@@ -1,0 +1,19 @@
+# Personal generated output
+dist/
+*.csv
+codex-day-*.png
+
+# Dependencies and build noise
+node_modules/
+npm-debug.log*
+*.log
+
+# Local editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Temporary review artifacts
+work/
+*.local.*

@@ -1,0 +1,861 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>codex.day</title>
+  <link rel="stylesheet" href="../src/token-dashboard.css">
+</head>
+<body>
+  <header class="relative z-30">
+    <div class="mx-auto flex min-h-20 w-[min(1260px,calc(100%-32px))] items-center justify-between gap-4 py-3">
+      <div class="min-w-0">
+        <div class="flex items-center gap-2">
+          <span class="relative h-5 w-5" aria-hidden="true"><span class="absolute left-0 top-0 h-3 w-3 rounded-sm bg-[rgb(var(--blue))]"></span><span class="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-[rgb(var(--lime))]"></span></span>
+          <h1 class="truncate text-base font-semibold">codex.day</h1>
+        </div>
+        <p id="generated-meta" class="mt-1 truncate text-[11px] text-[rgb(var(--muted))]">正在读取本地数据</p>
+      </div>
+      <div class="flex shrink-0 items-center gap-2">
+        <button id="export-poster" class="control hidden sm:inline-flex sm:items-center sm:gap-2" type="button"><span aria-hidden="true">▣</span><span>导出海报</span></button>
+        <button id="export-csv" class="control hidden sm:inline-flex sm:items-center sm:gap-2" type="button"><span aria-hidden="true">↓</span><span>导出 CSV</span></button>
+        <div class="relative sm:hidden">
+          <button id="mobile-actions-toggle" class="icon-control" type="button" aria-label="打开导出菜单" aria-controls="mobile-actions" aria-expanded="false" title="导出">⋮</button>
+          <div id="mobile-actions" class="absolute right-0 top-11 z-50 hidden w-36 rounded-md border border-[rgb(var(--line))] bg-[rgb(var(--panel))] p-1 shadow-panel">
+            <button id="mobile-export-poster" class="w-full rounded-sm px-3 py-2 text-left text-xs hover:bg-[rgb(var(--panel-subtle))]" type="button">导出海报</button>
+            <button id="mobile-export-csv" class="w-full rounded-sm px-3 py-2 text-left text-xs hover:bg-[rgb(var(--panel-subtle))]" type="button">导出 CSV</button>
+          </div>
+        </div>
+        <button id="theme-toggle" class="icon-control" type="button" aria-label="切换深浅主题">◐</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto w-[min(1260px,calc(100%-32px))] pb-12 pt-4 sm:pt-8">
+    <section class="mb-8 flex flex-col gap-4 sm:mb-12 lg:flex-row lg:items-center lg:justify-between">
+      <div class="range-group" role="group" aria-label="时间范围">
+          <button class="range-btn" type="button" data-range="today" data-active="true">今天</button>
+          <button class="range-btn" type="button" data-range="week" data-active="false">本周</button>
+          <button class="range-btn" type="button" data-range="30d" data-active="false">近 30 天</button>
+          <button class="range-btn" type="button" data-range="all" data-active="false">全部</button>
+      </div>
+      <div class="grid grid-cols-1 gap-2 min-[430px]:grid-cols-2 sm:flex sm:items-end">
+        <label class="grid min-w-0 gap-1 text-[10px] uppercase text-[rgb(var(--muted))]">Model
+          <select id="model-filter" class="select-control w-full"><option value="">全部模型</option></select>
+        </label>
+        <label class="grid min-w-0 gap-1 text-[10px] uppercase text-[rgb(var(--muted))]">Project
+          <select id="project-filter" class="select-control w-full"><option value="">全部项目</option></select>
+        </label>
+      </div>
+    </section>
+
+    <section class="mb-12 grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(420px,.8fr)] lg:items-end" aria-label="核心指标">
+      <div class="min-w-0">
+        <p class="mb-3 text-xs font-medium text-[rgb(var(--blue))]">你的 Codex 使用节奏</p>
+        <h2 class="max-w-3xl text-[28px] font-semibold leading-tight sm:text-5xl">这段时间，你和 Codex 一起跑了 <span class="inline-block whitespace-nowrap"><span id="stat-total" class="metric-number text-[rgb(var(--blue))]">0</span> tokens。</span></h2>
+        <div class="mt-4 flex flex-wrap items-center gap-3 text-xs text-[rgb(var(--muted))]"><span id="stat-total-note"></span><span class="h-1 w-1 rounded-full bg-[rgb(var(--orange))]"></span><span id="total-delta">--</span></div>
+      </div>
+      <div class="grid grid-cols-2 gap-x-4 border-y border-[rgb(var(--line))] py-5 sm:grid-cols-3 sm:gap-3">
+        <article class="story-stat">
+          <div class="eyebrow">缓存率 <span id="cache-delta" class="ml-1 normal-case">--</span></div>
+          <div id="stat-cache" class="metric-number mt-2 text-xl font-semibold sm:text-2xl">0%</div>
+          <div id="stat-cache-note" class="mt-1 truncate text-[10px] text-[rgb(var(--muted))]"></div>
+        </article>
+        <article class="story-stat">
+          <div class="eyebrow">每次 <span id="average-delta" class="ml-1 normal-case">--</span></div>
+          <div id="stat-average" class="metric-number mt-2 text-xl font-semibold sm:text-2xl">0</div>
+          <div id="stat-average-note" class="mt-1 truncate text-[10px] text-[rgb(var(--muted))]"></div>
+        </article>
+        <article class="story-stat col-span-2 mt-4 border-l-0 border-t border-[rgb(var(--line))] pt-4 pl-0 sm:col-span-1 sm:mt-0 sm:border-l sm:border-t-0 sm:pt-0 sm:pl-6">
+          <div class="eyebrow">任务 <span id="task-delta" class="ml-1 normal-case">--</span></div>
+          <div id="stat-tasks" class="metric-number mt-2 text-xl font-semibold sm:text-2xl">0</div>
+          <div id="stat-tasks-note" class="mt-1 truncate text-[10px] text-[rgb(var(--muted))]"></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="mb-14 grid overflow-hidden border-y border-[rgb(var(--line))] xl:grid-cols-[minmax(0,1fr)_290px]">
+      <div class="min-w-0 py-6 pr-0 xl:pr-8">
+        <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 id="trend-title" class="text-lg font-semibold">Token 趋势</h2>
+            <p id="trend-subtitle" class="mt-1 text-xs text-[rgb(var(--muted))]">当前周期与上一周期对比</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-[rgb(var(--muted))]">
+            <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-sm bg-blue-600 dark:bg-blue-400"></span>缓存输入</span>
+            <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-sm bg-emerald-600 dark:bg-emerald-400"></span>非缓存输入</span>
+            <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-sm bg-orange-600 dark:bg-orange-400"></span>输出</span>
+            <span class="inline-flex items-center gap-1.5"><span class="h-0 w-4 border-t-2 border-dashed border-violet-500"></span>上一周期</span>
+          </div>
+        </div>
+        <div id="trend-chart" class="relative h-[320px] min-w-0" role="img" aria-label="Token 使用趋势">
+          <div id="chart-tooltip" class="pointer-events-none absolute z-20 hidden min-w-48 rounded-md border border-[rgb(var(--line))] bg-[rgb(var(--panel))] p-3 text-xs shadow-panel"></div>
+        </div>
+      </div>
+      <aside class="border-t border-[rgb(var(--line))] py-6 xl:border-l xl:border-t-0 xl:pl-6">
+        <div class="mb-3 flex items-center justify-between">
+          <h2 class="text-base font-semibold">今天发生了什么</h2>
+          <span class="chip" id="insight-period">当前周期</span>
+        </div>
+        <div id="insights" class="divide-y divide-[rgb(var(--line))]"></div>
+      </aside>
+    </section>
+
+    <section class="mb-14 overflow-hidden">
+      <div class="flex flex-wrap items-end justify-between gap-3 pb-5">
+        <div>
+          <p class="mb-2 text-xs font-medium text-[rgb(var(--orange))]">Token 都去了哪里</p>
+          <h2 class="text-2xl font-semibold">项目 × 模型</h2>
+          <p class="mt-2 text-xs text-[rgb(var(--muted))]">点击色块，只看这个组合</p>
+        </div>
+        <div id="matrix-summary" class="text-xs text-[rgb(var(--muted))]"></div>
+      </div>
+      <div id="matrix-wrap" class="thin-scrollbar overflow-x-auto"></div>
+    </section>
+
+    <section class="border-t border-[rgb(var(--line))] pt-10">
+      <div class="flex flex-wrap items-end justify-between gap-3 pb-6">
+        <div>
+          <p class="mb-2 text-xs font-medium text-[rgb(var(--violet))]">最近一起做过的事</p>
+          <h2 class="text-2xl font-semibold">任务活动</h2>
+          <p class="mt-2 text-xs text-[rgb(var(--muted))]">打开一张卡，看看里面发生了什么</p>
+        </div>
+        <div id="task-summary" class="text-xs text-[rgb(var(--muted))]"></div>
+      </div>
+      <div id="task-body" class="grid gap-3 md:grid-cols-2 xl:grid-cols-3"></div>
+      <div class="mt-5 flex items-center justify-between gap-3">
+        <span id="task-page-note" class="text-xs text-[rgb(var(--muted))]"></span>
+        <button id="show-more" class="control" type="button">显示更多</button>
+      </div>
+    </section>
+
+    <footer class="mt-4 flex flex-wrap justify-between gap-2 px-1 text-[11px] text-[rgb(var(--muted))]">
+      <span id="source-summary"></span>
+      <span>缓存与推理 Token 已包含在输入和输出总量中</span>
+    </footer>
+  </main>
+
+  <div id="drawer-shell" class="fixed inset-0 z-50 hidden">
+    <button id="drawer-backdrop" class="absolute inset-0 bg-black/40" type="button" aria-label="关闭任务详情"></button>
+    <aside class="absolute inset-y-0 right-0 flex w-full max-w-xl flex-col border-l border-[rgb(var(--line))] bg-[rgb(var(--panel))] shadow-2xl" aria-label="任务详情">
+      <header class="flex items-start justify-between gap-4 border-b border-[rgb(var(--line))] p-5">
+        <div class="min-w-0">
+          <p class="eyebrow">Session detail</p>
+          <h2 id="drawer-title" class="mt-1 truncate font-mono text-sm font-semibold"></h2>
+          <p id="drawer-range" class="mt-1 text-xs text-[rgb(var(--muted))]"></p>
+        </div>
+        <button id="drawer-close" class="icon-control shrink-0" type="button" aria-label="关闭任务详情">×</button>
+      </header>
+      <div class="thin-scrollbar flex-1 overflow-y-auto p-5">
+        <div id="drawer-chips" class="mb-5 flex flex-wrap gap-2"></div>
+        <div id="drawer-stats" class="mb-6 grid grid-cols-2 gap-x-6 gap-y-4 border-y border-[rgb(var(--line))] py-4"></div>
+        <div class="mb-3 flex items-center justify-between">
+          <h3 class="section-title">内部调用</h3>
+          <span id="drawer-call-count" class="text-xs text-[rgb(var(--muted))]"></span>
+        </div>
+        <div id="drawer-calls" class="divide-y divide-[rgb(var(--line))]"></div>
+      </div>
+    </aside>
+  </div>
+
+  <script id="token-data">window.__TOKEN_DATA__ = {"generatedAt":"2026-08-20T17:30:00+08:00","timezone":"Demo time (UTC+08:00)","filesScanned":8,"sessionsScanned":6,"demo":true,"events":[{"timestamp":"2026-08-19T09:20:00+08:00","date":"2026-08-19","sessionId":"task-7a91b2c3d4e5","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":8200000,"cachedInput":6500000,"cacheWriteInput":0,"uncachedInput":1700000,"output":72000,"reasoningOutput":18000,"unclassified":0,"total":8272000,"contextWindow":258400},{"timestamp":"2026-08-19T10:15:00+08:00","date":"2026-08-19","sessionId":"task-7a91b2c3d4e5","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":12600000,"cachedInput":10400000,"cacheWriteInput":0,"uncachedInput":2200000,"output":118000,"reasoningOutput":32000,"unclassified":0,"total":12718000,"contextWindow":258400},{"timestamp":"2026-08-19T11:40:00+08:00","date":"2026-08-19","sessionId":"task-8b02c3d4e5f6","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":18400000,"cachedInput":15100000,"cacheWriteInput":0,"uncachedInput":3300000,"output":146000,"reasoningOutput":41000,"unclassified":0,"total":18546000,"contextWindow":258400},{"timestamp":"2026-08-19T14:10:00+08:00","date":"2026-08-19","sessionId":"task-9c13d4e5f607","model":"gpt-5.6-sol","project":"design-lab","projectId":"project-design","input":9700000,"cachedInput":8200000,"cacheWriteInput":0,"uncachedInput":1500000,"output":92000,"reasoningOutput":26000,"unclassified":0,"total":9792000,"contextWindow":258400},{"timestamp":"2026-08-19T15:35:00+08:00","date":"2026-08-19","sessionId":"task-9c13d4e5f607","model":"gpt-5.6-sol","project":"design-lab","projectId":"project-design","input":24200000,"cachedInput":21100000,"cacheWriteInput":0,"uncachedInput":3100000,"output":188000,"reasoningOutput":52000,"unclassified":0,"total":24388000,"contextWindow":258400},{"timestamp":"2026-08-19T16:20:00+08:00","date":"2026-08-19","sessionId":"task-ad24e5f60718","model":"gpt-5.6-luna","project":"atlas-app","projectId":"project-atlas","input":14800000,"cachedInput":12700000,"cacheWriteInput":0,"uncachedInput":2100000,"output":124000,"reasoningOutput":35000,"unclassified":0,"total":14924000,"contextWindow":258400},{"timestamp":"2026-08-20T09:10:00+08:00","date":"2026-08-20","sessionId":"task-be35f6071829","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":6100000,"cachedInput":4900000,"cacheWriteInput":0,"uncachedInput":1200000,"output":58000,"reasoningOutput":14000,"unclassified":0,"total":6158000,"contextWindow":258400},{"timestamp":"2026-08-20T10:05:00+08:00","date":"2026-08-20","sessionId":"task-be35f6071829","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":16900000,"cachedInput":14200000,"cacheWriteInput":0,"uncachedInput":2700000,"output":136000,"reasoningOutput":38000,"unclassified":0,"total":17036000,"contextWindow":258400},{"timestamp":"2026-08-20T10:45:00+08:00","date":"2026-08-20","sessionId":"task-cf460718293a","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":4300000,"cachedInput":3100000,"cacheWriteInput":0,"uncachedInput":1200000,"output":68000,"reasoningOutput":17000,"unclassified":0,"total":4368000,"contextWindow":258400},{"timestamp":"2026-08-20T11:15:00+08:00","date":"2026-08-20","sessionId":"task-cf460718293a","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":23500000,"cachedInput":19800000,"cacheWriteInput":0,"uncachedInput":3700000,"output":204000,"reasoningOutput":63000,"unclassified":0,"total":23704000,"contextWindow":258400},{"timestamp":"2026-08-20T11:50:00+08:00","date":"2026-08-20","sessionId":"task-be35f6071829","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":18200000,"cachedInput":16500000,"cacheWriteInput":0,"uncachedInput":1700000,"output":152000,"reasoningOutput":44000,"unclassified":0,"total":18352000,"contextWindow":258400},{"timestamp":"2026-08-20T12:30:00+08:00","date":"2026-08-20","sessionId":"task-be35f6071829","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":27700000,"cachedInput":25100000,"cacheWriteInput":0,"uncachedInput":2600000,"output":218000,"reasoningOutput":71000,"unclassified":0,"total":27918000,"contextWindow":258400},{"timestamp":"2026-08-20T13:20:00+08:00","date":"2026-08-20","sessionId":"task-9c13d4e5f607","model":"gpt-5.6-sol","project":"design-lab","projectId":"project-design","input":3800000,"cachedInput":2900000,"cacheWriteInput":0,"uncachedInput":900000,"output":52000,"reasoningOutput":12000,"unclassified":0,"total":3852000,"contextWindow":258400},{"timestamp":"2026-08-20T14:05:00+08:00","date":"2026-08-20","sessionId":"task-cf460718293a","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":11200000,"cachedInput":9100000,"cacheWriteInput":0,"uncachedInput":2100000,"output":108000,"reasoningOutput":29000,"unclassified":0,"total":11308000,"contextWindow":258400},{"timestamp":"2026-08-20T15:10:00+08:00","date":"2026-08-20","sessionId":"task-be35f6071829","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":31800000,"cachedInput":28400000,"cacheWriteInput":0,"uncachedInput":3400000,"output":286000,"reasoningOutput":94000,"unclassified":0,"total":32086000,"contextWindow":258400},{"timestamp":"2026-08-20T15:45:00+08:00","date":"2026-08-20","sessionId":"task-9c13d4e5f607","model":"gpt-5.6-sol","project":"design-lab","projectId":"project-design","input":21400000,"cachedInput":18200000,"cacheWriteInput":0,"uncachedInput":3200000,"output":196000,"reasoningOutput":57000,"unclassified":0,"total":21596000,"contextWindow":258400},{"timestamp":"2026-08-20T16:05:00+08:00","date":"2026-08-20","sessionId":"task-be35f6071829","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":36400000,"cachedInput":32900000,"cacheWriteInput":0,"uncachedInput":3500000,"output":318000,"reasoningOutput":112000,"unclassified":0,"total":36718000,"contextWindow":258400},{"timestamp":"2026-08-20T16:40:00+08:00","date":"2026-08-20","sessionId":"task-cf460718293a","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":13100000,"cachedInput":10800000,"cacheWriteInput":0,"uncachedInput":2300000,"output":116000,"reasoningOutput":33000,"unclassified":0,"total":13216000,"contextWindow":258400},{"timestamp":"2026-08-20T17:10:00+08:00","date":"2026-08-20","sessionId":"task-9c13d4e5f607","model":"gpt-5.6-sol","project":"design-lab","projectId":"project-design","input":7600000,"cachedInput":6100000,"cacheWriteInput":0,"uncachedInput":1500000,"output":78000,"reasoningOutput":21000,"unclassified":0,"total":7678000,"contextWindow":258400}]};</script>
+  <script>
+    (() => {
+      const payload = window.__TOKEN_DATA__ || { events: [] };
+      const events = (payload.events || []).map(event => ({ ...event, time: new Date(event.timestamp) }));
+      const requestedRange = new URLSearchParams(location.search).get('range');
+      const state = { range: ['today', 'week', '30d', 'all'].includes(requestedRange) ? requestedRange : 'today', model: '', project: '', visibleTasks: 16 };
+      const nf = new Intl.NumberFormat('zh-CN');
+      const compactEn = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
+      const dtf = new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+      const fullDtf = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+      const $ = id => document.getElementById(id);
+      const sum = (items, key) => items.reduce((total, item) => total + Number(item[key] || 0), 0);
+      const esc = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
+      const addDays = (date, count) => { const next = new Date(date); next.setDate(next.getDate() + count); return next; };
+
+      function startOfDay(value = new Date()) {
+        const date = new Date(value);
+        date.setHours(0, 0, 0, 0);
+        return date;
+      }
+
+      function periodBounds() {
+        const now = payload.demo && payload.generatedAt ? new Date(payload.generatedAt) : new Date();
+        let start;
+        let previousStart;
+        let previousEnd;
+        if (state.range === 'today') {
+          start = startOfDay(now);
+          previousStart = addDays(start, -1);
+          previousEnd = new Date(previousStart.getTime() + (now - start));
+        } else if (state.range === 'week') {
+          start = startOfDay(now);
+          start.setDate(start.getDate() - ((start.getDay() || 7) - 1));
+          previousStart = addDays(start, -7);
+          previousEnd = new Date(previousStart.getTime() + (now - start));
+        } else if (state.range === '30d') {
+          start = addDays(startOfDay(now), -29);
+          const span = now - start;
+          previousEnd = new Date(start);
+          previousStart = new Date(previousEnd.getTime() - span);
+        } else {
+          start = events.length ? startOfDay(new Date(Math.min(...events.map(item => item.time)))) : new Date(0);
+          previousStart = null;
+          previousEnd = null;
+        }
+        return { start, end: now, previousStart, previousEnd };
+      }
+
+      function matchesFilters(item) {
+        return (!state.model || item.model === state.model) && (!state.project || item.projectId === state.project);
+      }
+
+      function between(start, end) {
+        if (!start || !end) return [];
+        return events.filter(item => item.time >= start && item.time <= end && matchesFilters(item));
+      }
+
+      function currentAndPrevious() {
+        const bounds = periodBounds();
+        return { bounds, current: between(bounds.start, bounds.end), previous: between(bounds.previousStart, bounds.previousEnd) };
+      }
+
+      function setOptions(select, options, allLabel) {
+        select.innerHTML = `<option value="">${allLabel}</option>` + options.map(item => `<option value="${esc(item.value)}">${esc(item.label)}</option>`).join('');
+      }
+
+      function initializeFilters() {
+        const models = [...new Set(events.map(item => item.model))].sort((a, b) => a.localeCompare(b));
+        const projects = [...new Map(events.map(item => [item.projectId, item.project])).entries()]
+          .map(([value, label]) => ({ value, label }))
+          .sort((a, b) => a.label.localeCompare(b.label));
+        setOptions($('model-filter'), models.map(model => ({ value: model, label: model })), '全部模型');
+        setOptions($('project-filter'), projects, '全部项目');
+      }
+
+      function aggregate(items) {
+        const input = sum(items, 'input');
+        const cached = sum(items, 'cachedInput');
+        const total = sum(items, 'total');
+        return {
+          total,
+          input,
+          cached,
+          output: sum(items, 'output'),
+          reasoning: sum(items, 'reasoningOutput'),
+          calls: items.length,
+          tasks: new Set(items.map(item => item.sessionId)).size,
+          cacheRate: input ? cached / input : 0,
+          average: items.length ? total / items.length : 0
+        };
+      }
+
+      function deltaText(current, previous, percentage = true) {
+        if (!previous && previous !== 0) return { text: '--', positive: null };
+        if (previous === 0) return { text: current ? '新增长' : '0%', positive: current > 0 };
+        const delta = (current - previous) / previous;
+        if (Math.abs(delta) > 9.99) return { text: '上期样本少', positive: null };
+        return { text: `${delta >= 0 ? '↑' : '↓'} ${Math.abs(delta * 100).toFixed(1)}%`, positive: delta >= 0 };
+      }
+
+      function setDelta(id, value) {
+        const node = $(id);
+        node.textContent = value.text;
+        node.className = value.positive === null ? 'text-xs font-medium text-[rgb(var(--muted))]' : value.positive ? 'text-xs font-medium text-orange-600 dark:text-orange-400' : 'text-xs font-medium text-emerald-600 dark:text-emerald-400';
+      }
+
+      function renderMetrics(currentItems, previousItems) {
+        const current = aggregate(currentItems);
+        const previous = aggregate(previousItems);
+        $('stat-total').textContent = compactEn.format(current.total);
+        $('stat-total').title = nf.format(current.total);
+        $('stat-total-note').textContent = `${nf.format(current.calls)} 次调用 · 输入 ${compactEn.format(current.input)} · 输出 ${compactEn.format(current.output)}`;
+        $('stat-cache').textContent = `${(current.cacheRate * 100).toFixed(1)}%`;
+        $('stat-cache-note').textContent = `${compactEn.format(current.cached)} / ${compactEn.format(current.input)} 输入`;
+        $('stat-average').textContent = compactEn.format(current.average);
+        $('stat-average-note').textContent = `每次调用平均 Token`;
+        $('stat-tasks').textContent = nf.format(current.tasks);
+        $('stat-tasks-note').textContent = `${new Set(currentItems.map(item => item.projectId)).size} 个项目 · ${new Set(currentItems.map(item => item.model)).size} 个模型`;
+        setDelta('total-delta', previousItems.length ? deltaText(current.total, previous.total) : { text: '--', positive: null });
+        setDelta('cache-delta', previousItems.length ? deltaText(current.cacheRate, previous.cacheRate) : { text: '--', positive: null });
+        setDelta('average-delta', previousItems.length ? deltaText(current.average, previous.average) : { text: '--', positive: null });
+        setDelta('task-delta', previousItems.length ? deltaText(current.tasks, previous.tasks) : { text: '--', positive: null });
+      }
+
+      function bucketConfig(bounds) {
+        if (state.range === 'today') return { step: 3600000, count: 24, format: date => `${String(date.getHours()).padStart(2, '0')}:00` };
+        const spanDays = Math.max(1, Math.ceil((bounds.end - bounds.start) / 86400000));
+        return { step: 86400000, count: spanDays, format: date => `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}` };
+      }
+
+      function buildBuckets(items, start, config) {
+        const buckets = Array.from({ length: config.count }, (_, index) => {
+          const time = new Date(start.getTime() + index * config.step);
+          return { index, label: config.format(time), cached: 0, uncached: 0, output: 0, other: 0, reasoning: 0, calls: 0 };
+        });
+        for (const item of items) {
+          const index = Math.floor((item.time - start) / config.step);
+          if (!buckets[index]) continue;
+          buckets[index].cached += item.cachedInput || 0;
+          buckets[index].uncached += item.uncachedInput || 0;
+          buckets[index].output += item.output || 0;
+          buckets[index].other += item.unclassified || 0;
+          buckets[index].reasoning += item.reasoningOutput || 0;
+          buckets[index].calls += 1;
+        }
+        buckets.forEach(bucket => { bucket.total = bucket.cached + bucket.uncached + bucket.output + bucket.other; });
+        return buckets;
+      }
+
+      function compressedTimeline(current, previous = []) {
+        if (state.range !== 'today') {
+          return current.map((bucket, index) => ({ ...bucket, isGap: false, span: 1, weight: 1, previousValue: previous[index]?.total || 0 }));
+        }
+
+        const timeline = [];
+        let index = 0;
+        while (index < current.length) {
+          if (current[index].total > 0) {
+            timeline.push({ ...current[index], isGap: false, span: 1, weight: 1, previousValue: previous[index]?.total || 0 });
+            index += 1;
+            continue;
+          }
+
+          let end = index;
+          while (end < current.length && current[end].total === 0) end += 1;
+          const span = end - index;
+          if (span >= 3) {
+            const previousValues = previous.slice(index, end).map(bucket => bucket.total || 0);
+            const previousValue = previousValues.length ? previousValues.reduce((total, value) => total + value, 0) / previousValues.length : 0;
+            timeline.push({
+              index,
+              label: `${String(index).padStart(2, '0')}–${String(end).padStart(2, '0')}`,
+              accessibleLabel: `${String(index).padStart(2, '0')}:00–${String(end).padStart(2, '0')}:00`,
+              cached: 0,
+              uncached: 0,
+              output: 0,
+              other: 0,
+              reasoning: 0,
+              calls: 0,
+              total: 0,
+              isGap: true,
+              span,
+              weight: 1.35,
+              previousValue
+            });
+          } else {
+            for (let offset = index; offset < end; offset += 1) {
+              timeline.push({ ...current[offset], isGap: false, span: 1, weight: 1, previousValue: previous[offset]?.total || 0 });
+            }
+          }
+          index = end;
+        }
+        return timeline;
+      }
+
+      function niceMax(value) {
+        if (!value) return 1;
+        const unit = Math.pow(10, Math.floor(Math.log10(value)));
+        return Math.ceil(value / unit) * unit;
+      }
+
+      function renderTrend(currentItems, previousItems, bounds) {
+        const container = $('trend-chart');
+        const tooltip = $('chart-tooltip');
+        container.querySelectorAll('svg, .empty-state').forEach(node => node.remove());
+        const config = bucketConfig(bounds);
+        const current = buildBuckets(currentItems, bounds.start, config);
+        const previous = bounds.previousStart ? buildBuckets(previousItems, bounds.previousStart, config) : [];
+        const timeline = compressedTimeline(current, previous);
+        $('trend-title').textContent = state.range === 'today' ? '今日调用节奏' : 'Token 使用趋势';
+        const trendSubtitle = $('trend-subtitle');
+        trendSubtitle.textContent = previousItems.length ? '堆叠柱为当前周期，虚线为上一周期总量' : '当前周期 Token 构成';
+        trendSubtitle.classList.toggle('hidden', state.range === 'today');
+
+        if (!currentItems.length) {
+          const empty = document.createElement('div');
+          empty.className = 'empty-state grid h-full place-items-center text-sm text-[rgb(var(--muted))]';
+          empty.textContent = '当前范围没有 Token 记录';
+          container.appendChild(empty);
+          return current;
+        }
+
+        const width = Math.max(320, container.clientWidth);
+        const height = 320;
+        const margin = { top: 16, right: 14, bottom: width < 560 ? 56 : 38, left: width < 560 ? 52 : 64 };
+        const plotW = width - margin.left - margin.right;
+        const plotH = height - margin.top - margin.bottom;
+        const maxValue = niceMax(Math.max(...timeline.map(item => item.total), ...timeline.map(item => item.previousValue), 1));
+        const totalWeight = timeline.reduce((total, item) => total + item.weight, 0);
+        const ns = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(ns, 'svg');
+        svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+        svg.setAttribute('class', 'block h-full w-full');
+        svg.setAttribute('aria-label', '当前周期与上一周期 Token 趋势图');
+
+        for (let tick = 0; tick <= 4; tick++) {
+          const y = margin.top + plotH - plotH * tick / 4;
+          const line = document.createElementNS(ns, 'line');
+          line.setAttribute('x1', margin.left); line.setAttribute('x2', width - margin.right);
+          line.setAttribute('y1', y); line.setAttribute('y2', y); line.setAttribute('class', 'chart-grid');
+          svg.appendChild(line);
+          const label = document.createElementNS(ns, 'text');
+          label.setAttribute('x', margin.left - 8); label.setAttribute('y', y + 4);
+          label.setAttribute('text-anchor', 'end'); label.setAttribute('class', 'chart-axis');
+          label.textContent = compactEn.format(maxValue * tick / 4);
+          svg.appendChild(label);
+        }
+
+        const points = [];
+        let cursorX = margin.left;
+        timeline.forEach((bucket, index) => {
+          const slot = plotW * bucket.weight / totalWeight;
+          const centerX = cursorX + slot / 2;
+          const barW = Math.max(4, Math.min(30, slot * 0.58));
+          const x = centerX - barW / 2;
+          let yBottom = margin.top + plotH;
+          [
+            [bucket.cached, 'chart-current-cached'],
+            [bucket.uncached, 'chart-current-uncached'],
+            [bucket.output, 'chart-current-output'],
+            [bucket.other, 'chart-current-other']
+          ].forEach(([value, className]) => {
+            const segmentH = plotH * value / maxValue;
+            yBottom -= segmentH;
+            const rect = document.createElementNS(ns, 'rect');
+            rect.setAttribute('x', x); rect.setAttribute('y', yBottom);
+            rect.setAttribute('width', barW); rect.setAttribute('height', Math.max(0, segmentH));
+            rect.setAttribute('rx', '2');
+            rect.setAttribute('class', className); svg.appendChild(rect);
+          });
+
+          const previousValue = bucket.previousValue || 0;
+          points.push(`${centerX},${margin.top + plotH - plotH * previousValue / maxValue}`);
+
+          if (bucket.isGap) {
+            [-5, 3].forEach(offset => {
+              const slash = document.createElementNS(ns, 'line');
+              slash.setAttribute('x1', centerX + offset - 3); slash.setAttribute('x2', centerX + offset + 3);
+              slash.setAttribute('y1', margin.top + plotH + 3); slash.setAttribute('y2', margin.top + plotH - 3);
+              slash.setAttribute('stroke', 'rgb(var(--muted))'); slash.setAttribute('stroke-width', '1.5');
+              svg.appendChild(slash);
+            });
+          }
+
+          const hit = document.createElementNS(ns, 'rect');
+          hit.setAttribute('x', cursorX); hit.setAttribute('y', margin.top);
+          hit.setAttribute('width', slot); hit.setAttribute('height', plotH);
+          hit.setAttribute('fill', 'transparent'); hit.setAttribute('tabindex', '0');
+          hit.setAttribute('aria-label', bucket.isGap ? `${bucket.accessibleLabel}，连续空闲时段` : `${bucket.label}，${nf.format(bucket.total)} Token`);
+          const show = () => {
+            tooltip.innerHTML = bucket.isGap
+              ? `<strong>${esc(bucket.accessibleLabel)}</strong><div class="mt-2 text-[rgb(var(--muted))]">连续 ${bucket.span} 小时无调用，时间轴已压缩</div>`
+              : `<div class="mb-2 flex items-center justify-between gap-6"><strong>${esc(bucket.label)}</strong><span class="text-[rgb(var(--muted))]">${nf.format(bucket.calls)} 次调用</span></div>` +
+              `<div class="grid grid-cols-2 gap-x-6 gap-y-1"><span class="text-[rgb(var(--muted))]">当前总量</span><span class="text-right font-medium">${nf.format(bucket.total)}</span>` +
+              `<span class="text-[rgb(var(--muted))]">上一周期</span><span class="text-right">${nf.format(previousValue)}</span>` +
+              `<span class="text-[rgb(var(--muted))]">缓存输入</span><span class="text-right">${nf.format(bucket.cached)}</span>` +
+              `<span class="text-[rgb(var(--muted))]">非缓存输入</span><span class="text-right">${nf.format(bucket.uncached)}</span>` +
+              `<span class="text-[rgb(var(--muted))]">输出 / 推理</span><span class="text-right">${nf.format(bucket.output)} / ${nf.format(bucket.reasoning)}</span></div>`;
+            tooltip.classList.remove('hidden');
+            const left = Math.max(4, Math.min(width - 212, centerX - 106));
+            tooltip.style.left = `${left}px`; tooltip.style.top = `${Math.max(4, yBottom - 145)}px`;
+          };
+          hit.addEventListener('mouseenter', show); hit.addEventListener('focus', show);
+          hit.addEventListener('mouseleave', () => tooltip.classList.add('hidden'));
+          hit.addEventListener('blur', () => tooltip.classList.add('hidden'));
+          svg.appendChild(hit);
+
+          const tickStep = Math.max(1, Math.ceil(timeline.length / (width < 560 ? 5 : 9)));
+          if (bucket.isGap || timeline[index - 1]?.isGap || index % tickStep === 0 || index === timeline.length - 1) {
+            const label = document.createElementNS(ns, 'text');
+            const labelY = width < 560 ? height - (index % 2 === 0 ? 28 : 10) : height - 13;
+            label.setAttribute('x', centerX); label.setAttribute('y', labelY);
+            label.setAttribute('text-anchor', 'middle'); label.setAttribute('class', 'chart-axis');
+            label.textContent = bucket.label; svg.appendChild(label);
+          }
+          cursorX += slot;
+        });
+
+        if (previous.length && points.length > 1) {
+          const line = document.createElementNS(ns, 'polyline');
+          line.setAttribute('points', points.join(' ')); line.setAttribute('class', 'chart-previous');
+          svg.appendChild(line);
+        }
+        container.appendChild(svg);
+        return current;
+      }
+
+      function group(items, key, labelKey = key) {
+        const map = new Map();
+        items.forEach(item => {
+          const id = item[key];
+          if (!map.has(id)) map.set(id, { id, label: item[labelKey], total: 0, calls: 0 });
+          const value = map.get(id); value.total += item.total; value.calls += 1;
+        });
+        return [...map.values()].sort((a, b) => b.total - a.total);
+      }
+
+      function buildTasks(items) {
+        const map = new Map();
+        items.forEach(item => {
+          if (!map.has(item.sessionId)) map.set(item.sessionId, { id: item.sessionId, events: [], total: 0, input: 0, cached: 0, output: 0, reasoning: 0, projects: new Map(), models: new Map(), start: item.time, end: item.time });
+          const task = map.get(item.sessionId);
+          task.events.push(item); task.total += item.total; task.input += item.input; task.cached += item.cachedInput; task.output += item.output; task.reasoning += item.reasoningOutput;
+          task.start = item.time < task.start ? item.time : task.start; task.end = item.time > task.end ? item.time : task.end;
+          task.projects.set(item.project, (task.projects.get(item.project) || 0) + item.total);
+          task.models.set(item.model, (task.models.get(item.model) || 0) + item.total);
+        });
+        return [...map.values()].map(task => {
+          task.projectNames = [...task.projects.entries()].sort((a, b) => b[1] - a[1]).map(item => item[0]);
+          task.modelNames = [...task.models.entries()].sort((a, b) => b[1] - a[1]).map(item => item[0]);
+          task.cacheRate = task.input ? task.cached / task.input : 0;
+          task.duration = Math.max(0, task.end - task.start);
+          return task;
+        }).sort((a, b) => b.total - a.total);
+      }
+
+      function formatDuration(ms) {
+        if (ms < 60000) return `${Math.max(1, Math.round(ms / 1000))} 秒`;
+        if (ms < 3600000) return `${Math.round(ms / 60000)} 分钟`;
+        return `${(ms / 3600000).toFixed(ms >= 36000000 ? 0 : 1)} 小时`;
+      }
+
+      function renderInsights(items, buckets, tasks) {
+        const projects = group(items, 'projectId', 'project');
+        const models = group(items, 'model');
+        const peak = [...buckets].sort((a, b) => b.total - a.total)[0];
+        const rows = [
+          { label: '峰值时段', value: peak?.label || '--', note: peak ? `${compactEn.format(peak.total)} Token` : '暂无数据', color: 'bg-orange-500' },
+          { label: '主要项目', value: projects[0]?.label || '--', note: projects[0] ? `${(projects[0].total / Math.max(1, sum(items, 'total')) * 100).toFixed(1)}% 占比` : '暂无数据', color: 'bg-blue-500' },
+          { label: '主要模型', value: models[0]?.label || '--', note: models[0] ? `${compactEn.format(models[0].total)} Token` : '暂无数据', color: 'bg-emerald-500' },
+          { label: '最大任务', value: tasks[0] ? tasks[0].id.slice(-8) : '--', note: tasks[0] ? `${compactEn.format(tasks[0].total)} Token` : '暂无数据', color: 'bg-violet-500' }
+        ];
+        $('insights').innerHTML = rows.map(row => `<div class="flex items-center gap-3 py-4 first:pt-2 last:pb-1"><span class="h-8 w-1 rounded-full ${row.color}"></span><div class="min-w-0 flex-1"><div class="text-xs text-[rgb(var(--muted))]">${esc(row.label)}</div><div class="mt-1 truncate font-medium">${esc(row.value)}</div></div><div class="shrink-0 text-right text-xs text-[rgb(var(--muted))]">${esc(row.note)}</div></div>`).join('');
+        $('insight-period').textContent = { today: '今日', week: '本周', '30d': '近 30 天', all: '全部' }[state.range];
+      }
+
+      function renderMatrix(items) {
+        const projects = group(items, 'projectId', 'project').slice(0, 10);
+        const models = group(items, 'model');
+        const values = new Map();
+        items.forEach(item => {
+          const key = `${item.projectId}\u0000${item.model}`;
+          values.set(key, (values.get(key) || 0) + item.total);
+        });
+        const max = Math.max(...values.values(), 1);
+        $('matrix-summary').textContent = `${projects.length} 个项目 × ${models.length} 个模型`;
+        if (!projects.length || !models.length) {
+          $('matrix-wrap').innerHTML = '<div class="grid h-32 place-items-center text-sm text-[rgb(var(--muted))]">当前范围没有矩阵数据</div>';
+          return;
+        }
+        const columns = `160px repeat(${models.length}, minmax(120px, 1fr))`;
+        let html = `<div class="grid min-w-max gap-1.5" style="grid-template-columns:${columns}"><div></div>`;
+        html += models.map(model => `<div class="truncate px-2 pb-1 text-center font-mono text-[11px] text-[rgb(var(--muted))]" title="${esc(model.label)}">${esc(model.label)}</div>`).join('');
+        const heatColors = ['var(--blue)', 'var(--orange)', 'var(--emerald)', 'var(--violet)', 'var(--amber)'];
+        projects.forEach((project, projectIndex) => {
+          html += `<div class="flex min-h-12 items-center truncate pr-3 text-xs font-medium" title="${esc(project.label)}">${esc(project.label)}</div>`;
+          models.forEach(model => {
+            const total = values.get(`${project.id}\u0000${model.id}`) || 0;
+            const heat = total ? Math.max(12, total / max * 82) : 0;
+            html += `<button type="button" class="heat-cell min-h-14 rounded-lg border border-[rgb(var(--line))] px-2 text-center text-xs transition" style="--heat:${heat.toFixed(1)}%;--heat-color:${heatColors[projectIndex % heatColors.length]}" data-project="${esc(project.id)}" data-model="${esc(model.id)}" aria-label="筛选 ${esc(project.label)} 和 ${esc(model.label)}"><span class="metric-number font-medium">${total ? compactEn.format(total) : '—'}</span><span class="mt-0.5 block text-[10px] text-[rgb(var(--muted))]">${total ? `${(total / Math.max(1, sum(items, 'total')) * 100).toFixed(1)}%` : ''}</span></button>`;
+          });
+        });
+        html += '</div>';
+        $('matrix-wrap').innerHTML = html;
+        $('matrix-wrap').querySelectorAll('button[data-project]').forEach(button => button.addEventListener('click', () => {
+          state.project = button.dataset.project; state.model = button.dataset.model; state.visibleTasks = 16;
+          $('project-filter').value = state.project; $('model-filter').value = state.model; render();
+        }));
+      }
+
+      function summarizeNames(names) {
+        if (!names.length) return '--';
+        return names.length > 1 ? `${names[0]} +${names.length - 1}` : names[0];
+      }
+
+      function renderTasks(tasks) {
+        const visible = tasks.slice(0, state.visibleTasks);
+        $('task-summary').textContent = `${nf.format(tasks.length)} 个任务 · ${nf.format(tasks.reduce((total, task) => total + task.events.length, 0))} 次调用`;
+        $('task-page-note').textContent = tasks.length ? `显示 ${Math.min(state.visibleTasks, tasks.length)} / ${tasks.length}` : '当前范围没有任务';
+        $('show-more').classList.toggle('hidden', tasks.length <= state.visibleTasks);
+        const tones = [
+          'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
+          'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300',
+          'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+          'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300',
+          'bg-lime-100 text-lime-700 dark:bg-lime-950 dark:text-lime-300'
+        ];
+        $('task-body').innerHTML = visible.length ? visible.map((task, index) => `
+          <button class="task-card" data-session="${esc(task.id)}" type="button" aria-label="打开任务 ${esc(task.id)}">
+            <div class="flex items-start gap-3">
+              <span class="task-dot ${tones[index % tones.length]}">${esc((task.projectNames[0] || '?').slice(0, 1).toUpperCase())}</span>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0"><div class="truncate font-medium" title="${esc(task.projectNames.join(', '))}">${esc(summarizeNames(task.projectNames))}</div><div class="mt-1 truncate font-mono text-[10px] text-[rgb(var(--muted))]" title="${esc(task.modelNames.join(', '))}">${esc(summarizeNames(task.modelNames))}</div></div>
+                  <div class="metric-number shrink-0 text-lg font-semibold">${compactEn.format(task.total)}</div>
+                </div>
+                <div class="mt-4 flex items-center justify-between gap-2 text-[11px] text-[rgb(var(--muted))]"><span>${esc(dtf.format(task.start))} · ${esc(formatDuration(task.duration))}</span><span>${nf.format(task.events.length)} 次 · ${(task.cacheRate * 100).toFixed(0)}% 缓存</span></div>
+              </div>
+            </div>
+          </button>`).join('') : '<div class="col-span-full grid h-32 place-items-center text-sm text-[rgb(var(--muted))]">当前范围没有任务</div>';
+        $('task-body').querySelectorAll('[data-session]').forEach(row => {
+          const open = () => openTaskDrawer(tasks.find(task => task.id === row.dataset.session));
+          row.addEventListener('click', open);
+          row.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); } });
+        });
+      }
+
+      function openTaskDrawer(task) {
+        if (!task) return;
+        $('drawer-title').textContent = task.id;
+        $('drawer-range').textContent = `${fullDtf.format(task.start)} — ${fullDtf.format(task.end)} · ${formatDuration(task.duration)}`;
+        $('drawer-chips').innerHTML = [...task.projectNames.map(name => `<span class="chip">${esc(name)}</span>`), ...task.modelNames.map(name => `<span class="chip font-mono">${esc(name)}</span>`)].join('');
+        const stats = [
+          ['总 Token', compactEn.format(task.total), nf.format(task.total)],
+          ['缓存命中率', `${(task.cacheRate * 100).toFixed(1)}%`, `${nf.format(task.cached)} 缓存输入`],
+          ['输出 Token', compactEn.format(task.output), `${nf.format(task.reasoning)} 推理`],
+          ['模型调用', nf.format(task.events.length), `${compactEn.format(task.total / Math.max(1, task.events.length))} / 次`]
+        ];
+        $('drawer-stats').innerHTML = stats.map(([label, value, note]) => `<div><div class="eyebrow">${esc(label)}</div><div class="metric-number mt-1 text-xl font-semibold">${esc(value)}</div><div class="mt-1 text-[11px] text-[rgb(var(--muted))]">${esc(note)}</div></div>`).join('');
+        $('drawer-call-count').textContent = `${task.events.length} 次`;
+        $('drawer-calls').innerHTML = [...task.events].sort((a, b) => b.time - a.time).slice(0, 120).map(item => `<div class="grid grid-cols-[auto_1fr_auto] items-center gap-3 py-3"><span class="font-mono text-[11px] text-[rgb(var(--muted))]">${esc(dtf.format(item.time))}</span><div class="min-w-0"><div class="truncate text-xs">${esc(item.project)}</div><div class="truncate font-mono text-[10px] text-[rgb(var(--muted))]">${esc(item.model)}</div></div><div class="text-right"><div class="metric-number text-xs font-medium">${compactEn.format(item.total)}</div><div class="text-[10px] text-[rgb(var(--muted))]">${(item.input ? item.cachedInput / item.input * 100 : 0).toFixed(0)}% 缓存</div></div></div>`).join('');
+        $('drawer-shell').classList.remove('hidden');
+        document.body.classList.add('overflow-hidden');
+      }
+
+      function closeDrawer() {
+        $('drawer-shell').classList.add('hidden');
+        document.body.classList.remove('overflow-hidden');
+      }
+
+      function setMobileActions(open) {
+        $('mobile-actions').classList.toggle('hidden', !open);
+        $('mobile-actions-toggle').setAttribute('aria-expanded', String(open));
+      }
+
+      function exportCsv() {
+        const items = currentAndPrevious().current;
+        const headers = ['时间', '项目', '项目标识', '模型', '输入', '缓存输入', '非缓存输入', '输出', '推理输出', '未分类', '总计', '任务ID'];
+        const rows = items.map(item => [item.timestamp, item.project, item.projectId, item.model, item.input, item.cachedInput, item.uncachedInput, item.output, item.reasoningOutput, item.unclassified || 0, item.total, item.sessionId]);
+        const quote = value => `"${String(value ?? '').replace(/"/g, '""')}"`;
+        const csv = '\ufeff' + [headers, ...rows].map(row => row.map(quote).join(',')).join('\r\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob); link.download = `codex-token-${state.range}-${new Date().toISOString().slice(0, 10)}.csv`; link.click();
+        URL.revokeObjectURL(link.href);
+      }
+
+      function roundedRect(ctx, x, y, width, height, radius, fill) {
+        ctx.beginPath();
+        ctx.roundRect(x, y, width, height, radius);
+        ctx.fillStyle = fill;
+        ctx.fill();
+      }
+
+      function posterCanvas() {
+        const { bounds, current, previous } = currentAndPrevious();
+        const summary = aggregate(current);
+        const projects = group(current, 'projectId', 'project');
+        const models = group(current, 'model');
+        const tasks = buildTasks(current);
+        const config = bucketConfig(bounds);
+        const buckets = buildBuckets(current, bounds.start, config);
+        const previousBuckets = bounds.previousStart ? buildBuckets(previous, bounds.previousStart, config) : [];
+        const posterTimeline = compressedTimeline(buckets, previousBuckets);
+        const periodLabel = { today: '今天', week: '本周', '30d': '近 30 天', all: '全部记录' }[state.range];
+        const canvas = document.createElement('canvas');
+        canvas.width = 1200;
+        canvas.height = 1600;
+        const ctx = canvas.getContext('2d');
+        const colors = { bg: '#f4f6f8', panel: '#ffffff', ink: '#141619', muted: '#68727c', line: '#dfe4e8', blue: '#3366ff', green: '#00b07d', coral: '#ff5b4c', violet: '#844aff', lime: '#beec48' };
+        const font = '"Segoe UI", "Microsoft YaHei", sans-serif';
+        const mono = '"Cascadia Code", Consolas, monospace';
+        ctx.fillStyle = colors.bg;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = colors.blue;
+        ctx.fillRect(72, 64, 22, 22);
+        ctx.beginPath(); ctx.arc(98, 90, 11, 0, Math.PI * 2); ctx.fillStyle = colors.lime; ctx.fill();
+        ctx.fillStyle = colors.ink; ctx.font = `600 30px ${font}`; ctx.fillText('codex.day', 122, 91);
+        ctx.fillStyle = colors.muted; ctx.font = `400 18px ${font}`; ctx.fillText(`${periodLabel} · ${fullDtf.format(new Date(payload.generatedAt || Date.now()))}`, 72, 142);
+
+        roundedRect(ctx, 72, 190, 150, 48, 24, colors.ink);
+        ctx.fillStyle = colors.panel; ctx.font = `600 19px ${font}`; ctx.textAlign = 'center'; ctx.fillText(periodLabel, 147, 221); ctx.textAlign = 'left';
+
+        ctx.fillStyle = colors.ink; ctx.font = `600 54px ${font}`; ctx.fillText('我和 Codex 一起跑了', 72, 332);
+        const totalDisplay = compactEn.format(summary.total);
+        ctx.fillStyle = colors.blue; ctx.font = '700 108px "Segoe UI", sans-serif'; ctx.fillText(totalDisplay, 68, 462);
+        const valueWidth = ctx.measureText(totalDisplay).width;
+        ctx.fillStyle = colors.ink; ctx.font = '500 50px "Segoe UI", sans-serif'; ctx.fillText('tokens', 68 + valueWidth + 30, 452);
+        ctx.fillStyle = colors.muted; ctx.font = `400 20px ${font}`;
+        ctx.fillText(`${nf.format(summary.calls)} 次调用  ·  输入 ${compactEn.format(summary.input)}  ·  输出 ${compactEn.format(summary.output)}  ·  ${summary.tasks} 个任务`, 72, 510);
+
+        const stats = [
+          ['缓存命中率', `${(summary.cacheRate * 100).toFixed(1)}%`, colors.green],
+          ['平均每次', compactEn.format(summary.average), colors.coral],
+          ['活跃项目', String(new Set(current.map(item => item.projectId)).size), colors.violet]
+        ];
+        stats.forEach((stat, index) => {
+          const x = 72 + index * 352;
+          if (index) { ctx.fillStyle = colors.line; ctx.fillRect(x - 25, 558, 1, 116); }
+          ctx.fillStyle = stat[2]; ctx.fillRect(x, 566, 34, 6);
+          ctx.fillStyle = colors.muted; ctx.font = `400 18px ${font}`; ctx.fillText(stat[0], x, 610);
+          ctx.fillStyle = colors.ink; ctx.font = `600 38px ${font}`; ctx.fillText(stat[1], x, 658);
+        });
+
+        roundedRect(ctx, 52, 724, 1096, 520, 24, colors.panel);
+        ctx.fillStyle = colors.ink; ctx.font = `600 27px ${font}`; ctx.fillText(state.range === 'today' ? '今天的调用节奏' : 'Token 使用节奏', 86, 784);
+        const chartLegend = [['缓存', colors.blue], ['新输入', colors.green], ['输出', colors.coral]];
+        let legendX = 790;
+        ctx.font = `400 14px ${font}`;
+        chartLegend.forEach(([label, color]) => {
+          ctx.fillStyle = color; ctx.fillRect(legendX, 773, 10, 10);
+          ctx.fillStyle = colors.muted; ctx.fillText(label, legendX + 17, 784);
+          legendX += ctx.measureText(label).width + 45;
+        });
+
+        const chart = { x: 126, y: 830, w: 936, h: 328 };
+        const maxValue = niceMax(Math.max(...posterTimeline.map(item => item.total), ...posterTimeline.map(item => item.previousValue), 1));
+        for (let tick = 0; tick <= 3; tick++) {
+          const y = chart.y + chart.h - chart.h * tick / 3;
+          ctx.fillStyle = colors.line; ctx.fillRect(chart.x, y, chart.w, 1);
+          ctx.fillStyle = colors.muted; ctx.font = `400 14px ${font}`; ctx.textAlign = 'right'; ctx.fillText(compactEn.format(maxValue * tick / 3), chart.x - 12, y + 5);
+        }
+        ctx.textAlign = 'left';
+        const totalWeight = posterTimeline.reduce((total, item) => total + item.weight, 0);
+        let cursorX = chart.x;
+        posterTimeline.forEach((bucket, index) => {
+          const slot = chart.w * bucket.weight / Math.max(1, totalWeight);
+          const barWidth = Math.max(10, Math.min(46, slot * 0.56));
+          const x = cursorX + (slot - barWidth) / 2;
+          let yBottom = chart.y + chart.h;
+          [[bucket.cached, colors.blue], [bucket.uncached, colors.green], [bucket.output + bucket.other, colors.coral]].forEach(([value, color]) => {
+            const height = chart.h * value / maxValue;
+            yBottom -= height;
+            if (height > 0) roundedRect(ctx, x, yBottom, barWidth, Math.max(2, height), 3, color);
+          });
+          if (bucket.isGap) {
+            const centerX = cursorX + slot / 2;
+            ctx.strokeStyle = colors.muted;
+            ctx.lineWidth = 2;
+            [-5, 4].forEach(offset => {
+              ctx.beginPath();
+              ctx.moveTo(centerX + offset - 3, chart.y + chart.h + 4);
+              ctx.lineTo(centerX + offset + 3, chart.y + chart.h - 4);
+              ctx.stroke();
+            });
+          }
+          const labelStep = Math.max(1, Math.ceil(posterTimeline.length / 7));
+          const shouldLabel = state.range === 'today'
+            ? bucket.isGap || bucket.total > 0
+            : bucket.isGap || posterTimeline[index - 1]?.isGap || index % labelStep === 0 || index === posterTimeline.length - 1;
+          if (shouldLabel) {
+            ctx.fillStyle = colors.muted; ctx.font = `400 14px ${font}`; ctx.textAlign = 'center'; ctx.fillText(bucket.label, x + barWidth / 2, chart.y + chart.h + 34);
+          }
+          cursorX += slot;
+        });
+        ctx.textAlign = 'left';
+
+        ctx.fillStyle = colors.ink; ctx.font = `600 25px ${font}`; ctx.fillText('这段时间的主角', 72, 1320);
+        const highlights = [
+          ['主要项目', projects[0]?.label || '—', projects[0] ? `${(projects[0].total / Math.max(1, summary.total) * 100).toFixed(1)}%` : ''],
+          ['主要模型', models[0]?.label || '—', models[0] ? compactEn.format(models[0].total) : ''],
+          ['最大任务', tasks[0]?.id.slice(-8) || '—', tasks[0] ? compactEn.format(tasks[0].total) : '']
+        ];
+        highlights.forEach((item, index) => {
+          const x = 72 + index * 352;
+          const accent = [colors.blue, colors.green, colors.violet][index];
+          roundedRect(ctx, x, 1360, 320, 128, 16, colors.panel);
+          ctx.fillStyle = accent; ctx.fillRect(x + 20, 1382, 26, 5);
+          ctx.fillStyle = colors.muted; ctx.font = `400 16px ${font}`; ctx.fillText(item[0], x + 20, 1422);
+          ctx.fillStyle = colors.ink; ctx.font = index === 1 ? `600 23px ${mono}` : `600 26px ${font}`; ctx.fillText(String(item[1]), x + 20, 1460);
+          ctx.fillStyle = colors.muted; ctx.font = `400 15px ${font}`; ctx.textAlign = 'right'; ctx.fillText(String(item[2]), x + 298, 1460); ctx.textAlign = 'left';
+        });
+
+        ctx.fillStyle = colors.muted; ctx.font = `400 15px ${font}`; ctx.fillText(payload.demo ? '虚构 Demo 数据' : '数据来自本地 Codex 日志', 72, 1550);
+        ctx.textAlign = 'right'; ctx.fillText('personal AI rhythm · codex.day', 1128, 1550); ctx.textAlign = 'left';
+        return canvas;
+      }
+
+      function exportPoster(event) {
+        const button = event?.currentTarget || $('export-poster');
+        const original = button.innerHTML;
+        button.disabled = true;
+        button.textContent = '生成中…';
+        const canvas = posterCanvas();
+        canvas.toBlob(blob => {
+          const link = document.createElement('a');
+          link.href = URL.createObjectURL(blob);
+          link.download = `codex-day-${state.range}-${new Date().toISOString().slice(0, 10)}.png`;
+          link.click();
+          URL.revokeObjectURL(link.href);
+          button.disabled = false;
+          button.innerHTML = original;
+        }, 'image/png');
+      }
+
+      function showPosterPreview() {
+        const canvas = posterCanvas();
+        document.body.innerHTML = '';
+        document.body.style.margin = '0';
+        document.body.style.background = '#f4f6f8';
+        canvas.style.display = 'block';
+        canvas.style.width = '1200px';
+        canvas.style.height = '1600px';
+        document.body.appendChild(canvas);
+      }
+
+      function render() {
+        const { bounds, current, previous } = currentAndPrevious();
+        const tasks = buildTasks(current);
+        renderMetrics(current, previous);
+        const buckets = renderTrend(current, previous, bounds);
+        renderInsights(current, buckets, tasks);
+        renderMatrix(current);
+        renderTasks(tasks);
+      }
+
+      document.querySelectorAll('[data-range]').forEach(button => button.addEventListener('click', () => {
+        state.range = button.dataset.range; state.visibleTasks = 16;
+        document.querySelectorAll('[data-range]').forEach(item => item.dataset.active = String(item === button));
+        render();
+      }));
+      $('model-filter').addEventListener('change', event => { state.model = event.target.value; state.visibleTasks = 16; render(); });
+      $('project-filter').addEventListener('change', event => { state.project = event.target.value; state.visibleTasks = 16; render(); });
+      $('show-more').addEventListener('click', () => { state.visibleTasks += 24; renderTasks(buildTasks(currentAndPrevious().current)); });
+      $('export-csv').addEventListener('click', exportCsv);
+      $('export-poster').addEventListener('click', exportPoster);
+      $('mobile-actions-toggle').addEventListener('click', event => {
+        event.stopPropagation();
+        setMobileActions($('mobile-actions').classList.contains('hidden'));
+      });
+      $('mobile-actions').addEventListener('click', event => event.stopPropagation());
+      $('mobile-export-poster').addEventListener('click', event => { setMobileActions(false); exportPoster(event); });
+      $('mobile-export-csv').addEventListener('click', () => { setMobileActions(false); exportCsv(); });
+      $('drawer-close').addEventListener('click', closeDrawer);
+      $('drawer-backdrop').addEventListener('click', closeDrawer);
+      document.addEventListener('click', () => setMobileActions(false));
+      document.addEventListener('keydown', event => { if (event.key === 'Escape') { closeDrawer(); setMobileActions(false); } });
+      $('theme-toggle').addEventListener('click', () => {
+        document.documentElement.classList.toggle('dark');
+        localStorage.setItem('codex-token-theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+      });
+      const savedTheme = localStorage.getItem('codex-token-theme');
+      if (savedTheme === 'dark' || (!savedTheme && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark');
+
+      let resizeTimer;
+      window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { const current = currentAndPrevious(); renderTrend(current.current, current.previous, current.bounds); }, 120); });
+
+      initializeFilters();
+      document.querySelectorAll('[data-range]').forEach(item => item.dataset.active = String(item.dataset.range === state.range));
+      $('generated-meta').textContent = payload.generatedAt ? `${payload.demo ? '虚构 Demo' : '本地日志'} · 更新于 ${fullDtf.format(new Date(payload.generatedAt))}` : '尚未生成数据';
+      $('source-summary').textContent = payload.demo
+        ? `虚构 Demo · ${nf.format(payload.sessionsScanned || 0)} 个任务`
+        : `${nf.format(payload.sessionsScanned || 0)} 个任务 · ${nf.format(payload.filesScanned || 0)} 个日志文件 · ${payload.timezone || '本地时区'}`;
+      render();
+      if (new URLSearchParams(location.search).get('poster') === 'preview') showPosterPreview();
+    })();
+  </script>
+</body>
+</html>

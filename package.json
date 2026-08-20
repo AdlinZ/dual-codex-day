@@ -1,0 +1,15 @@
+{
+  "name": "codex-day",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A private, local-first dashboard for personal Codex token activity.",
+  "license": "MIT",
+  "scripts": {
+    "build:css": "tailwindcss -i ./src/styles.css -o ./src/token-dashboard.css --minify",
+    "build:demo": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-demo.ps1",
+    "build": "npm run build:css && npm run build:demo"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.17"
+  }
+}

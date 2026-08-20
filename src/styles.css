@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --page: 247 248 250;
+    --panel: 255 255 255;
+    --panel-subtle: 241 244 247;
+    --ink: 20 22 25;
+    --muted: 99 108 117;
+    --line: 224 228 233;
+    --line-strong: 198 205 213;
+    --blue: 51 102 255;
+    --emerald: 0 176 125;
+    --orange: 255 91 76;
+    --amber: 226 166 0;
+    --violet: 132 74 255;
+    --lime: 190 236 72;
+  }
+
+  .dark {
+    color-scheme: dark;
+    --page: 13 14 16;
+    --panel: 21 23 26;
+    --panel-subtle: 29 32 36;
+    --ink: 238 241 244;
+    --muted: 148 158 169;
+    --line: 46 51 58;
+    --line-strong: 67 74 83;
+    --blue: 96 165 250;
+    --emerald: 52 211 153;
+    --orange: 251 146 60;
+    --amber: 250 204 21;
+    --violet: 167 139 250;
+  }
+
+  html { letter-spacing: 0; }
+  body { @apply m-0 min-h-screen bg-[rgb(var(--page))] font-sans text-sm text-[rgb(var(--ink))] antialiased; }
+  button, select { letter-spacing: 0; }
+  button:focus-visible, select:focus-visible { @apply outline-none ring-2 ring-[rgb(var(--blue))] ring-offset-2 ring-offset-[rgb(var(--page))]; }
+}
+
+@layer components {
+  .surface { @apply border border-[rgb(var(--line))] bg-[rgb(var(--panel))]; }
+  .metric-card { @apply min-w-0 border-l border-[rgb(var(--line))] pl-4 first:border-l-0 first:pl-0 sm:pl-6; }
+  .control { @apply h-9 rounded-md border border-[rgb(var(--line-strong))] bg-[rgb(var(--panel))] px-3 text-[rgb(var(--ink))] transition hover:bg-[rgb(var(--panel-subtle))]; }
+  .icon-control { @apply control inline-grid w-9 place-items-center px-0 text-base; }
+  .select-control { @apply control min-w-40 appearance-auto pr-8; }
+  .range-group { @apply inline-flex gap-1; }
+  .range-btn { @apply min-w-0 whitespace-nowrap rounded-full border border-transparent px-3.5 py-2 text-xs font-medium text-[rgb(var(--muted))] transition hover:bg-[rgb(var(--panel))]; }
+  .range-btn[data-active="true"] { @apply border-[rgb(var(--ink))] bg-[rgb(var(--ink))] text-[rgb(var(--panel))]; }
+  .eyebrow { @apply text-[11px] font-medium uppercase text-[rgb(var(--muted))]; }
+  .section-title { @apply text-sm font-semibold text-[rgb(var(--ink))]; }
+  .chip { @apply inline-flex items-center rounded-md border border-[rgb(var(--line))] bg-[rgb(var(--panel-subtle))] px-2 py-1 text-xs text-[rgb(var(--muted))]; }
+  .table-head { @apply border-b border-[rgb(var(--line))] bg-[rgb(var(--panel-subtle))] text-left text-[11px] font-medium text-[rgb(var(--muted))]; }
+  .table-cell { @apply border-b border-[rgb(var(--line))] px-3 py-2.5 align-middle; }
+  .story-stat { @apply min-w-0 border-l border-[rgb(var(--line))] pl-4 first:border-l-0 first:pl-0 sm:pl-6; }
+  .task-card { @apply min-w-0 rounded-lg border border-[rgb(var(--line))] bg-[rgb(var(--panel))] p-4 text-left transition hover:-translate-y-0.5 hover:border-[rgb(var(--line-strong))] hover:shadow-panel; }
+  .task-dot { @apply inline-grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-semibold; }
+}
+
+.chart-axis { fill: rgb(var(--muted)); font-size: 11px; }
+.chart-grid { stroke: rgb(var(--line)); stroke-width: 1; }
+.chart-current-cached { fill: rgb(var(--blue)); }
+.chart-current-uncached { fill: rgb(var(--emerald)); }
+.chart-current-output { fill: rgb(var(--orange)); }
+.chart-current-other { fill: rgb(var(--amber)); }
+.chart-previous { fill: none; stroke: rgb(var(--violet)); stroke-width: 2; stroke-dasharray: 5 5; }
+.heat-cell { background: color-mix(in srgb, rgb(var(--heat-color, var(--blue))) var(--heat), rgb(var(--panel-subtle))); }
+.heat-cell:hover { box-shadow: inset 0 0 0 2px rgb(var(--blue)); }
+.thin-scrollbar { scrollbar-width: thin; scrollbar-color: rgb(var(--line-strong)) transparent; }
+.thin-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+.thin-scrollbar::-webkit-scrollbar-thumb { border-radius: 4px; background: rgb(var(--line-strong)); }
+.task-row { cursor: pointer; }
+.task-row:hover td { background: rgb(var(--panel-subtle)); }
+.metric-number { font-variant-numeric: tabular-nums; }
