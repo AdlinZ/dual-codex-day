@@ -1,0 +1,16 @@
+{
+  "starting": "正在启动服务...",
+  "online": "运行中 · {0} 次调用 · {1} 个任务",
+  "offline": "服务未运行",
+  "open": "打开仪表盘",
+  "restart": "重启服务",
+  "logs": "打开日志目录",
+  "startup": "开机自启",
+  "exit": "退出并停止服务",
+  "startedTitle": "codex-day 已启动",
+  "startedBody": "Token 仪表盘正在后台刷新。",
+  "failedTitle": "codex-day 启动失败",
+  "failedBody": "请查看本地服务日志。",
+  "recoveredTitle": "codex-day 已恢复",
+  "recoveredBody": "本地服务已重新连接。"
+}

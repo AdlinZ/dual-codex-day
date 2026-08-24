@@ -19,6 +19,7 @@
 - SQLite 本地增量索引，只重建新增或变化的日志文件
 - 仅监听 `127.0.0.1` 的本地 HTTP 服务与健康状态接口
 - Docker Compose 部署，日志只读挂载、索引独立持久化
+- Windows 系统托盘、服务自动恢复与当前用户开机自启
 - 本地项目别名，不修改原始日志或公开 Demo
 - 模型与项目筛选、项目 × 模型矩阵、任务详情
 - 完整 24 小时时间轴，连续空闲时段自动压缩
@@ -42,7 +43,7 @@ cd codex-day
 - `%USERPROFILE%\.codex\sessions`
 - `%USERPROFILE%\.codex\archived_sessions`
 
-启动脚本会优先使用 SQLite 增量索引，并打开 `http://127.0.0.1:8765/?live=1`。启动窗口会持续监听日志变化，关闭窗口或按 `Ctrl+C` 即可停止动态刷新。
+启动脚本会优先使用 SQLite 增量索引，在系统托盘常驻，并打开 `http://127.0.0.1:8765/?live=1`。不再需要保留命令窗口；没有 Node.js 时才会回退到原来的 PowerShell 窗口模式。
 
 数据库位于 `.codex-day/codex-day.sqlite`，生成页面位于 `dist/index.html`。这两个目录都已被 Git 忽略，只应保留在本机。SQLite 会保存本地日志文件路径用于判断文件是否变化，但这些路径不会进入生成页面或公开 Demo。
 
@@ -61,6 +62,18 @@ npm start
 ```
 
 服务提供 `/healthz` 与 `/api/status` 两个只读状态接口。默认仅绑定 `127.0.0.1`，不会暴露到局域网。
+
+## Windows 托盘
+
+双击 `scripts/open-dashboard.cmd` 后，codex-day 会缩到 Windows 通知区域。双击托盘图标可以打开仪表盘，右键菜单可以：
+
+- 查看当前调用数和任务数
+- 打开仪表盘或本地日志目录
+- 重启后台服务
+- 打开或关闭当前用户的开机自启
+- 退出托盘并停止它所管理的服务
+
+开机自启默认关闭，打开后只写入当前用户的 `HKCU` 启动项，不需要管理员权限。托盘每 5 秒检查一次健康状态；服务意外退出时会尝试自动恢复。PID 文件和运行日志位于被 Git 忽略的 `.codex-day/`。
 
 ## Docker
 
@@ -147,10 +160,12 @@ npm test
 ```powershell
 npm run build:css
 npm run build:demo
+npm run test:service
+npm run test:tray
 npm run test:container
 ```
 
-`npm test` 会检查模板与 Demo、SQLite 增量行为以及容器的只读挂载、持久化和本地端口边界。如果本机安装了 Docker，还会额外执行 `docker compose config`。
+`npm test` 会检查模板与 Demo、SQLite 增量行为、服务 PID 生命周期、Windows 托盘脚本以及容器的只读挂载、持久化和本地端口边界。如果本机安装了 Docker，还会额外执行 `docker compose config`。
 
 ## 项目结构
 
@@ -161,15 +176,19 @@ codex-day/
 ├─ .env.example               # 跨平台 Docker 配置示例
 ├─ assets/                    # README 的公开 Demo 预览图
 ├─ config/
-│  └─ pricing.json            # 可更新的 API 价格快照
+│  ├─ pricing.json            # 可更新的 API 价格快照
+│  └─ tray.zh-CN.json         # Windows 托盘中文文本
 ├─ demo/
 │  ├─ index.html              # 可直接浏览的虚构 Demo
 │  └─ sample-data.json        # 虚构数据源
 ├─ scripts/
 │  ├─ build-demo.ps1          # 重建公开 Demo
 │  ├─ codex-day.mjs           # 增量索引、本地服务与跨平台入口
+│  ├─ codex-day-tray.ps1      # Windows 托盘与开机自启控制
 │  ├─ check-container.mjs     # Docker/Compose 边界检查
 │  ├─ check-indexer.mjs       # SQLite 增量行为集成测试
+│  ├─ check-service.mjs       # 服务健康与 PID 生命周期测试
+│  ├─ check-tray.mjs          # 托盘入口与脚本语法检查
 │  ├─ lib/
 │  │  └─ session-index.mjs    # JSONL 解析、SQLite 与页面生成
 │  ├─ open-dashboard.cmd      # 刷新并打开个人仪表盘
@@ -201,17 +220,18 @@ codex-day/
 
 ## 当前限制
 
-- Node.js 增量模式要求 22.5 或更高版本；Windows PowerShell 模式仍可作为兼容回退。
+- Node.js 增量模式要求 22.5 或更高版本；Windows 托盘依赖系统自带的 PowerShell 与 Windows Forms，无 Node.js 时仍可回退到 PowerShell 刷新模式。
 - Docker 部署需要用户显式配置 `CODEX_DATA_DIR`，不会自动猜测或扩大宿主机挂载范围。
 - 项目名称取自工作目录的最后一级，重名目录会在界面中显示相同名称，但内部匿名标识仍不同。
 - 成本仅是公开 API 标价的等价估算，无法代表公司中转站的折扣、包量、倍率或实际账单。
 
 ## 后续方向
 
-- Windows 托盘入口与后台刷新
 - 可选择的本地数据保留与索引清理策略
+- 页面内的数据源诊断与异常记录提示
+- GitHub Actions、版本 Release 与公开 Docker 镜像
 
-Node.js、SQLite 与 Docker 部署层已经完成。下一阶段将优先改善后台常驻体验，并让用户可以控制历史索引的保留周期。
+Node.js、SQLite、Docker 与 Windows 后台常驻入口已经完成。下一阶段将优先增加数据诊断和可控的历史索引保留周期。
 
 ## License
 

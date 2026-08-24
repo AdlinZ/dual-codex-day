@@ -1,4 +1,4 @@
-import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
@@ -17,11 +17,12 @@ function parseArgs(argv) {
     host: '127.0.0.1',
     port: 8765,
     intervalSeconds: 4,
+    pidFile: null,
     once: false,
     open: false
   };
   const valueOptions = new Map([
-    ['--codex-root', 'codexRoot'], ['--database', 'databasePath'], ['--dashboard', 'dashboardPath'],
+    ['--codex-root', 'codexRoot'], ['--database', 'databasePath'], ['--dashboard', 'dashboardPath'], ['--pid-file', 'pidFile'],
     ['--host', 'host'], ['--port', 'port'], ['--interval', 'intervalSeconds']
   ]);
   for (let index = 0; index < argv.length; index += 1) {
@@ -41,7 +42,31 @@ function parseArgs(argv) {
 }
 
 function printHelp() {
-  console.log(`codex-day v0.5\n\nUsage:\n  node scripts/codex-day.mjs [options]\n\nOptions:\n  --once                 Build once and exit\n  --open                 Open the local dashboard\n  --codex-root <path>    Codex data directory\n  --database <path>      SQLite index path\n  --dashboard <path>     Generated HTML path\n  --host <host>          HTTP host (default 127.0.0.1)\n  --port <port>          HTTP port (default 8765)\n  --interval <seconds>   Poll interval from 2 to 60\n`);
+  console.log(`codex-day v0.6\n\nUsage:\n  node scripts/codex-day.mjs [options]\n\nOptions:\n  --once                 Build once and exit\n  --open                 Open the local dashboard\n  --codex-root <path>    Codex data directory\n  --database <path>      SQLite index path\n  --dashboard <path>     Generated HTML path\n  --pid-file <path>      Write the running service PID to a file\n  --host <host>          HTTP host (default 127.0.0.1)\n  --port <port>          HTTP port (default 8765)\n  --interval <seconds>   Poll interval from 2 to 60\n`);
+}
+
+function processIsRunning(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try { process.kill(pid, 0); return true; } catch { return false; }
+}
+
+function acquirePidFile(filePath) {
+  if (!filePath) return () => {};
+  mkdirSync(path.dirname(filePath), { recursive: true });
+  if (existsSync(filePath)) {
+    const existingPid = Number(readFileSync(filePath, 'utf8').trim());
+    if (processIsRunning(existingPid)) throw new Error(`codex-day is already running with PID ${existingPid}.`);
+    unlinkSync(filePath);
+  }
+  writeFileSync(filePath, `${process.pid}\n`, { encoding: 'utf8', flag: 'wx' });
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    try {
+      if (Number(readFileSync(filePath, 'utf8').trim()) === process.pid) unlinkSync(filePath);
+    } catch {}
+  };
 }
 
 function openUrl(url) {
@@ -79,6 +104,8 @@ if (options.help) {
   printHelp();
   process.exit(0);
 }
+const releasePidFile = acquirePidFile(options.pidFile);
+process.on('exit', releasePidFile);
 
 const paths = {
   templatePath: path.join(repoRoot, 'src', 'index.template.html'),
@@ -153,6 +180,7 @@ let timer;
 server.on('error', error => {
   if (timer) clearInterval(timer);
   database.close();
+  releasePidFile();
   console.error(`Local service failed: ${error.message}`);
   process.exit(1);
 });
@@ -179,6 +207,7 @@ function shutdown() {
   if (timer) clearInterval(timer);
   server.close(() => {
     database.close();
+    releasePidFile();
     process.exit(0);
   });
 }
