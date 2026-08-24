@@ -18,6 +18,7 @@
 - 独立的周报/月报海报导出
 - SQLite 本地增量索引，只重建新增或变化的日志文件
 - 仅监听 `127.0.0.1` 的本地 HTTP 服务与健康状态接口
+- Docker Compose 部署，日志只读挂载、索引独立持久化
 - 本地项目别名，不修改原始日志或公开 Demo
 - 模型与项目筛选、项目 × 模型矩阵、任务详情
 - 完整 24 小时时间轴，连续空闲时段自动压缩
@@ -60,6 +61,39 @@ npm start
 ```
 
 服务提供 `/healthz` 与 `/api/status` 两个只读状态接口。默认仅绑定 `127.0.0.1`，不会暴露到局域网。
+
+## Docker
+
+Docker 版本适合希望后台常驻、又不想在宿主机安装 Node.js 的用户。它仍然只读取本机日志，不会上传数据；Compose 只把服务发布到 `127.0.0.1`。
+
+先复制环境变量示例，并把 `CODEX_DATA_DIR` 改成自己的 `.codex` 目录：
+
+```powershell
+Copy-Item .env.example .env
+notepad .env
+docker compose up -d --build
+```
+
+Windows Docker Desktop 路径请使用正斜杠，例如：
+
+```dotenv
+CODEX_DATA_DIR=C:/Users/your-name/.codex
+```
+
+macOS 或 Linux 可以填写：
+
+```dotenv
+CODEX_DATA_DIR=/Users/your-name/.codex
+```
+
+启动后访问 `http://127.0.0.1:8765`。原始日志以只读方式挂载到 `/codex`，SQLite 索引存放在 Docker 命名卷 `codex-day_index` 中。更新与停止命令：
+
+```powershell
+docker compose up -d --build
+docker compose down
+```
+
+`docker compose down` 不会删除索引；只有显式增加 `--volumes` 才会移除持久化卷。时区默认是 `Asia/Shanghai`，可以在 `.env` 中修改 `TZ`。端口冲突时修改 `CODEX_DAY_PORT`。
 
 使用 PowerShell 兼容模式只生成一次静态快照：
 
@@ -113,14 +147,18 @@ npm test
 ```powershell
 npm run build:css
 npm run build:demo
+npm run test:container
 ```
 
-`npm test` 会检查模板与 Demo 的内联脚本语法、重复 DOM 标识、缺失节点引用、报告节点和 Demo 时间跨度。
+`npm test` 会检查模板与 Demo、SQLite 增量行为以及容器的只读挂载、持久化和本地端口边界。如果本机安装了 Docker，还会额外执行 `docker compose config`。
 
 ## 项目结构
 
 ```text
 codex-day/
+├─ Dockerfile                 # 非 root 的 Node.js 运行镜像
+├─ compose.yaml               # 本地端口、只读日志与持久化索引
+├─ .env.example               # 跨平台 Docker 配置示例
 ├─ assets/                    # README 的公开 Demo 预览图
 ├─ config/
 │  └─ pricing.json            # 可更新的 API 价格快照
@@ -130,6 +168,7 @@ codex-day/
 ├─ scripts/
 │  ├─ build-demo.ps1          # 重建公开 Demo
 │  ├─ codex-day.mjs           # 增量索引、本地服务与跨平台入口
+│  ├─ check-container.mjs     # Docker/Compose 边界检查
 │  ├─ check-indexer.mjs       # SQLite 增量行为集成测试
 │  ├─ lib/
 │  │  └─ session-index.mjs    # JSONL 解析、SQLite 与页面生成
@@ -163,15 +202,16 @@ codex-day/
 ## 当前限制
 
 - Node.js 增量模式要求 22.5 或更高版本；Windows PowerShell 模式仍可作为兼容回退。
+- Docker 部署需要用户显式配置 `CODEX_DATA_DIR`，不会自动猜测或扩大宿主机挂载范围。
 - 项目名称取自工作目录的最后一级，重名目录会在界面中显示相同名称，但内部匿名标识仍不同。
 - 成本仅是公开 API 标价的等价估算，无法代表公司中转站的折扣、包量、倍率或实际账单。
 
 ## 后续方向
 
-- Docker 镜像与只读日志目录挂载
 - Windows 托盘入口与后台刷新
+- 可选择的本地数据保留与索引清理策略
 
-Node.js 与 SQLite 数据层已经完成，下一阶段可以在此基础上增加 Docker；容器会将 Codex 日志目录只读挂载，并把 SQLite 数据库单独持久化。
+Node.js、SQLite 与 Docker 部署层已经完成。下一阶段将优先改善后台常驻体验，并让用户可以控制历史索引的保留周期。
 
 ## License
 

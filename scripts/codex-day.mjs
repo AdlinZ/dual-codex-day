@@ -41,7 +41,7 @@ function parseArgs(argv) {
 }
 
 function printHelp() {
-  console.log(`codex-day v0.4\n\nUsage:\n  node scripts/codex-day.mjs [options]\n\nOptions:\n  --once                 Build once and exit\n  --open                 Open the local dashboard\n  --codex-root <path>    Codex data directory\n  --database <path>      SQLite index path\n  --dashboard <path>     Generated HTML path\n  --host <host>          HTTP host (default 127.0.0.1)\n  --port <port>          HTTP port (default 8765)\n  --interval <seconds>   Poll interval from 2 to 60\n`);
+  console.log(`codex-day v0.5\n\nUsage:\n  node scripts/codex-day.mjs [options]\n\nOptions:\n  --once                 Build once and exit\n  --open                 Open the local dashboard\n  --codex-root <path>    Codex data directory\n  --database <path>      SQLite index path\n  --dashboard <path>     Generated HTML path\n  --host <host>          HTTP host (default 127.0.0.1)\n  --port <port>          HTTP port (default 8765)\n  --interval <seconds>   Poll interval from 2 to 60\n`);
 }
 
 function openUrl(url) {

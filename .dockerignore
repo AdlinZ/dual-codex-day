@@ -1,0 +1,12 @@
+.git
+.github
+.codex-day
+dist
+node_modules
+assets
+demo
+work
+.env
+*.csv
+*.log
+codex-day-*.png
