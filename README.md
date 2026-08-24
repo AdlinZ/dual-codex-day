@@ -2,6 +2,9 @@
 
 <p align="center"><img src="assets/codex-day-mark.svg" width="112" alt="codex-day Logo"></p>
 
+[![CI](https://github.com/AdlinZ/codex-day/actions/workflows/ci.yml/badge.svg)](https://github.com/AdlinZ/codex-day/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/AdlinZ/codex-day)](https://github.com/AdlinZ/codex-day/releases)
+
 一个本地优先的个人 Codex Token 活动仪表盘。它读取本机 Codex 会话日志，按今天、本周、近 30 天、模型、项目和任务汇总 Token，并可以导出 CSV 与分享海报。
 
 > 非 OpenAI 官方项目，与 OpenAI 无隶属或背书关系。
@@ -188,6 +191,7 @@ codex-day/
 │  └─ sample-data.json        # 虚构数据源
 ├─ scripts/
 │  ├─ build-demo.ps1          # 重建公开 Demo
+│  ├─ build-demo.mjs          # 跨平台重建公开 Demo
 │  ├─ codex-day.mjs           # 增量索引、本地服务与跨平台入口
 │  ├─ codex-day-tray.ps1      # Windows 托盘与开机自启控制
 │  ├─ check-container.mjs     # Docker/Compose 边界检查
@@ -234,9 +238,9 @@ codex-day/
 
 - 可选择的本地数据保留与索引清理策略
 - 页面内的数据源诊断与异常记录提示
-- GitHub Actions、版本 Release 与公开 Docker 镜像
+- 发布到 GHCR 的公开 Docker 镜像
 
-Node.js、SQLite、Docker 与 Windows 后台常驻入口已经完成。下一阶段将优先增加数据诊断和可控的历史索引保留周期。
+Node.js、SQLite、Docker、Windows 后台常驻入口与 GitHub 自动发布流程已经完成。下一阶段将优先增加数据诊断和可控的历史索引保留周期。
 
 ## License
 
