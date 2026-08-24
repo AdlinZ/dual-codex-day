@@ -80,6 +80,7 @@ function contentType(filePath) {
   if (filePath.endsWith('.html')) return 'text/html; charset=utf-8';
   if (filePath.endsWith('.css')) return 'text/css; charset=utf-8';
   if (filePath.endsWith('.js')) return 'text/javascript; charset=utf-8';
+  if (filePath.endsWith('.svg')) return 'image/svg+xml';
   return 'application/octet-stream';
 }
 
@@ -111,6 +112,7 @@ const paths = {
   templatePath: path.join(repoRoot, 'src', 'index.template.html'),
   stylesheetPath: path.join(repoRoot, 'src', 'token-dashboard.css'),
   pricingPath: path.join(repoRoot, 'config', 'pricing.json'),
+  logoPath: path.join(repoRoot, 'assets', 'codex-day-mark.svg'),
   dashboardPath: options.dashboardPath
 };
 const database = openIndex(options.databasePath);
@@ -167,6 +169,7 @@ const server = createServer((request, response) => {
   const routes = new Map([
     ['/', options.dashboardPath], ['/index.html', options.dashboardPath],
     ['/token-dashboard.css', path.join(outputDirectory, 'token-dashboard.css')],
+    ['/codex-day-mark.svg', path.join(outputDirectory, 'codex-day-mark.svg')],
     ['/live-update.js', path.join(outputDirectory, 'live-update.js')]
   ]);
   const filePath = routes.get(url.pathname);

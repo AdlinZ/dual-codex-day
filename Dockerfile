@@ -11,6 +11,7 @@ ENV NODE_ENV=production \
     TZ=Asia/Shanghai
 
 COPY --chown=node:node package.json LICENSE ./
+COPY --chown=node:node assets/codex-day-mark.svg ./assets/codex-day-mark.svg
 COPY --chown=node:node config ./config
 COPY --chown=node:node src/index.template.html src/token-dashboard.css ./src/
 COPY --chown=node:node scripts/codex-day.mjs ./scripts/codex-day.mjs

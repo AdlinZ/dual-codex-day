@@ -41,6 +41,8 @@ if (-not [Text.RegularExpressions.Regex]::IsMatch($html, $pricingPattern)) {
 $html = [Text.RegularExpressions.Regex]::Replace($html, $pattern, [Text.RegularExpressions.MatchEvaluator]{ param($match) $replacement }, 1)
 $html = [Text.RegularExpressions.Regex]::Replace($html, $pricingPattern, [Text.RegularExpressions.MatchEvaluator]{ param($match) $pricingReplacement }, 1)
 $html = $html.Replace('href="token-dashboard.css"', 'href="../src/token-dashboard.css"')
+$html = $html.Replace('href="codex-day-mark.svg"', 'href="../assets/codex-day-mark.svg"')
+$html = $html.Replace('src="codex-day-mark.svg"', 'src="../assets/codex-day-mark.svg"')
 [IO.File]::WriteAllText($OutputPath, $html, [Text.UTF8Encoding]::new($false))
 Write-Host ('Demo: {0}' -f $OutputPath)
 

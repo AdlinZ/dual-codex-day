@@ -231,8 +231,8 @@ export function readIndexedEvents(database) {
 }
 
 export function buildDashboard(database, options) {
-  const { templatePath, stylesheetPath, pricingPath, dashboardPath, indexResult = {} } = options;
-  for (const required of [templatePath, stylesheetPath, pricingPath]) {
+  const { templatePath, stylesheetPath, pricingPath, logoPath, dashboardPath, indexResult = {} } = options;
+  for (const required of [templatePath, stylesheetPath, pricingPath, logoPath]) {
     if (!existsSync(required)) throw new Error(`Required dashboard source not found: ${required}`);
   }
   const events = readIndexedEvents(database);
@@ -264,6 +264,7 @@ export function buildDashboard(database, options) {
   mkdirSync(outputDirectory, { recursive: true });
   writeFileSync(dashboardPath, html, 'utf8');
   copyFileSync(stylesheetPath, path.join(outputDirectory, 'token-dashboard.css'));
+  copyFileSync(logoPath, path.join(outputDirectory, 'codex-day-mark.svg'));
   writeFileSync(path.join(outputDirectory, 'live-update.js'), `window.__CODEX_DAY_LIVE__ = ${JSON.stringify(generatedAt)};`, 'utf8');
   return payload;
 }

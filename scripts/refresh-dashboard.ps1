@@ -4,6 +4,7 @@ param(
     [string]$DashboardPath,
     [string]$TemplatePath,
     [string]$StylesheetPath,
+    [string]$LogoPath,
     [string]$PricingPath,
     [switch]$Open
 )
@@ -19,6 +20,9 @@ if ([string]::IsNullOrWhiteSpace($TemplatePath)) {
 }
 if ([string]::IsNullOrWhiteSpace($StylesheetPath)) {
     $StylesheetPath = Join-Path $repoRoot 'src\token-dashboard.css'
+}
+if ([string]::IsNullOrWhiteSpace($LogoPath)) {
+    $LogoPath = Join-Path $repoRoot 'assets\codex-day-mark.svg'
 }
 if ([string]::IsNullOrWhiteSpace($PricingPath)) {
     $PricingPath = Join-Path $repoRoot 'config\pricing.json'
@@ -221,6 +225,9 @@ if (-not (Test-Path -LiteralPath $TemplatePath)) {
 if (-not (Test-Path -LiteralPath $StylesheetPath)) {
     throw "Dashboard stylesheet not found: $StylesheetPath"
 }
+if (-not (Test-Path -LiteralPath $LogoPath)) {
+    throw "Dashboard logo not found: $LogoPath"
+}
 if (-not (Test-Path -LiteralPath $PricingPath)) {
     throw "Pricing configuration not found: $PricingPath"
 }
@@ -249,6 +256,7 @@ if (-not (Test-Path -LiteralPath $outputDirectory)) {
 }
 [IO.File]::WriteAllText($DashboardPath, $updated, [Text.UTF8Encoding]::new($false))
 Copy-Item -LiteralPath $StylesheetPath -Destination (Join-Path $outputDirectory 'token-dashboard.css') -Force
+Copy-Item -LiteralPath $LogoPath -Destination (Join-Path $outputDirectory 'codex-day-mark.svg') -Force
 $liveSignalPath = Join-Path $outputDirectory 'live-update.js'
 $liveSignal = 'window.__CODEX_DAY_LIVE__ = ' + ($payload.generatedAt | ConvertTo-Json -Compress) + ';'
 [IO.File]::WriteAllText($liveSignalPath, $liveSignal, [Text.UTF8Encoding]::new($false))

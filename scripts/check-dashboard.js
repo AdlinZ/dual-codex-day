@@ -65,6 +65,7 @@ function checkHtml(file, source) {
   if (!source.includes('data-report-period="week"') || !source.includes('data-report-period="month"')) {
     fail(`${label}: weekly and monthly report controls are required`);
   }
+  if (!source.includes('codex-day-mark.svg')) fail(`${label}: codex-day logo asset is required`);
 }
 
 const template = read(templatePath);

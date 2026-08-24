@@ -1,5 +1,7 @@
 # codex-day
 
+<p align="center"><img src="assets/codex-day-mark.svg" width="112" alt="codex-day Logo"></p>
+
 一个本地优先的个人 Codex Token 活动仪表盘。它读取本机 Codex 会话日志，按今天、本周、近 30 天、模型、项目和任务汇总 Token，并可以导出 CSV 与分享海报。
 
 > 非 OpenAI 官方项目，与 OpenAI 无隶属或背书关系。
@@ -174,7 +176,10 @@ codex-day/
 ├─ Dockerfile                 # 非 root 的 Node.js 运行镜像
 ├─ compose.yaml               # 本地端口、只读日志与持久化索引
 ├─ .env.example               # 跨平台 Docker 配置示例
-├─ assets/                    # README 的公开 Demo 预览图
+├─ assets/                    # 品牌图标与公开 Demo 预览
+│  ├─ codex-day-mark.svg      # 页面、favicon 与品牌源图标
+│  ├─ codex-day.ico           # Windows 多尺寸托盘图标
+│  └─ demo-preview.png        # README 的公开 Demo 预览图
 ├─ config/
 │  ├─ pricing.json            # 可更新的 API 价格快照
 │  └─ tray.zh-CN.json         # Windows 托盘中文文本

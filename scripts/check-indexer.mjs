@@ -57,6 +57,7 @@ try {
     templatePath: path.join(root, 'src', 'index.template.html'),
     stylesheetPath: path.join(root, 'src', 'token-dashboard.css'),
     pricingPath: path.join(root, 'config', 'pricing.json'),
+    logoPath: path.join(root, 'assets', 'codex-day-mark.svg'),
     dashboardPath,
     indexResult: first
   });

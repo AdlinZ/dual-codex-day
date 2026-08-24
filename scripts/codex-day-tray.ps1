@@ -11,6 +11,7 @@ $servicePidPath = Join-Path $stateDirectory 'service.pid'
 $stdoutPath = Join-Path $stateDirectory 'service-out.log'
 $stderrPath = Join-Path $stateDirectory 'service-error.log'
 $labelsPath = Join-Path $repoRoot 'config\tray.zh-CN.json'
+$iconPath = Join-Path $repoRoot 'assets\codex-day.ico'
 $dashboardUrl = 'http://127.0.0.1:8765/?live=1'
 $healthUrl = 'http://127.0.0.1:8765/healthz'
 $startupRegistryPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
@@ -113,8 +114,15 @@ function Set-StartupEnabled([bool]$Enabled) {
     }
 }
 
+$trayIcon = [System.Drawing.SystemIcons]::Information
+$ownsTrayIcon = $false
+if (Test-Path -LiteralPath $iconPath) {
+    $trayIcon = New-Object System.Drawing.Icon -ArgumentList $iconPath
+    $ownsTrayIcon = $true
+}
+
 $notifyIcon = New-Object System.Windows.Forms.NotifyIcon
-$notifyIcon.Icon = [System.Drawing.SystemIcons]::Information
+$notifyIcon.Icon = $trayIcon
 $notifyIcon.Text = 'codex-day'
 $notifyIcon.Visible = $true
 
@@ -152,7 +160,7 @@ function Update-TrayStatus {
     if ($status) {
         $statusItem.Text = $labels.online -f [int]$status.events, [int]$status.sessions
         $notifyIcon.Text = 'codex-day - running'
-        $notifyIcon.Icon = [System.Drawing.SystemIcons]::Information
+        $notifyIcon.Icon = $trayIcon
         if ($script:lastHealthy -eq $false) {
             Show-Notification $labels.recoveredTitle $labels.recoveredBody ([System.Windows.Forms.ToolTipIcon]::Info)
         }
@@ -220,6 +228,7 @@ finally {
     $notifyIcon.Visible = $false
     $notifyIcon.Dispose()
     $menu.Dispose()
+    if ($ownsTrayIcon) { $trayIcon.Dispose() }
     if ($createdNew) { $mutex.ReleaseMutex() }
     $mutex.Dispose()
 }

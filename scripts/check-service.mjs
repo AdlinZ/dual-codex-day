@@ -85,6 +85,8 @@ try {
   first = startService(port);
   const firstStatus = await waitForHealth(port, first);
   assert(firstStatus.ok && firstStatus.events === 1, 'service health should report the indexed fixture');
+  const logoResponse = await fetch(`http://127.0.0.1:${port}/codex-day-mark.svg`);
+  assert(logoResponse.ok && logoResponse.headers.get('content-type') === 'image/svg+xml', 'service should expose the generated logo asset');
   assert(Number(readFileSync(pidPath, 'utf8').trim()) === first.pid, 'PID file should identify the running service');
 
   const duplicate = startService(port);

@@ -3,7 +3,7 @@
 .codex-day
 dist
 node_modules
-assets
+assets/*.png
 demo
 work
 .env

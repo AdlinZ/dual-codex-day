@@ -10,11 +10,13 @@ const trayPath = path.resolve('scripts', 'codex-day-tray.ps1');
 const tray = readFileSync(trayPath, 'utf8');
 const launcher = readFileSync('scripts/open-dashboard.cmd', 'utf8');
 const labels = JSON.parse(readFileSync('config/tray.zh-CN.json', 'utf8'));
+const iconPath = path.resolve('assets', 'codex-day.ico');
 
 assert(/Local\\CodexDayTray/.test(tray), 'tray must enforce a single instance');
 assert(/HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run/.test(tray), 'tray must use the current-user startup registry key');
 assert(/Test-OwnedServiceProcess/.test(tray) && /--pid-file/.test(tray), 'tray must stop only its owned service process');
 assert(/Get-CodexDayStatus/.test(tray) && /\/healthz/.test(tray), 'tray must monitor the local health endpoint');
+assert(/codex-day\.ico/.test(tray) && existsSync(iconPath), 'tray must use the generated codex-day icon');
 assert(/codex-day-tray\.ps1/.test(launcher) && /-WindowStyle Hidden/.test(launcher), 'double-click launcher must start hidden tray mode');
 assert(labels.open && labels.restart && labels.startup && labels.exit, 'tray labels must include all primary actions');
 
