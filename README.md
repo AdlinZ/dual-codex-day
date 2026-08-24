@@ -54,6 +54,8 @@ cd codex-day
 
 页面右上角的设置按钮可以配置显示币种、汇率、中转站倍率和预算。设置与项目别名保存在浏览器的 `localStorage`，不会写入仓库、日志或导出的静态模板。
 
+页面右上角的数据状态入口会打开诊断侧栏，显示最近刷新、数据范围、索引大小、解析异常和当前保留策略。诊断页面只展示汇总计数，不显示完整日志路径、原始 Session ID 或失败行。
+
 使用 Node.js 只增量索引并生成一次静态快照：
 
 ```powershell
@@ -67,6 +69,23 @@ npm start
 ```
 
 服务提供 `/healthz` 与 `/api/status` 两个只读状态接口。默认仅绑定 `127.0.0.1`，不会暴露到局域网。
+
+运行只读、默认脱敏的本机自检：
+
+```powershell
+node .\scripts\codex-day.mjs doctor
+node .\scripts\codex-day.mjs doctor --json
+```
+
+只有主动增加 `--verbose` 时，自检结果才会包含本机路径。
+
+限制 SQLite 索引只保留最近 90 天：
+
+```powershell
+node .\scripts\codex-day.mjs --retention-days 90
+```
+
+默认值为 `all`。缩短周期只会清理 SQLite 事件，不会删除或修改 Codex 原始日志；扩大周期或切回 `all` 时会自动重扫并恢复历史。
 
 ## Windows 托盘
 
@@ -83,6 +102,10 @@ npm start
 ## Docker
 
 Docker 版本适合希望后台常驻、又不想在宿主机安装 Node.js 的用户。它仍然只读取本机日志，不会上传数据；Compose 只把服务发布到 `127.0.0.1`。
+
+从 v0.7.0 开始，正式版本也可以直接从 GHCR 拉取 `ghcr.io/adlinz/codex-day:latest`，或者继续使用仓库内 Compose 在本机构建。
+
+个人账号下首次发布 GHCR 包时，GitHub 会默认设为私有，需要在包设置中手动切换一次 `Public`。Release 流程包含匿名拉取检查，私有镜像不会被误标为正式公开版本。
 
 先复制环境变量示例，并把 `CODEX_DATA_DIR` 改成自己的 `.codex` 目录：
 
@@ -111,7 +134,7 @@ docker compose up -d --build
 docker compose down
 ```
 
-`docker compose down` 不会删除索引；只有显式增加 `--volumes` 才会移除持久化卷。时区默认是 `Asia/Shanghai`，可以在 `.env` 中修改 `TZ`。端口冲突时修改 `CODEX_DAY_PORT`。
+`docker compose down` 不会删除索引；只有显式增加 `--volumes` 才会移除持久化卷。时区默认是 `Asia/Shanghai`，可以在 `.env` 中修改 `TZ`。端口冲突时修改 `CODEX_DAY_PORT`，历史保留周期通过 `CODEX_DAY_RETENTION_DAYS` 配置。
 
 使用 PowerShell 兼容模式只生成一次静态快照：
 
@@ -226,6 +249,8 @@ codex-day/
 - 没有价格或不支持所选模式的模型不会参与费用合计，页面会显示定价覆盖率。
 - 中转站、代理或不同 Codex 版本可能改变日志字段；解析器遇到无法识别的记录时会跳过。
 - SQLite 按文件大小和修改时间识别变化；变化文件会整体重新解析，未变化文件不会重复扫描。
+- 无效 JSON、无效时间戳、空用量和重复事件会进入脱敏诊断汇总，不再静默丢失上下文。
+- 历史保留策略只影响 SQLite 索引；Codex 原始日志始终保持只读。
 
 ## 当前限制
 
@@ -236,11 +261,11 @@ codex-day/
 
 ## 后续方向
 
-- 可选择的本地数据保留与索引清理策略
-- 页面内的数据源诊断与异常记录提示
-- 发布到 GHCR 的公开 Docker 镜像
+- 可导入和导出的本地设置配置文件
+- 更细粒度的模型定价快照更新提示
+- 可选的本地日报摘要与系统通知
 
-Node.js、SQLite、Docker、Windows 后台常驻入口与 GitHub 自动发布流程已经完成。下一阶段将优先增加数据诊断和可控的历史索引保留周期。
+v0.7.0 已完成数据诊断、索引保留策略、脱敏自检和 GHCR 发布链路，设计范围与验收标准见 [v0.7.0 规划](docs/plans/v0.7.0.md)。
 
 ## License
 

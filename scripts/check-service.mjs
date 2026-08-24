@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -84,7 +84,15 @@ try {
   const port = await availablePort();
   first = startService(port);
   const firstStatus = await waitForHealth(port, first);
-  assert(firstStatus.ok && firstStatus.events === 1, 'service health should report the indexed fixture');
+  assert(firstStatus.ok && firstStatus.version === '0.7.0', 'service health should report liveness and version');
+  const statusResponse = await fetch(`http://127.0.0.1:${port}/api/status`);
+  const status = await statusResponse.json();
+  assert(status.ok && status.diagnostics.schemaVersion === 2 && status.diagnostics.counts.events === 1, 'status endpoint should expose schema v2 diagnostics');
+  assert(!JSON.stringify(status).includes(temporaryRoot), 'status endpoint must not expose private local paths');
+  const doctor = spawnSync(process.execPath, [path.join(root, 'scripts', 'codex-day.mjs'), 'doctor', '--json', '--codex-root', codexRoot, '--database', databasePath, '--dashboard', dashboardPath], { cwd: root, encoding: 'utf8' });
+  const doctorReport = JSON.parse(doctor.stdout);
+  assert(doctor.status === 0 && doctorReport.status === 'ok', 'doctor should report a healthy fixture');
+  assert(!doctor.stdout.includes(temporaryRoot), 'doctor JSON should omit private paths by default');
   const logoResponse = await fetch(`http://127.0.0.1:${port}/codex-day-mark.svg`);
   assert(logoResponse.ok && logoResponse.headers.get('content-type') === 'image/svg+xml', 'service should expose the generated logo asset');
   assert(Number(readFileSync(pidPath, 'utf8').trim()) === first.pid, 'PID file should identify the running service');
@@ -100,7 +108,7 @@ try {
   second = startService(port);
   await waitForHealth(port, second);
   assert(Number(readFileSync(pidPath, 'utf8').trim()) === second.pid, 'a stale PID file should be replaced on restart');
-  console.log('Service checks passed: health, PID ownership, duplicate rejection, and stale PID recovery.');
+  console.log('Service checks passed: health, diagnostics, doctor privacy, PID ownership, duplicate rejection, and stale PID recovery.');
 } finally {
   for (const child of children) child.kill();
   if (second) await waitForExit(second);

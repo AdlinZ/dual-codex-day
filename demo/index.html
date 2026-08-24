@@ -18,6 +18,10 @@
         <p id="generated-meta" class="mt-1 truncate text-[11px] text-[rgb(var(--muted))]">正在读取本地数据</p>
       </div>
       <div class="flex shrink-0 items-center gap-2">
+        <button id="health-toggle" class="control inline-flex w-9 items-center justify-center gap-2 px-0 sm:w-auto sm:justify-start sm:px-2.5" type="button" aria-label="打开数据诊断" title="数据诊断">
+          <span id="health-dot" class="h-2 w-2 rounded-full bg-[rgb(var(--emerald))]" aria-hidden="true"></span>
+          <span id="health-label" class="hidden text-xs sm:inline">数据正常</span>
+        </button>
         <button id="export-poster" class="control hidden sm:inline-flex sm:items-center sm:gap-2" type="button"><span aria-hidden="true">▣</span><span>导出海报</span></button>
         <button id="export-csv" class="control hidden sm:inline-flex sm:items-center sm:gap-2" type="button"><span aria-hidden="true">↓</span><span>导出 CSV</span></button>
         <div class="relative sm:hidden">
@@ -289,6 +293,65 @@
     </footer>
   </main>
 
+  <div id="health-shell" class="fixed inset-0 z-[55] hidden">
+    <button id="health-backdrop" class="absolute inset-0 bg-black/40" type="button" aria-label="关闭数据诊断"></button>
+    <aside class="absolute inset-y-0 right-0 flex w-full max-w-lg flex-col border-l border-[rgb(var(--line))] bg-[rgb(var(--panel))] shadow-2xl" aria-labelledby="health-title">
+      <header class="flex items-start justify-between gap-4 border-b border-[rgb(var(--line))] p-5">
+        <div class="min-w-0">
+          <p class="eyebrow">Data health</p>
+          <h2 id="health-title" class="mt-1 text-lg font-semibold">数据诊断</h2>
+          <p id="health-status-note" class="mt-1 text-xs text-[rgb(var(--muted))]">正在读取索引状态</p>
+        </div>
+        <button id="health-close" class="icon-control shrink-0" type="button" aria-label="关闭数据诊断">×</button>
+      </header>
+      <div class="thin-scrollbar flex-1 overflow-y-auto">
+        <section class="grid grid-cols-3 border-b border-[rgb(var(--line))] px-5 py-6" aria-label="索引数量">
+          <div>
+            <div class="eyebrow">日志文件</div>
+            <div id="health-files" class="metric-number mt-2 text-xl font-semibold">0</div>
+          </div>
+          <div class="border-l border-[rgb(var(--line))] pl-5">
+            <div class="eyebrow">任务</div>
+            <div id="health-sessions" class="metric-number mt-2 text-xl font-semibold">0</div>
+          </div>
+          <div class="border-l border-[rgb(var(--line))] pl-5">
+            <div class="eyebrow">调用</div>
+            <div id="health-events" class="metric-number mt-2 text-xl font-semibold">0</div>
+          </div>
+        </section>
+        <section class="border-b border-[rgb(var(--line))] px-5 py-6">
+          <h3 class="section-title">当前索引</h3>
+          <dl class="mt-4 divide-y divide-[rgb(var(--line))] text-xs">
+            <div class="flex items-center justify-between gap-4 py-3"><dt class="text-[rgb(var(--muted))]">最近刷新</dt><dd id="health-refresh" class="text-right font-medium">--</dd></div>
+            <div class="flex items-center justify-between gap-4 py-3"><dt class="text-[rgb(var(--muted))]">数据范围</dt><dd id="health-range" class="text-right font-medium">--</dd></div>
+            <div class="flex items-center justify-between gap-4 py-3"><dt class="text-[rgb(var(--muted))]">历史保留</dt><dd id="health-retention" class="text-right font-medium">全部历史</dd></div>
+            <div class="flex items-center justify-between gap-4 py-3"><dt class="text-[rgb(var(--muted))]">数据库</dt><dd id="health-database" class="metric-number text-right font-medium">--</dd></div>
+            <div class="flex items-center justify-between gap-4 py-3"><dt class="text-[rgb(var(--muted))]">Schema</dt><dd id="health-schema" class="metric-number text-right font-medium">v--</dd></div>
+            <div class="flex items-center justify-between gap-4 py-3"><dt class="text-[rgb(var(--muted))]">本轮文件</dt><dd id="health-file-changes" class="text-right font-medium">--</dd></div>
+          </dl>
+        </section>
+        <section class="border-b border-[rgb(var(--line))] px-5 py-6">
+          <div class="flex items-center justify-between gap-3">
+            <h3 class="section-title">解析结果</h3>
+            <span id="health-parse-summary" class="chip">0 条有效记录</span>
+          </div>
+          <dl class="mt-4 grid grid-cols-2 gap-x-6 gap-y-5 text-xs">
+            <div><dt class="text-[rgb(var(--muted))]">有效事件</dt><dd id="health-valid" class="metric-number mt-1 text-base font-semibold">0</dd></div>
+            <div><dt class="text-[rgb(var(--muted))]">重复事件</dt><dd id="health-duplicates" class="metric-number mt-1 text-base font-semibold">0</dd></div>
+            <div><dt class="text-[rgb(var(--muted))]">空用量</dt><dd id="health-empty" class="metric-number mt-1 text-base font-semibold">0</dd></div>
+            <div><dt class="text-[rgb(var(--muted))]">周期外</dt><dd id="health-retained" class="metric-number mt-1 text-base font-semibold">0</dd></div>
+            <div><dt class="text-[rgb(var(--muted))]">无效 JSON</dt><dd id="health-json-errors" class="metric-number mt-1 text-base font-semibold">0</dd></div>
+            <div><dt class="text-[rgb(var(--muted))]">无效时间</dt><dd id="health-time-errors" class="metric-number mt-1 text-base font-semibold">0</dd></div>
+          </dl>
+        </section>
+        <section class="px-5 py-6 text-xs leading-5 text-[rgb(var(--muted))]">
+          <p>诊断仅展示汇总计数，不包含完整文件路径、原始 Session ID、日志正文或失败行。</p>
+          <p class="mt-2">历史保留只作用于 SQLite 索引，不会删除或修改 Codex 原始日志。</p>
+        </section>
+      </div>
+    </aside>
+  </div>
+
   <div id="drawer-shell" class="fixed inset-0 z-50 hidden">
     <button id="drawer-backdrop" class="absolute inset-0 bg-black/40" type="button" aria-label="关闭任务详情"></button>
     <aside class="absolute inset-y-0 right-0 flex w-full max-w-xl flex-col border-l border-[rgb(var(--line))] bg-[rgb(var(--panel))] shadow-2xl" aria-label="任务详情">
@@ -366,7 +429,7 @@
     </section>
   </div>
 
-  <script id="token-data">window.__TOKEN_DATA__ = {"generatedAt":"2026-08-20T17:30:00+08:00","timezone":"Demo time (UTC+08:00)","filesScanned":8,"sessionsScanned":17,"demo":true,"events":[{"timestamp":"2026-07-02T10:20:00+08:00","date":"2026-07-02","sessionId":"task-demo-0702","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":5800000,"cachedInput":4300000,"cacheWriteInput":0,"uncachedInput":1500000,"output":68000,"reasoningOutput":16000,"unclassified":0,"total":5868000,"contextWindow":258400},{"timestamp":"2026-07-08T14:10:00+08:00","date":"2026-07-08","sessionId":"task-demo-0708","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":9200000,"cachedInput":7600000,"cacheWriteInput":0,"uncachedInput":1600000,"output":94000,"reasoningOutput":22000,"unclassified":0,"total":9294000,"contextWindow":258400},{"timestamp":"2026-07-15T09:45:00+08:00","date":"2026-07-15","sessionId":"task-demo-0715","model":"gpt-5.6-luna","project":"design-lab","projectId":"project-design","input":4600000,"cachedInput":3500000,"cacheWriteInput":0,"uncachedInput":1100000,"output":52000,"reasoningOutput":12000,"unclassified":0,"total":4652000,"contextWindow":258400},{"timestamp":"2026-07-23T16:05:00+08:00","date":"2026-07-23","sessionId":"task-demo-0723","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":12400000,"cachedInput":10100000,"cacheWriteInput":0,"uncachedInput":2300000,"output":126000,"reasoningOutput":36000,"unclassified":0,"total":12526000,"contextWindow":258400},{"timestamp":"2026-07-30T11:30:00+08:00","date":"2026-07-30","sessionId":"task-demo-0730","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":7100000,"cachedInput":5600000,"cacheWriteInput":0,"uncachedInput":1500000,"output":78000,"reasoningOutput":19000,"unclassified":0,"total":7178000,"contextWindow":258400},{"timestamp":"2026-08-03T09:25:00+08:00","date":"2026-08-03","sessionId":"task-demo-0803","model":"gpt-5.6-sol","project":"design-lab","projectId":"project-design","input":8400000,"cachedInput":6900000,"cacheWriteInput":0,"uncachedInput":1500000,"output":90000,"reasoningOutput":24000,"unclassified":0,"total":8490000,"contextWindow":258400},{"timestamp":"2026-08-05T15:15:00+08:00","date":"2026-08-05","sessionId":"task-demo-0803","model":"gpt-5.6-sol","project":"design-lab","projectId":"project-design","input":10200000,"cachedInput":8500000,"cacheWriteInput":0,"uncachedInput":1700000,"output":112000,"reasoningOutput":31000,"unclassified":0,"total":10312000,"contextWindow":258400},{"timestamp":"2026-08-07T13:40:00+08:00","date":"2026-08-07","sessionId":"task-demo-0807","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":6700000,"cachedInput":5100000,"cacheWriteInput":0,"uncachedInput":1600000,"output":74000,"reasoningOutput":18000,"unclassified":0,"total":6774000,"contextWindow":258400},{"timestamp":"2026-08-10T10:10:00+08:00","date":"2026-08-10","sessionId":"task-demo-0810","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":14300000,"cachedInput":12100000,"cacheWriteInput":0,"uncachedInput":2200000,"output":148000,"reasoningOutput":42000,"unclassified":0,"total":14448000,"contextWindow":258400},{"timestamp":"2026-08-11T14:35:00+08:00","date":"2026-08-11","sessionId":"task-demo-0810","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":8900000,"cachedInput":7200000,"cacheWriteInput":0,"uncachedInput":1700000,"output":96000,"reasoningOutput":26000,"unclassified":0,"total":8996000,"contextWindow":258400},{"timestamp":"2026-08-12T11:05:00+08:00","date":"2026-08-12","sessionId":"task-demo-0812","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":11600000,"cachedInput":9400000,"cacheWriteInput":0,"uncachedInput":2200000,"output":122000,"reasoningOutput":34000,"unclassified":0,"total":11722000,"contextWindow":258400},{"timestamp":"2026-08-13T16:20:00+08:00","date":"2026-08-13","sessionId":"task-demo-0812","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":16800000,"cachedInput":14200000,"cacheWriteInput":0,"uncachedInput":2600000,"output":174000,"reasoningOutput":51000,"unclassified":0,"total":16974000,"contextWindow":258400},{"timestamp":"2026-08-14T09:50:00+08:00","date":"2026-08-14","sessionId":"task-demo-0814","model":"gpt-5.6-sol","project":"design-lab","projectId":"project-design","input":5400000,"cachedInput":4200000,"cacheWriteInput":0,"uncachedInput":1200000,"output":66000,"reasoningOutput":15000,"unclassified":0,"total":5466000,"contextWindow":258400},{"timestamp":"2026-08-17T10:30:00+08:00","date":"2026-08-17","sessionId":"task-demo-0817","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":9800000,"cachedInput":8100000,"cacheWriteInput":0,"uncachedInput":1700000,"output":108000,"reasoningOutput":29000,"unclassified":0,"total":9908000,"contextWindow":258400},{"timestamp":"2026-08-18T15:00:00+08:00","date":"2026-08-18","sessionId":"task-demo-0817","model":"gpt-5.6-luna","project":"design-lab","projectId":"project-design","input":13600000,"cachedInput":11200000,"cacheWriteInput":0,"uncachedInput":2400000,"output":142000,"reasoningOutput":39000,"unclassified":0,"total":13742000,"contextWindow":258400},{"timestamp":"2026-08-19T09:20:00+08:00","date":"2026-08-19","sessionId":"task-7a91b2c3d4e5","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":8200000,"cachedInput":6500000,"cacheWriteInput":0,"uncachedInput":1700000,"output":72000,"reasoningOutput":18000,"unclassified":0,"total":8272000,"contextWindow":258400},{"timestamp":"2026-08-19T10:15:00+08:00","date":"2026-08-19","sessionId":"task-7a91b2c3d4e5","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":12600000,"cachedInput":10400000,"cacheWriteInput":0,"uncachedInput":2200000,"output":118000,"reasoningOutput":32000,"unclassified":0,"total":12718000,"contextWindow":258400},{"timestamp":"2026-08-19T11:40:00+08:00","date":"2026-08-19","sessionId":"task-8b02c3d4e5f6","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":18400000,"cachedInput":15100000,"cacheWriteInput":0,"uncachedInput":3300000,"output":146000,"reasoningOutput":41000,"unclassified":0,"total":18546000,"contextWindow":258400},{"timestamp":"2026-08-19T14:10:00+08:00","date":"2026-08-19","sessionId":"task-9c13d4e5f607","model":"gpt-5.6-sol","project":"design-lab","projectId":"project-design","input":9700000,"cachedInput":8200000,"cacheWriteInput":0,"uncachedInput":1500000,"output":92000,"reasoningOutput":26000,"unclassified":0,"total":9792000,"contextWindow":258400},{"timestamp":"2026-08-19T15:35:00+08:00","date":"2026-08-19","sessionId":"task-9c13d4e5f607","model":"gpt-5.6-sol","project":"design-lab","projectId":"project-design","input":24200000,"cachedInput":21100000,"cacheWriteInput":0,"uncachedInput":3100000,"output":188000,"reasoningOutput":52000,"unclassified":0,"total":24388000,"contextWindow":258400},{"timestamp":"2026-08-19T16:20:00+08:00","date":"2026-08-19","sessionId":"task-ad24e5f60718","model":"gpt-5.6-luna","project":"atlas-app","projectId":"project-atlas","input":14800000,"cachedInput":12700000,"cacheWriteInput":0,"uncachedInput":2100000,"output":124000,"reasoningOutput":35000,"unclassified":0,"total":14924000,"contextWindow":258400},{"timestamp":"2026-08-20T09:10:00+08:00","date":"2026-08-20","sessionId":"task-be35f6071829","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":6100000,"cachedInput":4900000,"cacheWriteInput":0,"uncachedInput":1200000,"output":58000,"reasoningOutput":14000,"unclassified":0,"total":6158000,"contextWindow":258400},{"timestamp":"2026-08-20T10:05:00+08:00","date":"2026-08-20","sessionId":"task-be35f6071829","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":16900000,"cachedInput":14200000,"cacheWriteInput":0,"uncachedInput":2700000,"output":136000,"reasoningOutput":38000,"unclassified":0,"total":17036000,"contextWindow":258400},{"timestamp":"2026-08-20T10:45:00+08:00","date":"2026-08-20","sessionId":"task-cf460718293a","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":4300000,"cachedInput":3100000,"cacheWriteInput":0,"uncachedInput":1200000,"output":68000,"reasoningOutput":17000,"unclassified":0,"total":4368000,"contextWindow":258400},{"timestamp":"2026-08-20T11:15:00+08:00","date":"2026-08-20","sessionId":"task-cf460718293a","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":23500000,"cachedInput":19800000,"cacheWriteInput":0,"uncachedInput":3700000,"output":204000,"reasoningOutput":63000,"unclassified":0,"total":23704000,"contextWindow":258400},{"timestamp":"2026-08-20T11:50:00+08:00","date":"2026-08-20","sessionId":"task-be35f6071829","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":18200000,"cachedInput":16500000,"cacheWriteInput":0,"uncachedInput":1700000,"output":152000,"reasoningOutput":44000,"unclassified":0,"total":18352000,"contextWindow":258400},{"timestamp":"2026-08-20T12:30:00+08:00","date":"2026-08-20","sessionId":"task-be35f6071829","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":27700000,"cachedInput":25100000,"cacheWriteInput":0,"uncachedInput":2600000,"output":218000,"reasoningOutput":71000,"unclassified":0,"total":27918000,"contextWindow":258400},{"timestamp":"2026-08-20T13:20:00+08:00","date":"2026-08-20","sessionId":"task-9c13d4e5f607","model":"gpt-5.6-sol","project":"design-lab","projectId":"project-design","input":3800000,"cachedInput":2900000,"cacheWriteInput":0,"uncachedInput":900000,"output":52000,"reasoningOutput":12000,"unclassified":0,"total":3852000,"contextWindow":258400},{"timestamp":"2026-08-20T14:05:00+08:00","date":"2026-08-20","sessionId":"task-cf460718293a","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":11200000,"cachedInput":9100000,"cacheWriteInput":0,"uncachedInput":2100000,"output":108000,"reasoningOutput":29000,"unclassified":0,"total":11308000,"contextWindow":258400},{"timestamp":"2026-08-20T15:10:00+08:00","date":"2026-08-20","sessionId":"task-be35f6071829","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":31800000,"cachedInput":28400000,"cacheWriteInput":0,"uncachedInput":3400000,"output":286000,"reasoningOutput":94000,"unclassified":0,"total":32086000,"contextWindow":258400},{"timestamp":"2026-08-20T15:45:00+08:00","date":"2026-08-20","sessionId":"task-9c13d4e5f607","model":"gpt-5.6-sol","project":"design-lab","projectId":"project-design","input":21400000,"cachedInput":18200000,"cacheWriteInput":0,"uncachedInput":3200000,"output":196000,"reasoningOutput":57000,"unclassified":0,"total":21596000,"contextWindow":258400},{"timestamp":"2026-08-20T16:05:00+08:00","date":"2026-08-20","sessionId":"task-be35f6071829","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":36400000,"cachedInput":32900000,"cacheWriteInput":0,"uncachedInput":3500000,"output":318000,"reasoningOutput":112000,"unclassified":0,"total":36718000,"contextWindow":258400},{"timestamp":"2026-08-20T16:40:00+08:00","date":"2026-08-20","sessionId":"task-cf460718293a","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":13100000,"cachedInput":10800000,"cacheWriteInput":0,"uncachedInput":2300000,"output":116000,"reasoningOutput":33000,"unclassified":0,"total":13216000,"contextWindow":258400},{"timestamp":"2026-08-20T17:10:00+08:00","date":"2026-08-20","sessionId":"task-9c13d4e5f607","model":"gpt-5.6-sol","project":"design-lab","projectId":"project-design","input":7600000,"cachedInput":6100000,"cacheWriteInput":0,"uncachedInput":1500000,"output":78000,"reasoningOutput":21000,"unclassified":0,"total":7678000,"contextWindow":258400}]};</script>
+  <script id="token-data">window.__TOKEN_DATA__ = {"generatedAt":"2026-08-20T17:30:00+08:00","timezone":"Demo time (UTC+08:00)","filesScanned":8,"sessionsScanned":17,"demo":true,"diagnostics":{"status":"warning","schemaVersion":2,"lastRefreshAt":"2026-08-20T17:30:00+08:00","databaseBytes":2785280,"retention":{"days":"all","cutoffDate":null,"prunedEvents":0,"policyChanged":false},"counts":{"files":8,"sessions":17,"events":34,"warningFiles":1,"errorFiles":0,"filesWithoutTokens":0,"totalLines":2841,"parsedLines":2839,"tokenRecords":38,"acceptedEvents":34,"duplicateEvents":1,"emptyUsage":1,"invalidJson":2,"invalidTimestamp":0,"outsideRetention":0},"timeRange":{"oldest":"2026-07-02T10:20:00+08:00","newest":"2026-08-20T17:10:00+08:00"},"refresh":{"changedFiles":2,"unchangedFiles":6,"removedFiles":0,"failedFiles":0}},"events":[{"timestamp":"2026-07-02T10:20:00+08:00","date":"2026-07-02","sessionId":"task-demo-0702","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":5800000,"cachedInput":4300000,"cacheWriteInput":0,"uncachedInput":1500000,"output":68000,"reasoningOutput":16000,"unclassified":0,"total":5868000,"contextWindow":258400},{"timestamp":"2026-07-08T14:10:00+08:00","date":"2026-07-08","sessionId":"task-demo-0708","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":9200000,"cachedInput":7600000,"cacheWriteInput":0,"uncachedInput":1600000,"output":94000,"reasoningOutput":22000,"unclassified":0,"total":9294000,"contextWindow":258400},{"timestamp":"2026-07-15T09:45:00+08:00","date":"2026-07-15","sessionId":"task-demo-0715","model":"gpt-5.6-luna","project":"design-lab","projectId":"project-design","input":4600000,"cachedInput":3500000,"cacheWriteInput":0,"uncachedInput":1100000,"output":52000,"reasoningOutput":12000,"unclassified":0,"total":4652000,"contextWindow":258400},{"timestamp":"2026-07-23T16:05:00+08:00","date":"2026-07-23","sessionId":"task-demo-0723","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":12400000,"cachedInput":10100000,"cacheWriteInput":0,"uncachedInput":2300000,"output":126000,"reasoningOutput":36000,"unclassified":0,"total":12526000,"contextWindow":258400},{"timestamp":"2026-07-30T11:30:00+08:00","date":"2026-07-30","sessionId":"task-demo-0730","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":7100000,"cachedInput":5600000,"cacheWriteInput":0,"uncachedInput":1500000,"output":78000,"reasoningOutput":19000,"unclassified":0,"total":7178000,"contextWindow":258400},{"timestamp":"2026-08-03T09:25:00+08:00","date":"2026-08-03","sessionId":"task-demo-0803","model":"gpt-5.6-sol","project":"design-lab","projectId":"project-design","input":8400000,"cachedInput":6900000,"cacheWriteInput":0,"uncachedInput":1500000,"output":90000,"reasoningOutput":24000,"unclassified":0,"total":8490000,"contextWindow":258400},{"timestamp":"2026-08-05T15:15:00+08:00","date":"2026-08-05","sessionId":"task-demo-0803","model":"gpt-5.6-sol","project":"design-lab","projectId":"project-design","input":10200000,"cachedInput":8500000,"cacheWriteInput":0,"uncachedInput":1700000,"output":112000,"reasoningOutput":31000,"unclassified":0,"total":10312000,"contextWindow":258400},{"timestamp":"2026-08-07T13:40:00+08:00","date":"2026-08-07","sessionId":"task-demo-0807","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":6700000,"cachedInput":5100000,"cacheWriteInput":0,"uncachedInput":1600000,"output":74000,"reasoningOutput":18000,"unclassified":0,"total":6774000,"contextWindow":258400},{"timestamp":"2026-08-10T10:10:00+08:00","date":"2026-08-10","sessionId":"task-demo-0810","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":14300000,"cachedInput":12100000,"cacheWriteInput":0,"uncachedInput":2200000,"output":148000,"reasoningOutput":42000,"unclassified":0,"total":14448000,"contextWindow":258400},{"timestamp":"2026-08-11T14:35:00+08:00","date":"2026-08-11","sessionId":"task-demo-0810","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":8900000,"cachedInput":7200000,"cacheWriteInput":0,"uncachedInput":1700000,"output":96000,"reasoningOutput":26000,"unclassified":0,"total":8996000,"contextWindow":258400},{"timestamp":"2026-08-12T11:05:00+08:00","date":"2026-08-12","sessionId":"task-demo-0812","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":11600000,"cachedInput":9400000,"cacheWriteInput":0,"uncachedInput":2200000,"output":122000,"reasoningOutput":34000,"unclassified":0,"total":11722000,"contextWindow":258400},{"timestamp":"2026-08-13T16:20:00+08:00","date":"2026-08-13","sessionId":"task-demo-0812","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":16800000,"cachedInput":14200000,"cacheWriteInput":0,"uncachedInput":2600000,"output":174000,"reasoningOutput":51000,"unclassified":0,"total":16974000,"contextWindow":258400},{"timestamp":"2026-08-14T09:50:00+08:00","date":"2026-08-14","sessionId":"task-demo-0814","model":"gpt-5.6-sol","project":"design-lab","projectId":"project-design","input":5400000,"cachedInput":4200000,"cacheWriteInput":0,"uncachedInput":1200000,"output":66000,"reasoningOutput":15000,"unclassified":0,"total":5466000,"contextWindow":258400},{"timestamp":"2026-08-17T10:30:00+08:00","date":"2026-08-17","sessionId":"task-demo-0817","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":9800000,"cachedInput":8100000,"cacheWriteInput":0,"uncachedInput":1700000,"output":108000,"reasoningOutput":29000,"unclassified":0,"total":9908000,"contextWindow":258400},{"timestamp":"2026-08-18T15:00:00+08:00","date":"2026-08-18","sessionId":"task-demo-0817","model":"gpt-5.6-luna","project":"design-lab","projectId":"project-design","input":13600000,"cachedInput":11200000,"cacheWriteInput":0,"uncachedInput":2400000,"output":142000,"reasoningOutput":39000,"unclassified":0,"total":13742000,"contextWindow":258400},{"timestamp":"2026-08-19T09:20:00+08:00","date":"2026-08-19","sessionId":"task-7a91b2c3d4e5","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":8200000,"cachedInput":6500000,"cacheWriteInput":0,"uncachedInput":1700000,"output":72000,"reasoningOutput":18000,"unclassified":0,"total":8272000,"contextWindow":258400},{"timestamp":"2026-08-19T10:15:00+08:00","date":"2026-08-19","sessionId":"task-7a91b2c3d4e5","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":12600000,"cachedInput":10400000,"cacheWriteInput":0,"uncachedInput":2200000,"output":118000,"reasoningOutput":32000,"unclassified":0,"total":12718000,"contextWindow":258400},{"timestamp":"2026-08-19T11:40:00+08:00","date":"2026-08-19","sessionId":"task-8b02c3d4e5f6","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":18400000,"cachedInput":15100000,"cacheWriteInput":0,"uncachedInput":3300000,"output":146000,"reasoningOutput":41000,"unclassified":0,"total":18546000,"contextWindow":258400},{"timestamp":"2026-08-19T14:10:00+08:00","date":"2026-08-19","sessionId":"task-9c13d4e5f607","model":"gpt-5.6-sol","project":"design-lab","projectId":"project-design","input":9700000,"cachedInput":8200000,"cacheWriteInput":0,"uncachedInput":1500000,"output":92000,"reasoningOutput":26000,"unclassified":0,"total":9792000,"contextWindow":258400},{"timestamp":"2026-08-19T15:35:00+08:00","date":"2026-08-19","sessionId":"task-9c13d4e5f607","model":"gpt-5.6-sol","project":"design-lab","projectId":"project-design","input":24200000,"cachedInput":21100000,"cacheWriteInput":0,"uncachedInput":3100000,"output":188000,"reasoningOutput":52000,"unclassified":0,"total":24388000,"contextWindow":258400},{"timestamp":"2026-08-19T16:20:00+08:00","date":"2026-08-19","sessionId":"task-ad24e5f60718","model":"gpt-5.6-luna","project":"atlas-app","projectId":"project-atlas","input":14800000,"cachedInput":12700000,"cacheWriteInput":0,"uncachedInput":2100000,"output":124000,"reasoningOutput":35000,"unclassified":0,"total":14924000,"contextWindow":258400},{"timestamp":"2026-08-20T09:10:00+08:00","date":"2026-08-20","sessionId":"task-be35f6071829","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":6100000,"cachedInput":4900000,"cacheWriteInput":0,"uncachedInput":1200000,"output":58000,"reasoningOutput":14000,"unclassified":0,"total":6158000,"contextWindow":258400},{"timestamp":"2026-08-20T10:05:00+08:00","date":"2026-08-20","sessionId":"task-be35f6071829","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":16900000,"cachedInput":14200000,"cacheWriteInput":0,"uncachedInput":2700000,"output":136000,"reasoningOutput":38000,"unclassified":0,"total":17036000,"contextWindow":258400},{"timestamp":"2026-08-20T10:45:00+08:00","date":"2026-08-20","sessionId":"task-cf460718293a","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":4300000,"cachedInput":3100000,"cacheWriteInput":0,"uncachedInput":1200000,"output":68000,"reasoningOutput":17000,"unclassified":0,"total":4368000,"contextWindow":258400},{"timestamp":"2026-08-20T11:15:00+08:00","date":"2026-08-20","sessionId":"task-cf460718293a","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":23500000,"cachedInput":19800000,"cacheWriteInput":0,"uncachedInput":3700000,"output":204000,"reasoningOutput":63000,"unclassified":0,"total":23704000,"contextWindow":258400},{"timestamp":"2026-08-20T11:50:00+08:00","date":"2026-08-20","sessionId":"task-be35f6071829","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":18200000,"cachedInput":16500000,"cacheWriteInput":0,"uncachedInput":1700000,"output":152000,"reasoningOutput":44000,"unclassified":0,"total":18352000,"contextWindow":258400},{"timestamp":"2026-08-20T12:30:00+08:00","date":"2026-08-20","sessionId":"task-be35f6071829","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":27700000,"cachedInput":25100000,"cacheWriteInput":0,"uncachedInput":2600000,"output":218000,"reasoningOutput":71000,"unclassified":0,"total":27918000,"contextWindow":258400},{"timestamp":"2026-08-20T13:20:00+08:00","date":"2026-08-20","sessionId":"task-9c13d4e5f607","model":"gpt-5.6-sol","project":"design-lab","projectId":"project-design","input":3800000,"cachedInput":2900000,"cacheWriteInput":0,"uncachedInput":900000,"output":52000,"reasoningOutput":12000,"unclassified":0,"total":3852000,"contextWindow":258400},{"timestamp":"2026-08-20T14:05:00+08:00","date":"2026-08-20","sessionId":"task-cf460718293a","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":11200000,"cachedInput":9100000,"cacheWriteInput":0,"uncachedInput":2100000,"output":108000,"reasoningOutput":29000,"unclassified":0,"total":11308000,"contextWindow":258400},{"timestamp":"2026-08-20T15:10:00+08:00","date":"2026-08-20","sessionId":"task-be35f6071829","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":31800000,"cachedInput":28400000,"cacheWriteInput":0,"uncachedInput":3400000,"output":286000,"reasoningOutput":94000,"unclassified":0,"total":32086000,"contextWindow":258400},{"timestamp":"2026-08-20T15:45:00+08:00","date":"2026-08-20","sessionId":"task-9c13d4e5f607","model":"gpt-5.6-sol","project":"design-lab","projectId":"project-design","input":21400000,"cachedInput":18200000,"cacheWriteInput":0,"uncachedInput":3200000,"output":196000,"reasoningOutput":57000,"unclassified":0,"total":21596000,"contextWindow":258400},{"timestamp":"2026-08-20T16:05:00+08:00","date":"2026-08-20","sessionId":"task-be35f6071829","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":36400000,"cachedInput":32900000,"cacheWriteInput":0,"uncachedInput":3500000,"output":318000,"reasoningOutput":112000,"unclassified":0,"total":36718000,"contextWindow":258400},{"timestamp":"2026-08-20T16:40:00+08:00","date":"2026-08-20","sessionId":"task-cf460718293a","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":13100000,"cachedInput":10800000,"cacheWriteInput":0,"uncachedInput":2300000,"output":116000,"reasoningOutput":33000,"unclassified":0,"total":13216000,"contextWindow":258400},{"timestamp":"2026-08-20T17:10:00+08:00","date":"2026-08-20","sessionId":"task-9c13d4e5f607","model":"gpt-5.6-sol","project":"design-lab","projectId":"project-design","input":7600000,"cachedInput":6100000,"cacheWriteInput":0,"uncachedInput":1500000,"output":78000,"reasoningOutput":21000,"unclassified":0,"total":7678000,"contextWindow":258400}]};</script>
   <script id="pricing-data">window.__PRICING_DATA__ = {"version":"2026-08-20-openai-docs","currency":"USD","unitTokens":1000000,"source":{"label":"OpenAI API pricing","url":"https://developers.openai.com/api/docs/pricing","capturedAt":"2026-08-20","officiallyVerified":true},"aliases":{"gpt-5.6":"gpt-5.6-sol"},"modes":{"standard":{"label":"Standard","multiplier":1},"batch":{"label":"Batch","multiplier":0.5},"flex":{"label":"Flex","multiplier":0.5},"fast":{"label":"Fast","multiplier":2,"modelPrefixes":["gpt-5.6"]}},"longContext":{"thresholdInputTokens":272000,"inputMultiplier":2,"outputMultiplier":1.5,"modelPrefixes":["gpt-5.6"]},"models":{"gpt-5.6-sol":{"input":5,"cachedInput":0.5,"cacheWriteInput":6.25,"output":30,"contextWindow":1050000},"gpt-5.6-terra":{"input":2,"cachedInput":0.2,"cacheWriteInput":2.5,"output":12,"contextWindow":1050000},"gpt-5.6-luna":{"input":0.2,"cachedInput":0.02,"cacheWriteInput":0.25,"output":1.2,"contextWindow":1050000},"gpt-5.5":{"input":5,"cachedInput":0.5,"cacheWriteInput":null,"output":30,"contextWindow":1050000},"gpt-5.5-pro":{"input":30,"cachedInput":null,"cacheWriteInput":null,"output":180,"contextWindow":1050000},"gpt-5.4":{"input":2.5,"cachedInput":0.25,"cacheWriteInput":null,"output":15,"contextWindow":1050000},"gpt-5.4-mini":{"input":0.75,"cachedInput":0.075,"cacheWriteInput":null,"output":4.5,"contextWindow":400000},"gpt-5.4-nano":{"input":0.2,"cachedInput":0.02,"cacheWriteInput":null,"output":1.25,"contextWindow":400000},"gpt-5.3-codex":{"input":1.75,"cachedInput":0.175,"cacheWriteInput":null,"output":14,"contextWindow":400000}}};</script>
   <script>
     (() => {
@@ -427,6 +490,7 @@
       const reportDtf = new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric' });
       const weekdayDtf = new Intl.DateTimeFormat('zh-CN', { weekday: 'short' });
       const $ = id => document.getElementById(id);
+      let diagnostics = payload.diagnostics || null;
       const sum = (items, key) => items.reduce((total, item) => total + Number(item[key] || 0), 0);
       const esc = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
       const addDays = (date, count) => { const next = new Date(date); next.setDate(next.getDate() + count); return next; };
@@ -1229,8 +1293,79 @@
       }
 
       function syncBodyLock() {
-        const locked = !$('drawer-shell').classList.contains('hidden') || !$('settings-shell').classList.contains('hidden');
+        const locked = !$('drawer-shell').classList.contains('hidden') || !$('settings-shell').classList.contains('hidden') || !$('health-shell').classList.contains('hidden');
         document.body.classList.toggle('overflow-hidden', locked);
+      }
+
+      function byteSize(value) {
+        const bytes = Number(value || 0);
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+        return `${(bytes / 1048576).toFixed(1)} MB`;
+      }
+
+      function diagnosticData(value) {
+        if (value?.counts) return value;
+        return {
+          status: 'ok', schemaVersion: null, lastRefreshAt: payload.generatedAt || null, databaseBytes: 0,
+          retention: { days: 'all', cutoffDate: null },
+          counts: { files: payload.filesScanned || 0, sessions: payload.sessionsScanned || 0, events: payload.events?.length || 0 },
+          timeRange: { oldest: payload.events?.[0]?.timestamp || null, newest: payload.events?.at(-1)?.timestamp || null },
+          refresh: payload.index || {}
+        };
+      }
+
+      function renderDiagnostics(value = diagnostics) {
+        diagnostics = diagnosticData(value);
+        const counts = diagnostics.counts || {};
+        const refresh = diagnostics.refresh || {};
+        const status = diagnostics.status || 'ok';
+        const labels = { ok: '数据正常', warning: '需留意', error: '数据异常' };
+        const notes = {
+          ok: '索引与解析结果正常',
+          warning: `${nf.format((counts.invalidJson || 0) + (counts.invalidTimestamp || 0))} 条记录需要留意`,
+          error: `${nf.format(counts.errorFiles || refresh.failedFiles || 0)} 个日志文件读取失败`
+        };
+        $('health-label').textContent = labels[status] || labels.ok;
+        $('health-status-note').textContent = notes[status] || notes.ok;
+        $('health-dot').className = `h-2 w-2 rounded-full ${status === 'error' ? 'bg-[rgb(var(--orange))]' : status === 'warning' ? 'bg-[rgb(var(--amber))]' : 'bg-[rgb(var(--emerald))]'}`;
+        $('health-files').textContent = nf.format(counts.files || 0);
+        $('health-sessions').textContent = nf.format(counts.sessions || 0);
+        $('health-events').textContent = nf.format(counts.events || 0);
+        $('health-refresh').textContent = diagnostics.lastRefreshAt ? fullDtf.format(new Date(diagnostics.lastRefreshAt)) : '--';
+        $('health-range').textContent = diagnostics.timeRange?.oldest && diagnostics.timeRange?.newest
+          ? `${dtf.format(new Date(diagnostics.timeRange.oldest))} – ${dtf.format(new Date(diagnostics.timeRange.newest))}` : '--';
+        $('health-retention').textContent = diagnostics.retention?.days === 'all' ? '全部历史' : `${diagnostics.retention?.days || 0} 天 · 从 ${diagnostics.retention?.cutoffDate || '--'}`;
+        $('health-database').textContent = diagnostics.databaseBytes ? byteSize(diagnostics.databaseBytes) : payload.demo ? '虚构 Demo' : '--';
+        $('health-schema').textContent = diagnostics.schemaVersion ? `v${diagnostics.schemaVersion}` : '--';
+        $('health-file-changes').textContent = `${nf.format(refresh.changedFiles || 0)} 变化 · ${nf.format(refresh.unchangedFiles || 0)} 未变化 · ${nf.format(refresh.removedFiles || 0)} 移除`;
+        $('health-valid').textContent = nf.format(counts.events ?? counts.acceptedEvents ?? 0);
+        $('health-duplicates').textContent = nf.format(counts.duplicateEvents || 0);
+        $('health-empty').textContent = nf.format(counts.emptyUsage || 0);
+        $('health-retained').textContent = nf.format(counts.outsideRetention || 0);
+        $('health-json-errors').textContent = nf.format(counts.invalidJson || 0);
+        $('health-time-errors').textContent = nf.format(counts.invalidTimestamp || 0);
+        $('health-parse-summary').textContent = `${nf.format(counts.tokenRecords || counts.events || 0)} 条 Token 记录`;
+      }
+
+      async function openHealth() {
+        $('health-shell').classList.remove('hidden');
+        syncBodyLock();
+        renderDiagnostics();
+        requestAnimationFrame(() => $('health-close').focus());
+        if (!liveMode) return;
+        try {
+          const response = await fetch('/api/status', { cache: 'no-store' });
+          if (response.ok) {
+            const status = await response.json();
+            if (status.diagnostics) renderDiagnostics(status.diagnostics);
+          }
+        } catch {}
+      }
+
+      function closeHealth() {
+        $('health-shell').classList.add('hidden');
+        syncBodyLock();
       }
 
       function budgetDisplayValue(usd, currency, exchangeRate) {
@@ -1711,6 +1846,9 @@
       $('mobile-export-csv').addEventListener('click', () => { setMobileActions(false); exportCsv(); });
       $('drawer-close').addEventListener('click', closeDrawer);
       $('drawer-backdrop').addEventListener('click', closeDrawer);
+      $('health-toggle').addEventListener('click', openHealth);
+      $('health-close').addEventListener('click', closeHealth);
+      $('health-backdrop').addEventListener('click', closeHealth);
       $('settings-toggle').addEventListener('click', openSettings);
       $('settings-close').addEventListener('click', closeSettings);
       $('settings-cancel').addEventListener('click', closeSettings);
@@ -1719,7 +1857,7 @@
       $('settings-save').addEventListener('click', saveSettings);
       $('settings-currency').addEventListener('change', event => changeSettingsCurrency(event.target.value));
       document.addEventListener('click', () => setMobileActions(false));
-      document.addEventListener('keydown', event => { if (event.key === 'Escape') { closeDrawer(); closeSettings(); setMobileActions(false); } });
+      document.addEventListener('keydown', event => { if (event.key === 'Escape') { closeDrawer(); closeHealth(); closeSettings(); setMobileActions(false); } });
       $('theme-toggle').addEventListener('click', () => {
         document.documentElement.classList.toggle('dark');
         localStorage.setItem('codex-token-theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
@@ -1740,6 +1878,7 @@
       $('source-summary').textContent = payload.demo
         ? `虚构 Demo · ${nf.format(payload.sessionsScanned || 0)} 个任务`
         : `${nf.format(payload.sessionsScanned || 0)} 个任务 · ${nf.format(payload.filesScanned || 0)} 个日志文件 · ${payload.index?.engine === 'sqlite' ? 'SQLite 增量索引' : payload.timezone || '本地时区'}`;
+      renderDiagnostics();
       render();
       const savedScroll = Number(sessionStorage.getItem('codex-day-scroll') || 0);
       if (savedScroll > 0) {

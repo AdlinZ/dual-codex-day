@@ -4,6 +4,16 @@
   "filesScanned": 8,
   "sessionsScanned": 17,
   "demo": true,
+  "diagnostics": {
+    "status": "warning",
+    "schemaVersion": 2,
+    "lastRefreshAt": "2026-08-20T17:30:00+08:00",
+    "databaseBytes": 2785280,
+    "retention": {"days":"all","cutoffDate":null,"prunedEvents":0,"policyChanged":false},
+    "counts": {"files":8,"sessions":17,"events":34,"warningFiles":1,"errorFiles":0,"filesWithoutTokens":0,"totalLines":2841,"parsedLines":2839,"tokenRecords":38,"acceptedEvents":34,"duplicateEvents":1,"emptyUsage":1,"invalidJson":2,"invalidTimestamp":0,"outsideRetention":0},
+    "timeRange": {"oldest":"2026-07-02T10:20:00+08:00","newest":"2026-08-20T17:10:00+08:00"},
+    "refresh": {"changedFiles":2,"unchangedFiles":6,"removedFiles":0,"failedFiles":0}
+  },
   "events": [
     {"timestamp":"2026-07-02T10:20:00+08:00","date":"2026-07-02","sessionId":"task-demo-0702","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":5800000,"cachedInput":4300000,"cacheWriteInput":0,"uncachedInput":1500000,"output":68000,"reasoningOutput":16000,"unclassified":0,"total":5868000,"contextWindow":258400},
     {"timestamp":"2026-07-08T14:10:00+08:00","date":"2026-07-08","sessionId":"task-demo-0708","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":9200000,"cachedInput":7600000,"cacheWriteInput":0,"uncachedInput":1600000,"output":94000,"reasoningOutput":22000,"unclassified":0,"total":9294000,"contextWindow":258400},

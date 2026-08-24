@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.7.0] - 2026-08-24
+
+### Added
+
+- Schema v2 source diagnostics for invalid JSON, invalid timestamps, duplicate events, empty usage and retention filtering.
+- A compact data-health entry and detailed diagnostics drawer in the dashboard.
+- Configurable SQLite history retention with automatic recovery scans when the period expands.
+- Read-only `doctor` output in human-readable and JSON formats, private paths hidden by default.
+- Multi-architecture GHCR image publishing for tagged releases.
+
+### Changed
+
+- `/healthz` now reports minimal liveness while `/api/status` returns detailed, sanitized diagnostics.
+- Individual unreadable log files no longer stop the complete indexing pass.
+
+### Privacy
+
+- Retention cleanup never deletes or modifies Codex JSONL logs.
+- Public diagnostics omit source paths, raw session identifiers, log content and failed lines.
+
 ## [0.6.0] - 2026-08-24
 
 ### Added

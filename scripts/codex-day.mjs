@@ -4,10 +4,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
-import { buildDashboard, openIndex, refreshIndex } from './lib/session-index.mjs';
+import { DatabaseSync } from 'node:sqlite';
+import { buildDashboard, getIndexDiagnostics, normalizeRetentionDays, openIndex, refreshIndex, scanLogFiles, SCHEMA_VERSION } from './lib/session-index.mjs';
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.dirname(scriptDirectory);
+const packageMetadata = JSON.parse(readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
 
 function parseArgs(argv) {
   const options = {
@@ -18,31 +20,109 @@ function parseArgs(argv) {
     port: 8765,
     intervalSeconds: 4,
     pidFile: null,
+    retentionDays: process.env.CODEX_DAY_RETENTION_DAYS || 'all',
+    command: 'serve',
     once: false,
-    open: false
+    open: false,
+    json: false,
+    verbose: false
   };
   const valueOptions = new Map([
     ['--codex-root', 'codexRoot'], ['--database', 'databasePath'], ['--dashboard', 'dashboardPath'], ['--pid-file', 'pidFile'],
-    ['--host', 'host'], ['--port', 'port'], ['--interval', 'intervalSeconds']
+    ['--host', 'host'], ['--port', 'port'], ['--interval', 'intervalSeconds'], ['--retention-days', 'retentionDays']
   ]);
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
+    if (arg === 'doctor' && index === 0) { options.command = 'doctor'; continue; }
     if (arg === '--once') { options.once = true; continue; }
     if (arg === '--open') { options.open = true; continue; }
+    if (arg === '--json') { options.json = true; continue; }
+    if (arg === '--verbose') { options.verbose = true; continue; }
     if (arg === '--help' || arg === '-h') { options.help = true; continue; }
     const key = valueOptions.get(arg);
     if (!key || argv[index + 1] == null) throw new Error(`Unknown or incomplete option: ${arg}`);
     const value = argv[++index];
     options[key] = ['port', 'intervalSeconds'].includes(key) ? Number(value)
-      : key === 'host' ? value : path.resolve(value);
+      : ['host', 'retentionDays'].includes(key) ? value : path.resolve(value);
   }
   if (!Number.isInteger(options.port) || options.port < 1 || options.port > 65535) throw new Error('Port must be an integer from 1 to 65535.');
   if (!Number.isFinite(options.intervalSeconds) || options.intervalSeconds < 2 || options.intervalSeconds > 60) throw new Error('Interval must be from 2 to 60 seconds.');
+  options.retentionDays = normalizeRetentionDays(options.retentionDays);
   return options;
 }
 
 function printHelp() {
-  console.log(`codex-day v0.6\n\nUsage:\n  node scripts/codex-day.mjs [options]\n\nOptions:\n  --once                 Build once and exit\n  --open                 Open the local dashboard\n  --codex-root <path>    Codex data directory\n  --database <path>      SQLite index path\n  --dashboard <path>     Generated HTML path\n  --pid-file <path>      Write the running service PID to a file\n  --host <host>          HTTP host (default 127.0.0.1)\n  --port <port>          HTTP port (default 8765)\n  --interval <seconds>   Poll interval from 2 to 60\n`);
+  console.log(`codex-day v${packageMetadata.version}\n\nUsage:\n  node scripts/codex-day.mjs [options]\n  node scripts/codex-day.mjs doctor [--json] [--verbose]\n\nOptions:\n  --once                 Build once and exit\n  --open                 Open the local dashboard\n  --codex-root <path>    Codex data directory\n  --database <path>      SQLite index path\n  --dashboard <path>     Generated HTML path\n  --pid-file <path>      Write the running service PID to a file\n  --host <host>          HTTP host (default 127.0.0.1)\n  --port <port>          HTTP port (default 8765)\n  --interval <seconds>   Poll interval from 2 to 60\n  --retention-days <n>   Keep all history or 1-36500 days (default all)\n  --json                 Print doctor output as JSON\n  --verbose              Include private local paths in doctor output\n`);
+}
+
+function doctorReport(options) {
+  const issues = [];
+  let logFiles = 0;
+  try {
+    logFiles = scanLogFiles(options.codexRoot).length;
+  } catch {
+    issues.push({ level: 'error', code: 'source-unavailable', message: 'Codex session directories are unavailable.' });
+  }
+
+  let database = { exists: existsSync(options.databasePath), schemaVersion: null, supportedSchemaVersion: SCHEMA_VERSION };
+  if (database.exists) {
+    let connection;
+    try {
+      connection = new DatabaseSync(options.databasePath, { readOnly: true, timeout: 3000 });
+      database.schemaVersion = Number(connection.prepare('PRAGMA user_version').get().user_version);
+      if (database.schemaVersion === SCHEMA_VERSION) {
+        database.diagnostics = getIndexDiagnostics(connection);
+        if (database.diagnostics.status === 'warning') issues.push({ level: 'warning', code: 'parse-warnings', message: 'The index contains records that need attention.' });
+        if (database.diagnostics.status === 'error') issues.push({ level: 'error', code: 'index-errors', message: 'The index contains unreadable source files.' });
+      }
+      else if (database.schemaVersion < SCHEMA_VERSION) {
+        const stats = connection.prepare('SELECT COUNT(*) AS files, COUNT(DISTINCT session_id) AS sessions FROM source_files').get();
+        const events = connection.prepare('SELECT COUNT(DISTINCT event_key) AS count FROM usage_events').get();
+        database.counts = { files: Number(stats.files), sessions: Number(stats.sessions), events: Number(events.count) };
+        issues.push({ level: 'warning', code: 'schema-upgrade-pending', message: 'The index will be upgraded on the next normal start.' });
+      } else {
+        issues.push({ level: 'error', code: 'schema-newer', message: 'The index schema is newer than this codex-day version.' });
+      }
+    } catch {
+      issues.push({ level: 'error', code: 'database-unreadable', message: 'The SQLite index could not be read.' });
+    } finally {
+      connection?.close();
+    }
+  } else {
+    issues.push({ level: 'warning', code: 'database-missing', message: 'The SQLite index has not been created yet.' });
+  }
+
+  const report = {
+    version: packageMetadata.version,
+    status: issues.some(issue => issue.level === 'error') ? 'error' : issues.length ? 'warning' : 'ok',
+    runtime: { node: process.version, platform: process.platform, arch: process.arch },
+    source: { readable: !issues.some(issue => issue.code === 'source-unavailable'), logFiles },
+    database,
+    service: {
+      host: options.host,
+      port: options.port,
+      intervalSeconds: options.intervalSeconds,
+      retentionDays: options.retentionDays ?? 'all'
+    },
+    issues
+  };
+  if (options.verbose) report.paths = { codexRoot: options.codexRoot, database: options.databasePath, dashboard: options.dashboardPath };
+  return report;
+}
+
+function printDoctor(report, asJson) {
+  if (asJson) {
+    console.log(JSON.stringify(report, null, 2));
+    return;
+  }
+  console.log(`codex-day doctor v${report.version}`);
+  console.log(`Status: ${report.status.toUpperCase()}`);
+  console.log(`Runtime: ${report.runtime.node} · ${report.runtime.platform}/${report.runtime.arch}`);
+  console.log(`Source: ${report.source.logFiles} JSONL files`);
+  console.log(`Database: ${report.database.exists ? `schema v${report.database.schemaVersion}` : 'not created'}`);
+  console.log(`Retention: ${report.service.retentionDays === 'all' ? 'all history' : `${report.service.retentionDays} days`}`);
+  report.issues.forEach(issue => console.log(`${issue.level.toUpperCase()}: ${issue.code} · ${issue.message}`));
+  if (report.paths) Object.entries(report.paths).forEach(([name, value]) => console.log(`${name}: ${value}`));
 }
 
 function processIsRunning(pid) {
@@ -105,6 +185,11 @@ if (options.help) {
   printHelp();
   process.exit(0);
 }
+if (options.command === 'doctor') {
+  const report = doctorReport(options);
+  printDoctor(report, options.json);
+  process.exit(report.status === 'error' ? 1 : 0);
+}
 const releasePidFile = acquirePidFile(options.pidFile);
 process.on('exit', releasePidFile);
 
@@ -113,22 +198,25 @@ const paths = {
   stylesheetPath: path.join(repoRoot, 'src', 'token-dashboard.css'),
   pricingPath: path.join(repoRoot, 'config', 'pricing.json'),
   logoPath: path.join(repoRoot, 'assets', 'codex-day-mark.svg'),
-  dashboardPath: options.dashboardPath
+  dashboardPath: options.dashboardPath,
+  databasePath: options.databasePath
 };
 const database = openIndex(options.databasePath);
 let latestPayload;
 let latestIndex;
+let latestError = null;
 let updating = false;
 
 function update(forceBuild = false) {
   if (updating) return null;
   updating = true;
   try {
-    const result = refreshIndex(database, options.codexRoot);
-    if (forceBuild || result.changedFiles || result.removedFiles || !existsSync(options.dashboardPath)) {
+    const result = refreshIndex(database, options.codexRoot, { retentionDays: options.retentionDays });
+    if (forceBuild || result.changedFiles || result.removedFiles || result.failedFiles || result.prunedEvents || result.policyChanged || !existsSync(options.dashboardPath)) {
       latestPayload = buildDashboard(database, { ...paths, indexResult: result });
     }
     latestIndex = result;
+    latestError = null;
     return result;
   } finally {
     updating = false;
@@ -152,15 +240,22 @@ const server = createServer((request, response) => {
     response.writeHead(405, { Allow: 'GET, HEAD' }); response.end(); return;
   }
   const url = new URL(request.url || '/', 'http://localhost');
-  if (url.pathname === '/healthz' || url.pathname === '/api/status') {
+  if (url.pathname === '/healthz') {
+    const body = JSON.stringify({ ok: true, version: packageMetadata.version });
+    response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store' });
+    response.end(method === 'HEAD' ? undefined : body);
+    return;
+  }
+  if (url.pathname === '/api/status') {
+    const diagnostics = getIndexDiagnostics(database, { indexResult: latestIndex });
+    if (latestError) diagnostics.status = 'error';
     const body = JSON.stringify({
-      ok: true,
+      ok: !latestError,
+      version: packageMetadata.version,
       engine: 'sqlite',
       generatedAt: latestPayload?.generatedAt || null,
-      events: latestIndex?.eventCount || 0,
-      sessions: latestIndex?.sessionCount || 0,
-      files: latestIndex?.filesScanned || 0,
-      changedFiles: latestIndex?.changedFiles || 0
+      diagnostics,
+      lastError: latestError
     });
     response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store' });
     response.end(method === 'HEAD' ? undefined : body);
@@ -202,6 +297,7 @@ timer = setInterval(() => {
       console.log(`Updated: ${result.eventCount} calls, ${result.changedFiles} changed files, ${result.removedFiles} removed files`);
     }
   } catch (error) {
+    latestError = { category: 'index-refresh', at: new Date().toISOString() };
     console.warn(`Index refresh failed: ${error.message}`);
   }
 }, options.intervalSeconds * 1000);

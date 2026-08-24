@@ -5,6 +5,12 @@ const root = path.resolve(__dirname, '..');
 const templatePath = path.join(root, 'src', 'index.template.html');
 const demoPath = path.join(root, 'demo', 'index.html');
 const requiredIds = [
+  'health-toggle',
+  'health-shell',
+  'health-status-note',
+  'health-files',
+  'health-events',
+  'health-json-errors',
   'budget-today',
   'budget-month',
   'budget-forecast',

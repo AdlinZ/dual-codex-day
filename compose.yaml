@@ -4,12 +4,13 @@ services:
   dashboard:
     build:
       context: .
-    image: codex-day:0.6.0
+    image: codex-day:0.7.0
     restart: unless-stopped
     ports:
       - "127.0.0.1:${CODEX_DAY_PORT:-8765}:8765"
     environment:
       TZ: "${TZ:-Asia/Shanghai}"
+      CODEX_DAY_RETENTION_DAYS: "${CODEX_DAY_RETENTION_DAYS:-all}"
     volumes:
       - type: bind
         source: "${CODEX_DATA_DIR:?Set CODEX_DATA_DIR to your local .codex directory}"

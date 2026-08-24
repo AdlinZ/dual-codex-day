@@ -18,6 +18,10 @@
         <p id="generated-meta" class="mt-1 truncate text-[11px] text-[rgb(var(--muted))]">正在读取本地数据</p>
       </div>
       <div class="flex shrink-0 items-center gap-2">
+        <button id="health-toggle" class="control inline-flex w-9 items-center justify-center gap-2 px-0 sm:w-auto sm:justify-start sm:px-2.5" type="button" aria-label="打开数据诊断" title="数据诊断">
+          <span id="health-dot" class="h-2 w-2 rounded-full bg-[rgb(var(--emerald))]" aria-hidden="true"></span>
+          <span id="health-label" class="hidden text-xs sm:inline">数据正常</span>
+        </button>
         <button id="export-poster" class="control hidden sm:inline-flex sm:items-center sm:gap-2" type="button"><span aria-hidden="true">▣</span><span>导出海报</span></button>
         <button id="export-csv" class="control hidden sm:inline-flex sm:items-center sm:gap-2" type="button"><span aria-hidden="true">↓</span><span>导出 CSV</span></button>
         <div class="relative sm:hidden">
@@ -289,6 +293,65 @@
     </footer>
   </main>
 
+  <div id="health-shell" class="fixed inset-0 z-[55] hidden">
+    <button id="health-backdrop" class="absolute inset-0 bg-black/40" type="button" aria-label="关闭数据诊断"></button>
+    <aside class="absolute inset-y-0 right-0 flex w-full max-w-lg flex-col border-l border-[rgb(var(--line))] bg-[rgb(var(--panel))] shadow-2xl" aria-labelledby="health-title">
+      <header class="flex items-start justify-between gap-4 border-b border-[rgb(var(--line))] p-5">
+        <div class="min-w-0">
+          <p class="eyebrow">Data health</p>
+          <h2 id="health-title" class="mt-1 text-lg font-semibold">数据诊断</h2>
+          <p id="health-status-note" class="mt-1 text-xs text-[rgb(var(--muted))]">正在读取索引状态</p>
+        </div>
+        <button id="health-close" class="icon-control shrink-0" type="button" aria-label="关闭数据诊断">×</button>
+      </header>
+      <div class="thin-scrollbar flex-1 overflow-y-auto">
+        <section class="grid grid-cols-3 border-b border-[rgb(var(--line))] px-5 py-6" aria-label="索引数量">
+          <div>
+            <div class="eyebrow">日志文件</div>
+            <div id="health-files" class="metric-number mt-2 text-xl font-semibold">0</div>
+          </div>
+          <div class="border-l border-[rgb(var(--line))] pl-5">
+            <div class="eyebrow">任务</div>
+            <div id="health-sessions" class="metric-number mt-2 text-xl font-semibold">0</div>
+          </div>
+          <div class="border-l border-[rgb(var(--line))] pl-5">
+            <div class="eyebrow">调用</div>
+            <div id="health-events" class="metric-number mt-2 text-xl font-semibold">0</div>
+          </div>
+        </section>
+        <section class="border-b border-[rgb(var(--line))] px-5 py-6">
+          <h3 class="section-title">当前索引</h3>
+          <dl class="mt-4 divide-y divide-[rgb(var(--line))] text-xs">
+            <div class="flex items-center justify-between gap-4 py-3"><dt class="text-[rgb(var(--muted))]">最近刷新</dt><dd id="health-refresh" class="text-right font-medium">--</dd></div>
+            <div class="flex items-center justify-between gap-4 py-3"><dt class="text-[rgb(var(--muted))]">数据范围</dt><dd id="health-range" class="text-right font-medium">--</dd></div>
+            <div class="flex items-center justify-between gap-4 py-3"><dt class="text-[rgb(var(--muted))]">历史保留</dt><dd id="health-retention" class="text-right font-medium">全部历史</dd></div>
+            <div class="flex items-center justify-between gap-4 py-3"><dt class="text-[rgb(var(--muted))]">数据库</dt><dd id="health-database" class="metric-number text-right font-medium">--</dd></div>
+            <div class="flex items-center justify-between gap-4 py-3"><dt class="text-[rgb(var(--muted))]">Schema</dt><dd id="health-schema" class="metric-number text-right font-medium">v--</dd></div>
+            <div class="flex items-center justify-between gap-4 py-3"><dt class="text-[rgb(var(--muted))]">本轮文件</dt><dd id="health-file-changes" class="text-right font-medium">--</dd></div>
+          </dl>
+        </section>
+        <section class="border-b border-[rgb(var(--line))] px-5 py-6">
+          <div class="flex items-center justify-between gap-3">
+            <h3 class="section-title">解析结果</h3>
+            <span id="health-parse-summary" class="chip">0 条有效记录</span>
+          </div>
+          <dl class="mt-4 grid grid-cols-2 gap-x-6 gap-y-5 text-xs">
+            <div><dt class="text-[rgb(var(--muted))]">有效事件</dt><dd id="health-valid" class="metric-number mt-1 text-base font-semibold">0</dd></div>
+            <div><dt class="text-[rgb(var(--muted))]">重复事件</dt><dd id="health-duplicates" class="metric-number mt-1 text-base font-semibold">0</dd></div>
+            <div><dt class="text-[rgb(var(--muted))]">空用量</dt><dd id="health-empty" class="metric-number mt-1 text-base font-semibold">0</dd></div>
+            <div><dt class="text-[rgb(var(--muted))]">周期外</dt><dd id="health-retained" class="metric-number mt-1 text-base font-semibold">0</dd></div>
+            <div><dt class="text-[rgb(var(--muted))]">无效 JSON</dt><dd id="health-json-errors" class="metric-number mt-1 text-base font-semibold">0</dd></div>
+            <div><dt class="text-[rgb(var(--muted))]">无效时间</dt><dd id="health-time-errors" class="metric-number mt-1 text-base font-semibold">0</dd></div>
+          </dl>
+        </section>
+        <section class="px-5 py-6 text-xs leading-5 text-[rgb(var(--muted))]">
+          <p>诊断仅展示汇总计数，不包含完整文件路径、原始 Session ID、日志正文或失败行。</p>
+          <p class="mt-2">历史保留只作用于 SQLite 索引，不会删除或修改 Codex 原始日志。</p>
+        </section>
+      </div>
+    </aside>
+  </div>
+
   <div id="drawer-shell" class="fixed inset-0 z-50 hidden">
     <button id="drawer-backdrop" class="absolute inset-0 bg-black/40" type="button" aria-label="关闭任务详情"></button>
     <aside class="absolute inset-y-0 right-0 flex w-full max-w-xl flex-col border-l border-[rgb(var(--line))] bg-[rgb(var(--panel))] shadow-2xl" aria-label="任务详情">
@@ -427,6 +490,7 @@
       const reportDtf = new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric' });
       const weekdayDtf = new Intl.DateTimeFormat('zh-CN', { weekday: 'short' });
       const $ = id => document.getElementById(id);
+      let diagnostics = payload.diagnostics || null;
       const sum = (items, key) => items.reduce((total, item) => total + Number(item[key] || 0), 0);
       const esc = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
       const addDays = (date, count) => { const next = new Date(date); next.setDate(next.getDate() + count); return next; };
@@ -1229,8 +1293,79 @@
       }
 
       function syncBodyLock() {
-        const locked = !$('drawer-shell').classList.contains('hidden') || !$('settings-shell').classList.contains('hidden');
+        const locked = !$('drawer-shell').classList.contains('hidden') || !$('settings-shell').classList.contains('hidden') || !$('health-shell').classList.contains('hidden');
         document.body.classList.toggle('overflow-hidden', locked);
+      }
+
+      function byteSize(value) {
+        const bytes = Number(value || 0);
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+        return `${(bytes / 1048576).toFixed(1)} MB`;
+      }
+
+      function diagnosticData(value) {
+        if (value?.counts) return value;
+        return {
+          status: 'ok', schemaVersion: null, lastRefreshAt: payload.generatedAt || null, databaseBytes: 0,
+          retention: { days: 'all', cutoffDate: null },
+          counts: { files: payload.filesScanned || 0, sessions: payload.sessionsScanned || 0, events: payload.events?.length || 0 },
+          timeRange: { oldest: payload.events?.[0]?.timestamp || null, newest: payload.events?.at(-1)?.timestamp || null },
+          refresh: payload.index || {}
+        };
+      }
+
+      function renderDiagnostics(value = diagnostics) {
+        diagnostics = diagnosticData(value);
+        const counts = diagnostics.counts || {};
+        const refresh = diagnostics.refresh || {};
+        const status = diagnostics.status || 'ok';
+        const labels = { ok: '数据正常', warning: '需留意', error: '数据异常' };
+        const notes = {
+          ok: '索引与解析结果正常',
+          warning: `${nf.format((counts.invalidJson || 0) + (counts.invalidTimestamp || 0))} 条记录需要留意`,
+          error: `${nf.format(counts.errorFiles || refresh.failedFiles || 0)} 个日志文件读取失败`
+        };
+        $('health-label').textContent = labels[status] || labels.ok;
+        $('health-status-note').textContent = notes[status] || notes.ok;
+        $('health-dot').className = `h-2 w-2 rounded-full ${status === 'error' ? 'bg-[rgb(var(--orange))]' : status === 'warning' ? 'bg-[rgb(var(--amber))]' : 'bg-[rgb(var(--emerald))]'}`;
+        $('health-files').textContent = nf.format(counts.files || 0);
+        $('health-sessions').textContent = nf.format(counts.sessions || 0);
+        $('health-events').textContent = nf.format(counts.events || 0);
+        $('health-refresh').textContent = diagnostics.lastRefreshAt ? fullDtf.format(new Date(diagnostics.lastRefreshAt)) : '--';
+        $('health-range').textContent = diagnostics.timeRange?.oldest && diagnostics.timeRange?.newest
+          ? `${dtf.format(new Date(diagnostics.timeRange.oldest))} – ${dtf.format(new Date(diagnostics.timeRange.newest))}` : '--';
+        $('health-retention').textContent = diagnostics.retention?.days === 'all' ? '全部历史' : `${diagnostics.retention?.days || 0} 天 · 从 ${diagnostics.retention?.cutoffDate || '--'}`;
+        $('health-database').textContent = diagnostics.databaseBytes ? byteSize(diagnostics.databaseBytes) : payload.demo ? '虚构 Demo' : '--';
+        $('health-schema').textContent = diagnostics.schemaVersion ? `v${diagnostics.schemaVersion}` : '--';
+        $('health-file-changes').textContent = `${nf.format(refresh.changedFiles || 0)} 变化 · ${nf.format(refresh.unchangedFiles || 0)} 未变化 · ${nf.format(refresh.removedFiles || 0)} 移除`;
+        $('health-valid').textContent = nf.format(counts.events ?? counts.acceptedEvents ?? 0);
+        $('health-duplicates').textContent = nf.format(counts.duplicateEvents || 0);
+        $('health-empty').textContent = nf.format(counts.emptyUsage || 0);
+        $('health-retained').textContent = nf.format(counts.outsideRetention || 0);
+        $('health-json-errors').textContent = nf.format(counts.invalidJson || 0);
+        $('health-time-errors').textContent = nf.format(counts.invalidTimestamp || 0);
+        $('health-parse-summary').textContent = `${nf.format(counts.tokenRecords || counts.events || 0)} 条 Token 记录`;
+      }
+
+      async function openHealth() {
+        $('health-shell').classList.remove('hidden');
+        syncBodyLock();
+        renderDiagnostics();
+        requestAnimationFrame(() => $('health-close').focus());
+        if (!liveMode) return;
+        try {
+          const response = await fetch('/api/status', { cache: 'no-store' });
+          if (response.ok) {
+            const status = await response.json();
+            if (status.diagnostics) renderDiagnostics(status.diagnostics);
+          }
+        } catch {}
+      }
+
+      function closeHealth() {
+        $('health-shell').classList.add('hidden');
+        syncBodyLock();
       }
 
       function budgetDisplayValue(usd, currency, exchangeRate) {
@@ -1711,6 +1846,9 @@
       $('mobile-export-csv').addEventListener('click', () => { setMobileActions(false); exportCsv(); });
       $('drawer-close').addEventListener('click', closeDrawer);
       $('drawer-backdrop').addEventListener('click', closeDrawer);
+      $('health-toggle').addEventListener('click', openHealth);
+      $('health-close').addEventListener('click', closeHealth);
+      $('health-backdrop').addEventListener('click', closeHealth);
       $('settings-toggle').addEventListener('click', openSettings);
       $('settings-close').addEventListener('click', closeSettings);
       $('settings-cancel').addEventListener('click', closeSettings);
@@ -1719,7 +1857,7 @@
       $('settings-save').addEventListener('click', saveSettings);
       $('settings-currency').addEventListener('change', event => changeSettingsCurrency(event.target.value));
       document.addEventListener('click', () => setMobileActions(false));
-      document.addEventListener('keydown', event => { if (event.key === 'Escape') { closeDrawer(); closeSettings(); setMobileActions(false); } });
+      document.addEventListener('keydown', event => { if (event.key === 'Escape') { closeDrawer(); closeHealth(); closeSettings(); setMobileActions(false); } });
       $('theme-toggle').addEventListener('click', () => {
         document.documentElement.classList.toggle('dark');
         localStorage.setItem('codex-token-theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
@@ -1740,6 +1878,7 @@
       $('source-summary').textContent = payload.demo
         ? `虚构 Demo · ${nf.format(payload.sessionsScanned || 0)} 个任务`
         : `${nf.format(payload.sessionsScanned || 0)} 个任务 · ${nf.format(payload.filesScanned || 0)} 个日志文件 · ${payload.index?.engine === 'sqlite' ? 'SQLite 增量索引' : payload.timezone || '本地时区'}`;
+      renderDiagnostics();
       render();
       const savedScroll = Number(sessionStorage.getItem('codex-day-scroll') || 0);
       if (savedScroll > 0) {
