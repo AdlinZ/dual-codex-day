@@ -26,6 +26,7 @@
             <button id="mobile-export-csv" class="w-full rounded-sm px-3 py-2 text-left text-xs hover:bg-[rgb(var(--panel-subtle))]" type="button">导出 CSV</button>
           </div>
         </div>
+        <button id="settings-toggle" class="icon-control" type="button" aria-label="打开预计成本设置" title="预计成本设置">⚙</button>
         <button id="theme-toggle" class="icon-control" type="button" aria-label="切换深浅主题">◐</button>
       </div>
     </div>
@@ -71,6 +72,98 @@
           <div id="stat-tasks" class="metric-number mt-2 text-xl font-semibold sm:text-2xl">0</div>
           <div id="stat-tasks-note" class="mt-1 truncate text-[10px] text-[rgb(var(--muted))]"></div>
         </article>
+      </div>
+    </section>
+
+    <section class="mb-14 border-y border-[rgb(var(--line))] py-7" aria-labelledby="cost-title">
+      <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+        <div class="min-w-0">
+          <p class="mb-2 text-xs font-medium text-[rgb(var(--emerald))]">预计成本</p>
+          <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h2 id="cost-title" class="metric-number text-4xl font-semibold sm:text-5xl">$0.00</h2>
+            <span id="cost-mode-note" class="text-xs text-[rgb(var(--muted))]">Standard list price</span>
+          </div>
+          <p id="cost-coverage" class="mt-3 text-xs text-[rgb(var(--muted))]"></p>
+        </div>
+        <div>
+          <div class="eyebrow mb-2 lg:text-right">Processing mode</div>
+          <div id="cost-mode-group" class="inline-grid grid-cols-4 gap-1 rounded-lg bg-[rgb(var(--panel-subtle))] p-1" role="group" aria-label="成本计价模式">
+            <button class="cost-mode-btn" type="button" data-cost-mode="standard" data-active="true">Standard</button>
+            <button class="cost-mode-btn" type="button" data-cost-mode="batch" data-active="false">Batch</button>
+            <button class="cost-mode-btn" type="button" data-cost-mode="flex" data-active="false">Flex</button>
+            <button class="cost-mode-btn" type="button" data-cost-mode="fast" data-active="false">Fast</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-7 grid grid-cols-2 gap-x-4 gap-y-6 border-t border-[rgb(var(--line))] pt-6 lg:grid-cols-4">
+        <article class="story-stat">
+          <div class="eyebrow">今日预计</div>
+          <div id="budget-today" class="metric-number mt-2 text-xl font-semibold">$0.00</div>
+          <div id="budget-today-note" class="mt-1 text-[10px] text-[rgb(var(--muted))]"></div>
+          <div class="budget-track mt-3"><div id="budget-today-bar" class="budget-fill" style="width:0%"></div></div>
+        </article>
+        <article class="story-stat">
+          <div class="eyebrow">本月累计</div>
+          <div id="budget-month" class="metric-number mt-2 text-xl font-semibold">$0.00</div>
+          <div id="budget-month-note" class="mt-1 text-[10px] text-[rgb(var(--muted))]"></div>
+          <div class="budget-track mt-3"><div id="budget-month-bar" class="budget-fill" style="width:0%"></div></div>
+        </article>
+        <article class="story-stat">
+          <div class="eyebrow">月底预测</div>
+          <div id="budget-forecast" class="metric-number mt-2 text-xl font-semibold">$0.00</div>
+          <div id="budget-forecast-note" class="mt-1 text-[10px] text-[rgb(var(--muted))]"></div>
+          <div class="budget-track mt-3"><div id="budget-forecast-bar" class="budget-fill" style="width:0%"></div></div>
+        </article>
+        <article class="story-stat">
+          <div class="eyebrow">预算状态</div>
+          <div id="budget-status" class="mt-2 text-sm font-semibold">尚未设置</div>
+          <div id="budget-status-note" class="mt-1 text-[10px] leading-4 text-[rgb(var(--muted))]"></div>
+        </article>
+      </div>
+
+      <div class="mt-7 grid grid-cols-2 gap-x-4 gap-y-5 border-t border-[rgb(var(--line))] pt-6 sm:grid-cols-4">
+        <article class="story-stat">
+          <div class="eyebrow">普通输入</div>
+          <div id="cost-input" class="metric-number mt-2 text-lg font-semibold">$0.00</div>
+          <div id="cost-input-note" class="mt-1 text-[10px] text-[rgb(var(--muted))]"></div>
+        </article>
+        <article class="story-stat">
+          <div class="eyebrow">缓存读取</div>
+          <div id="cost-cached" class="metric-number mt-2 text-lg font-semibold">$0.00</div>
+          <div id="cost-cached-note" class="mt-1 text-[10px] text-[rgb(var(--muted))]"></div>
+        </article>
+        <article class="story-stat">
+          <div class="eyebrow">缓存写入</div>
+          <div id="cost-cache-write" class="metric-number mt-2 text-lg font-semibold">$0.00</div>
+          <div id="cost-cache-write-note" class="mt-1 text-[10px] text-[rgb(var(--muted))]"></div>
+        </article>
+        <article class="story-stat">
+          <div class="eyebrow">输出</div>
+          <div id="cost-output" class="metric-number mt-2 text-lg font-semibold">$0.00</div>
+          <div id="cost-output-note" class="mt-1 text-[10px] text-[rgb(var(--muted))]"></div>
+        </article>
+      </div>
+
+      <div id="cost-alerts" class="mt-5 hidden border-t border-[rgb(var(--line))] pt-5"></div>
+
+      <div class="mt-6 grid gap-6 border-t border-[rgb(var(--line))] pt-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,.65fr)]">
+        <div>
+          <div class="mb-2 flex items-center justify-between gap-3">
+            <h3 class="section-title">模型费用</h3>
+            <span id="cost-model-count" class="text-[11px] text-[rgb(var(--muted))]"></span>
+          </div>
+          <div id="cost-models" class="divide-y divide-[rgb(var(--line))]"></div>
+        </div>
+        <div class="border-t border-[rgb(var(--line))] pt-5 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+          <div class="eyebrow">Estimate basis</div>
+          <p id="pricing-source" class="mt-2 text-xs leading-5 text-[rgb(var(--muted))]"></p>
+          <p class="mt-2 text-xs leading-5 text-[rgb(var(--muted))]">仅按公开 API 标价折算；公司中转站的折扣、包量与结算规则不在此估算中。</p>
+          <details class="mt-3 text-xs">
+            <summary class="cursor-pointer font-medium text-[rgb(var(--ink))]">查看价格快照</summary>
+            <div id="pricing-table" class="thin-scrollbar mt-3 overflow-x-auto"></div>
+          </details>
+        </div>
       </div>
     </section>
 
@@ -158,13 +251,111 @@
     </aside>
   </div>
 
+  <div id="settings-shell" class="fixed inset-0 z-[60] hidden">
+    <button id="settings-backdrop" class="absolute inset-0 bg-black/40" type="button" aria-label="关闭预计成本设置"></button>
+    <section class="thin-scrollbar absolute left-1/2 top-1/2 max-h-[min(760px,calc(100vh-32px))] w-[min(680px,calc(100%-32px))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-[rgb(var(--line))] bg-[rgb(var(--panel))] shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <header class="flex items-start justify-between gap-4 border-b border-[rgb(var(--line))] p-5">
+        <div>
+          <p class="eyebrow">Local estimate profile</p>
+          <h2 id="settings-title" class="mt-1 text-lg font-semibold">预计成本设置</h2>
+        </div>
+        <button id="settings-close" class="icon-control shrink-0" type="button" aria-label="关闭预计成本设置">×</button>
+      </header>
+      <div class="p-5">
+        <div class="grid gap-4 sm:grid-cols-2">
+          <label class="grid gap-1.5 text-xs font-medium">显示币种
+            <select id="settings-currency" class="select-control h-10 w-full min-w-0">
+              <option value="USD">USD · 美元</option>
+              <option value="CNY">CNY · 人民币</option>
+            </select>
+          </label>
+          <label class="grid gap-1.5 text-xs font-medium">USD → CNY 汇率
+            <input id="settings-exchange-rate" class="input-control metric-number" type="number" min="0.01" step="0.01" inputmode="decimal">
+          </label>
+          <label class="grid gap-1.5 text-xs font-medium">中转站价格倍率
+            <input id="settings-relay-multiplier" class="input-control metric-number" type="number" min="0" step="0.01" inputmode="decimal">
+          </label>
+          <div class="grid content-end gap-1.5 text-[11px] leading-5 text-[rgb(var(--muted))]">`1.00` 表示公开 API 标价；例如内部结算为公开价的 80%，填写 `0.80`。</div>
+          <label class="grid gap-1.5 text-xs font-medium">每日预算（<span id="settings-daily-currency">USD</span>）
+            <input id="settings-daily-budget" class="input-control metric-number" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0 表示不设置">
+          </label>
+          <label class="grid gap-1.5 text-xs font-medium">每月预算（<span id="settings-monthly-currency">USD</span>）
+            <input id="settings-monthly-budget" class="input-control metric-number" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0 表示不设置">
+          </label>
+        </div>
+
+        <div class="mt-7 border-t border-[rgb(var(--line))] pt-5">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <h3 class="section-title">项目别名</h3>
+              <p class="mt-1 text-[11px] text-[rgb(var(--muted))]">只保存在当前浏览器，不修改日志和公开 Demo。</p>
+            </div>
+            <span id="settings-project-count" class="chip"></span>
+          </div>
+          <div id="settings-project-aliases" class="mt-4 grid gap-3"></div>
+        </div>
+      </div>
+      <footer class="flex items-center justify-between gap-3 border-t border-[rgb(var(--line))] p-5">
+        <button id="settings-reset" class="control" type="button">恢复默认</button>
+        <div class="flex gap-2">
+          <button id="settings-cancel" class="control" type="button">取消</button>
+          <button id="settings-save" class="control border-[rgb(var(--ink))] bg-[rgb(var(--ink))] text-[rgb(var(--panel))] hover:opacity-90" type="button">保存设置</button>
+        </div>
+      </footer>
+    </section>
+  </div>
+
   <script id="token-data">window.__TOKEN_DATA__ = {"generatedAt":"2026-08-20T17:30:00+08:00","timezone":"Demo time (UTC+08:00)","filesScanned":8,"sessionsScanned":6,"demo":true,"events":[{"timestamp":"2026-08-19T09:20:00+08:00","date":"2026-08-19","sessionId":"task-7a91b2c3d4e5","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":8200000,"cachedInput":6500000,"cacheWriteInput":0,"uncachedInput":1700000,"output":72000,"reasoningOutput":18000,"unclassified":0,"total":8272000,"contextWindow":258400},{"timestamp":"2026-08-19T10:15:00+08:00","date":"2026-08-19","sessionId":"task-7a91b2c3d4e5","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":12600000,"cachedInput":10400000,"cacheWriteInput":0,"uncachedInput":2200000,"output":118000,"reasoningOutput":32000,"unclassified":0,"total":12718000,"contextWindow":258400},{"timestamp":"2026-08-19T11:40:00+08:00","date":"2026-08-19","sessionId":"task-8b02c3d4e5f6","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":18400000,"cachedInput":15100000,"cacheWriteInput":0,"uncachedInput":3300000,"output":146000,"reasoningOutput":41000,"unclassified":0,"total":18546000,"contextWindow":258400},{"timestamp":"2026-08-19T14:10:00+08:00","date":"2026-08-19","sessionId":"task-9c13d4e5f607","model":"gpt-5.6-sol","project":"design-lab","projectId":"project-design","input":9700000,"cachedInput":8200000,"cacheWriteInput":0,"uncachedInput":1500000,"output":92000,"reasoningOutput":26000,"unclassified":0,"total":9792000,"contextWindow":258400},{"timestamp":"2026-08-19T15:35:00+08:00","date":"2026-08-19","sessionId":"task-9c13d4e5f607","model":"gpt-5.6-sol","project":"design-lab","projectId":"project-design","input":24200000,"cachedInput":21100000,"cacheWriteInput":0,"uncachedInput":3100000,"output":188000,"reasoningOutput":52000,"unclassified":0,"total":24388000,"contextWindow":258400},{"timestamp":"2026-08-19T16:20:00+08:00","date":"2026-08-19","sessionId":"task-ad24e5f60718","model":"gpt-5.6-luna","project":"atlas-app","projectId":"project-atlas","input":14800000,"cachedInput":12700000,"cacheWriteInput":0,"uncachedInput":2100000,"output":124000,"reasoningOutput":35000,"unclassified":0,"total":14924000,"contextWindow":258400},{"timestamp":"2026-08-20T09:10:00+08:00","date":"2026-08-20","sessionId":"task-be35f6071829","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":6100000,"cachedInput":4900000,"cacheWriteInput":0,"uncachedInput":1200000,"output":58000,"reasoningOutput":14000,"unclassified":0,"total":6158000,"contextWindow":258400},{"timestamp":"2026-08-20T10:05:00+08:00","date":"2026-08-20","sessionId":"task-be35f6071829","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":16900000,"cachedInput":14200000,"cacheWriteInput":0,"uncachedInput":2700000,"output":136000,"reasoningOutput":38000,"unclassified":0,"total":17036000,"contextWindow":258400},{"timestamp":"2026-08-20T10:45:00+08:00","date":"2026-08-20","sessionId":"task-cf460718293a","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":4300000,"cachedInput":3100000,"cacheWriteInput":0,"uncachedInput":1200000,"output":68000,"reasoningOutput":17000,"unclassified":0,"total":4368000,"contextWindow":258400},{"timestamp":"2026-08-20T11:15:00+08:00","date":"2026-08-20","sessionId":"task-cf460718293a","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":23500000,"cachedInput":19800000,"cacheWriteInput":0,"uncachedInput":3700000,"output":204000,"reasoningOutput":63000,"unclassified":0,"total":23704000,"contextWindow":258400},{"timestamp":"2026-08-20T11:50:00+08:00","date":"2026-08-20","sessionId":"task-be35f6071829","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":18200000,"cachedInput":16500000,"cacheWriteInput":0,"uncachedInput":1700000,"output":152000,"reasoningOutput":44000,"unclassified":0,"total":18352000,"contextWindow":258400},{"timestamp":"2026-08-20T12:30:00+08:00","date":"2026-08-20","sessionId":"task-be35f6071829","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":27700000,"cachedInput":25100000,"cacheWriteInput":0,"uncachedInput":2600000,"output":218000,"reasoningOutput":71000,"unclassified":0,"total":27918000,"contextWindow":258400},{"timestamp":"2026-08-20T13:20:00+08:00","date":"2026-08-20","sessionId":"task-9c13d4e5f607","model":"gpt-5.6-sol","project":"design-lab","projectId":"project-design","input":3800000,"cachedInput":2900000,"cacheWriteInput":0,"uncachedInput":900000,"output":52000,"reasoningOutput":12000,"unclassified":0,"total":3852000,"contextWindow":258400},{"timestamp":"2026-08-20T14:05:00+08:00","date":"2026-08-20","sessionId":"task-cf460718293a","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":11200000,"cachedInput":9100000,"cacheWriteInput":0,"uncachedInput":2100000,"output":108000,"reasoningOutput":29000,"unclassified":0,"total":11308000,"contextWindow":258400},{"timestamp":"2026-08-20T15:10:00+08:00","date":"2026-08-20","sessionId":"task-be35f6071829","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":31800000,"cachedInput":28400000,"cacheWriteInput":0,"uncachedInput":3400000,"output":286000,"reasoningOutput":94000,"unclassified":0,"total":32086000,"contextWindow":258400},{"timestamp":"2026-08-20T15:45:00+08:00","date":"2026-08-20","sessionId":"task-9c13d4e5f607","model":"gpt-5.6-sol","project":"design-lab","projectId":"project-design","input":21400000,"cachedInput":18200000,"cacheWriteInput":0,"uncachedInput":3200000,"output":196000,"reasoningOutput":57000,"unclassified":0,"total":21596000,"contextWindow":258400},{"timestamp":"2026-08-20T16:05:00+08:00","date":"2026-08-20","sessionId":"task-be35f6071829","model":"gpt-5.6-sol","project":"atlas-app","projectId":"project-atlas","input":36400000,"cachedInput":32900000,"cacheWriteInput":0,"uncachedInput":3500000,"output":318000,"reasoningOutput":112000,"unclassified":0,"total":36718000,"contextWindow":258400},{"timestamp":"2026-08-20T16:40:00+08:00","date":"2026-08-20","sessionId":"task-cf460718293a","model":"gpt-5.6-luna","project":"research-notes","projectId":"project-research","input":13100000,"cachedInput":10800000,"cacheWriteInput":0,"uncachedInput":2300000,"output":116000,"reasoningOutput":33000,"unclassified":0,"total":13216000,"contextWindow":258400},{"timestamp":"2026-08-20T17:10:00+08:00","date":"2026-08-20","sessionId":"task-9c13d4e5f607","model":"gpt-5.6-sol","project":"design-lab","projectId":"project-design","input":7600000,"cachedInput":6100000,"cacheWriteInput":0,"uncachedInput":1500000,"output":78000,"reasoningOutput":21000,"unclassified":0,"total":7678000,"contextWindow":258400}]};</script>
+  <script id="pricing-data">window.__PRICING_DATA__ = {"version":"2026-08-20-openai-docs","currency":"USD","unitTokens":1000000,"source":{"label":"OpenAI API pricing","url":"https://developers.openai.com/api/docs/pricing","capturedAt":"2026-08-20","officiallyVerified":true},"aliases":{"gpt-5.6":"gpt-5.6-sol"},"modes":{"standard":{"label":"Standard","multiplier":1},"batch":{"label":"Batch","multiplier":0.5},"flex":{"label":"Flex","multiplier":0.5},"fast":{"label":"Fast","multiplier":2,"modelPrefixes":["gpt-5.6"]}},"longContext":{"thresholdInputTokens":272000,"inputMultiplier":2,"outputMultiplier":1.5,"modelPrefixes":["gpt-5.6"]},"models":{"gpt-5.6-sol":{"input":5,"cachedInput":0.5,"cacheWriteInput":6.25,"output":30,"contextWindow":1050000},"gpt-5.6-terra":{"input":2,"cachedInput":0.2,"cacheWriteInput":2.5,"output":12,"contextWindow":1050000},"gpt-5.6-luna":{"input":0.2,"cachedInput":0.02,"cacheWriteInput":0.25,"output":1.2,"contextWindow":1050000},"gpt-5.5":{"input":5,"cachedInput":0.5,"cacheWriteInput":null,"output":30,"contextWindow":1050000},"gpt-5.5-pro":{"input":30,"cachedInput":null,"cacheWriteInput":null,"output":180,"contextWindow":1050000},"gpt-5.4":{"input":2.5,"cachedInput":0.25,"cacheWriteInput":null,"output":15,"contextWindow":1050000},"gpt-5.4-mini":{"input":0.75,"cachedInput":0.075,"cacheWriteInput":null,"output":4.5,"contextWindow":400000},"gpt-5.4-nano":{"input":0.2,"cachedInput":0.02,"cacheWriteInput":null,"output":1.25,"contextWindow":400000},"gpt-5.3-codex":{"input":1.75,"cachedInput":0.175,"cacheWriteInput":null,"output":14,"contextWindow":400000}}};</script>
   <script>
     (() => {
       const payload = window.__TOKEN_DATA__ || { events: [] };
-      const events = (payload.events || []).map(event => ({ ...event, time: new Date(event.timestamp) }));
-      const requestedRange = new URLSearchParams(location.search).get('range');
-      const state = { range: ['today', 'week', '30d', 'all'].includes(requestedRange) ? requestedRange : 'today', model: '', project: '', visibleTasks: 16 };
+      const pricing = window.__PRICING_DATA__ || { models: {}, modes: {} };
+      const defaultSettings = { displayCurrency: 'USD', exchangeRate: 7.2, relayMultiplier: 1, dailyBudgetUsd: 0, monthlyBudgetUsd: 0, projectAliases: {} };
+      function numericSetting(value, fallback, minimum = 0) {
+        if (value === '' || value === null || typeof value === 'boolean') return fallback;
+        const parsed = Number(value);
+        return Number.isFinite(parsed) && parsed >= minimum ? parsed : fallback;
+      }
+
+      function aliasSettings(value) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+        return Object.fromEntries(Object.entries(value)
+          .filter(([key, alias]) => key && typeof alias === 'string' && alias.trim())
+          .map(([key, alias]) => [key, alias.trim()]));
+      }
+
+      function loadSettings() {
+        try {
+          const saved = JSON.parse(localStorage.getItem('codex-day-settings') || '{}');
+          return {
+            displayCurrency: saved.displayCurrency === 'CNY' ? 'CNY' : 'USD',
+            exchangeRate: numericSetting(saved.exchangeRate, defaultSettings.exchangeRate, 0.01),
+            relayMultiplier: numericSetting(saved.relayMultiplier, defaultSettings.relayMultiplier),
+            dailyBudgetUsd: numericSetting(saved.dailyBudgetUsd, defaultSettings.dailyBudgetUsd),
+            monthlyBudgetUsd: numericSetting(saved.monthlyBudgetUsd, defaultSettings.monthlyBudgetUsd),
+            projectAliases: aliasSettings(saved.projectAliases)
+          };
+        } catch {
+          return { ...defaultSettings, projectAliases: {} };
+        }
+      }
+      let settings = loadSettings();
+      const events = (payload.events || []).map(event => ({
+        ...event,
+        projectOriginal: event.project,
+        project: settings.projectAliases[event.projectId] || event.project,
+        time: new Date(event.timestamp)
+      }));
+      const query = new URLSearchParams(location.search);
+      const requestedRange = query.get('range');
+      const savedRange = localStorage.getItem('codex-token-range');
+      const initialRange = [requestedRange, savedRange, 'today'].find(value => ['today', 'week', '30d', 'all'].includes(value));
+      const savedCostMode = localStorage.getItem('codex-cost-mode');
+      const requestedCostMode = query.get('mode');
+      const initialCostMode = [requestedCostMode, savedCostMode, 'standard'].find(value => pricing.modes?.[value]) || 'standard';
+      const liveMode = !payload.demo && query.get('live') === '1';
+      const state = { range: initialRange, model: query.get('model') || localStorage.getItem('codex-token-model') || '', project: query.get('project') || localStorage.getItem('codex-token-project') || '', visibleTasks: 16, costMode: initialCostMode };
       const nf = new Intl.NumberFormat('zh-CN');
       const compactEn = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
       const dtf = new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
@@ -173,6 +364,100 @@
       const sum = (items, key) => items.reduce((total, item) => total + Number(item[key] || 0), 0);
       const esc = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
       const addDays = (date, count) => { const next = new Date(date); next.setDate(next.getDate() + count); return next; };
+
+      function syncViewQuery() {
+        const url = new URL(location.href);
+        const values = { range: state.range, mode: state.costMode, model: state.model, project: state.project };
+        Object.entries(values).forEach(([key, value]) => value ? url.searchParams.set(key, value) : url.searchParams.delete(key));
+        history.replaceState(null, '', url);
+      }
+
+      function formatMoney(value) {
+        const rate = settings.displayCurrency === 'CNY' ? Math.max(0.01, Number(settings.exchangeRate || 7.2)) : 1;
+        const amount = Number(value || 0) * rate;
+        const digits = amount > 0 && amount < 0.01 ? 4 : 2;
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: settings.displayCurrency || 'USD', minimumFractionDigits: digits, maximumFractionDigits: digits }).format(amount);
+      }
+
+      function matchesModelPrefix(model, prefixes = []) {
+        const normalized = String(model || '').toLowerCase();
+        return prefixes.some(prefix => normalized === String(prefix).toLowerCase() || normalized.startsWith(`${String(prefix).toLowerCase()}-`));
+      }
+
+      function estimateEvent(item, modeId = state.costMode) {
+        const rawModel = String(item.model || '').toLowerCase();
+        const modelId = pricing.aliases?.[rawModel] || rawModel;
+        const rates = pricing.models?.[modelId];
+        const mode = pricing.modes?.[modeId] || pricing.modes?.standard || { label: 'Standard', multiplier: 1 };
+        if (!rates) return { priced: false, reason: 'model', modelId, total: 0, longContext: false };
+        if (mode.modelPrefixes && !matchesModelPrefix(modelId, mode.modelPrefixes)) {
+          return { priced: false, reason: 'mode', modelId, total: 0, longContext: false };
+        }
+
+        const input = Math.max(0, Number(item.input || 0));
+        const cached = Math.min(input, Math.max(0, Number(item.cachedInput || 0)));
+        const cacheWrite = Math.min(Math.max(0, input - cached), Math.max(0, Number(item.cacheWriteInput || 0)));
+        const regularInput = Math.max(0, input - cached - cacheWrite);
+        const output = Math.max(0, Number(item.output || 0));
+        const longConfig = pricing.longContext;
+        const longContext = Boolean(longConfig && input > Number(longConfig.thresholdInputTokens || Infinity) && matchesModelPrefix(modelId, longConfig.modelPrefixes || []));
+        const inputMultiplier = longContext ? Number(longConfig.inputMultiplier || 1) : 1;
+        const outputMultiplier = longContext ? Number(longConfig.outputMultiplier || 1) : 1;
+        const modeMultiplier = Number(mode.multiplier || 1) * Math.max(0, Number(settings.relayMultiplier ?? 1));
+        const unit = Math.max(1, Number(pricing.unitTokens || 1000000));
+        const cachedRate = rates.cachedInput == null ? Number(rates.input || 0) : Number(rates.cachedInput);
+        const cacheWriteRate = rates.cacheWriteInput == null ? Number(rates.input || 0) : Number(rates.cacheWriteInput);
+        const parts = {
+          input: regularInput / unit * Number(rates.input || 0) * inputMultiplier * modeMultiplier,
+          cached: cached / unit * cachedRate * inputMultiplier * modeMultiplier,
+          cacheWrite: cacheWrite / unit * cacheWriteRate * inputMultiplier * modeMultiplier,
+          output: output / unit * Number(rates.output || 0) * outputMultiplier * modeMultiplier
+        };
+        return {
+          priced: true,
+          reason: null,
+          modelId,
+          longContext,
+          parts,
+          tokens: { regularInput, cached, cacheWrite, output },
+          total: parts.input + parts.cached + parts.cacheWrite + parts.output
+        };
+      }
+
+      function estimateCost(items, modeId = state.costMode) {
+        const result = {
+          total: 0,
+          parts: { input: 0, cached: 0, cacheWrite: 0, output: 0 },
+          tokens: { regularInput: 0, cached: 0, cacheWrite: 0, output: 0 },
+          coveredTokens: 0,
+          totalTokens: sum(items, 'total'),
+          coveredCalls: 0,
+          longContextCalls: 0,
+          unknownModels: new Set(),
+          unsupportedModeModels: new Set(),
+          byModel: new Map()
+        };
+        items.forEach(item => {
+          const estimate = estimateEvent(item, modeId);
+          if (!estimate.priced) {
+            (estimate.reason === 'mode' ? result.unsupportedModeModels : result.unknownModels).add(estimate.modelId || item.model);
+            return;
+          }
+          result.total += estimate.total;
+          result.coveredTokens += Number(item.total || 0);
+          result.coveredCalls += 1;
+          if (estimate.longContext) result.longContextCalls += 1;
+          Object.keys(result.parts).forEach(key => { result.parts[key] += estimate.parts[key]; });
+          Object.keys(result.tokens).forEach(key => { result.tokens[key] += estimate.tokens[key]; });
+          if (!result.byModel.has(estimate.modelId)) result.byModel.set(estimate.modelId, { model: estimate.modelId, total: 0, calls: 0 });
+          const model = result.byModel.get(estimate.modelId);
+          model.total += estimate.total;
+          model.calls += 1;
+        });
+        result.coverage = result.totalTokens ? result.coveredTokens / result.totalTokens : 1;
+        result.models = [...result.byModel.values()].sort((a, b) => b.total - a.total);
+        return result;
+      }
 
       function startOfDay(value = new Date()) {
         const date = new Date(value);
@@ -232,6 +517,10 @@
           .sort((a, b) => a.label.localeCompare(b.label));
         setOptions($('model-filter'), models.map(model => ({ value: model, label: model })), '全部模型');
         setOptions($('project-filter'), projects, '全部项目');
+        if (!models.includes(state.model)) state.model = '';
+        if (!projects.some(project => project.value === state.project)) state.project = '';
+        $('model-filter').value = state.model;
+        $('project-filter').value = state.project;
       }
 
       function aggregate(items) {
@@ -281,6 +570,134 @@
         setDelta('cache-delta', previousItems.length ? deltaText(current.cacheRate, previous.cacheRate) : { text: '--', positive: null });
         setDelta('average-delta', previousItems.length ? deltaText(current.average, previous.average) : { text: '--', positive: null });
         setDelta('task-delta', previousItems.length ? deltaText(current.tasks, previous.tasks) : { text: '--', positive: null });
+      }
+
+      function budgetSnapshot() {
+        const now = payload.demo && payload.generatedAt ? new Date(payload.generatedAt) : new Date();
+        const todayStart = startOfDay(now);
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        const filtered = events.filter(matchesFilters);
+        const today = estimateCost(filtered.filter(item => item.time >= todayStart && item.time <= now));
+        const month = estimateCost(filtered.filter(item => item.time >= monthStart && item.time <= now));
+        const elapsedDays = Math.max(1, (now - monthStart) / 86400000);
+        const daysInMonth = Math.round((monthEnd - monthStart) / 86400000);
+        const forecast = month.total / elapsedDays * daysInMonth;
+        return { today, month, forecast, elapsedDays, daysInMonth };
+      }
+
+      function setBudgetBar(id, value, limit) {
+        const ratio = limit > 0 ? value / limit : 0;
+        const node = $(id);
+        node.style.width = `${Math.min(100, Math.max(0, ratio * 100)).toFixed(1)}%`;
+        node.style.backgroundColor = ratio >= 1 ? 'rgb(var(--orange))' : ratio >= 0.8 ? 'rgb(var(--amber))' : 'rgb(var(--blue))';
+      }
+
+      function renderBudget() {
+        const budget = budgetSnapshot();
+        const dailyLimit = Math.max(0, Number(settings.dailyBudgetUsd || 0));
+        const monthlyLimit = Math.max(0, Number(settings.monthlyBudgetUsd || 0));
+        const filterNote = state.model || state.project ? ' · 当前筛选' : '';
+        $('budget-today').textContent = formatMoney(budget.today.total);
+        $('budget-month').textContent = formatMoney(budget.month.total);
+        $('budget-forecast').textContent = formatMoney(budget.forecast);
+        $('budget-today-note').textContent = dailyLimit ? `预算 ${formatMoney(dailyLimit)}${filterNote}` : `未设置每日预算${filterNote}`;
+        $('budget-month-note').textContent = monthlyLimit ? `预算 ${formatMoney(monthlyLimit)}${filterNote}` : `未设置每月预算${filterNote}`;
+        $('budget-forecast-note').textContent = `${budget.elapsedDays.toFixed(1)} 天样本 · ${budget.daysInMonth} 天折算${filterNote}`;
+        setBudgetBar('budget-today-bar', budget.today.total, dailyLimit);
+        setBudgetBar('budget-month-bar', budget.month.total, monthlyLimit);
+        setBudgetBar('budget-forecast-bar', budget.forecast, monthlyLimit);
+
+        let label = '尚未设置';
+        let note = '在设置中填写每日或每月预算';
+        let tone = 'text-[rgb(var(--muted))]';
+        if (monthlyLimit > 0) {
+          const ratio = budget.forecast / monthlyLimit;
+          label = ratio > 1 ? '预计超出月预算' : ratio >= 0.8 ? '接近月预算' : '预算范围内';
+          note = `月底预测为月预算的 ${(ratio * 100).toFixed(1)}%`;
+          tone = ratio > 1 ? 'text-orange-600 dark:text-orange-400' : ratio >= 0.8 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400';
+        } else if (dailyLimit > 0) {
+          const ratio = budget.today.total / dailyLimit;
+          label = ratio > 1 ? '今日已超预算' : ratio >= 0.8 ? '今日接近预算' : '今日预算正常';
+          note = `今日使用每日预算的 ${(ratio * 100).toFixed(1)}%`;
+          tone = ratio > 1 ? 'text-orange-600 dark:text-orange-400' : ratio >= 0.8 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400';
+        }
+        $('budget-status').textContent = label;
+        $('budget-status').className = `mt-2 text-sm font-semibold ${tone}`;
+        $('budget-status-note').textContent = note;
+        return budget;
+      }
+
+      function renderCostAlerts(items, estimate, budget) {
+        const alerts = [];
+        const callCosts = items.map(item => ({ item, estimate: estimateEvent(item) })).filter(row => row.estimate.priced).sort((a, b) => b.estimate.total - a.estimate.total);
+        if (callCosts.length >= 3) {
+          const values = callCosts.map(row => row.estimate.total).sort((a, b) => a - b);
+          const median = values[Math.floor(values.length / 2)] || 0;
+          const peak = callCosts[0];
+          if (median > 0 && peak.estimate.total >= median * 3) {
+            alerts.push({ label: '费用峰值', value: `${peak.item.model} · ${formatMoney(peak.estimate.total)}`, note: `约为单次中位数的 ${(peak.estimate.total / median).toFixed(1)} 倍`, color: 'var(--orange)' });
+          }
+        }
+        const usage = aggregate(items);
+        if (usage.input >= 100000 && usage.cacheRate < 0.5) {
+          alerts.push({ label: '缓存偏低', value: `${(usage.cacheRate * 100).toFixed(1)}%`, note: '当前范围缓存命中率低于 50%', color: 'var(--amber)' });
+        }
+        if (estimate.longContextCalls > 0) {
+          alerts.push({ label: '长上下文', value: `${nf.format(estimate.longContextCalls)} 次调用`, note: '已按长上下文倍率计入预计成本', color: 'var(--violet)' });
+        }
+        if (estimate.unknownModels.size > 0) {
+          alerts.push({ label: '价格缺口', value: [...estimate.unknownModels].join('、'), note: `${(estimate.coverage * 100).toFixed(1)}% Token 已纳入成本`, color: 'var(--blue)' });
+        }
+        const monthlyLimit = Math.max(0, Number(settings.monthlyBudgetUsd || 0));
+        if (monthlyLimit > 0 && budget.forecast > monthlyLimit) {
+          alerts.push({ label: '预算预警', value: `预计超出 ${formatMoney(budget.forecast - monthlyLimit)}`, note: '按本月当前消耗节奏折算', color: 'var(--orange)' });
+        }
+
+        const node = $('cost-alerts');
+        node.classList.toggle('hidden', !alerts.length);
+        node.innerHTML = alerts.length ? `<div class="mb-3 flex items-center justify-between gap-3"><h3 class="section-title">值得留意</h3><span class="text-[11px] text-[rgb(var(--muted))]">自动检测 · 仅供参考</span></div><div class="grid gap-x-6 sm:grid-cols-2 xl:grid-cols-3">${alerts.slice(0, 3).map(alert => `<div class="grid grid-cols-[4px_minmax(0,1fr)] gap-3 border-t border-[rgb(var(--line))] py-3 first:border-t-0 sm:first:border-t"><span class="rounded-full" style="background:rgb(${alert.color})"></span><div class="min-w-0"><div class="text-[10px] uppercase text-[rgb(var(--muted))]">${esc(alert.label)}</div><div class="mt-1 truncate text-xs font-medium" title="${esc(alert.value)}">${esc(alert.value)}</div><div class="mt-1 text-[10px] leading-4 text-[rgb(var(--muted))]">${esc(alert.note)}</div></div></div>`).join('')}</div>` : '';
+      }
+
+      function renderCost(items) {
+        const estimate = estimateCost(items);
+        const mode = pricing.modes?.[state.costMode] || pricing.modes?.standard || { label: 'Standard', multiplier: 1 };
+        $('cost-title').textContent = estimate.coveredCalls || !items.length ? `≈ ${formatMoney(estimate.total)}` : '—';
+        $('cost-mode-note').textContent = `${mode.label || state.costMode} · API ×${Number(mode.multiplier || 1).toFixed(2)} · 中转 ×${Number(settings.relayMultiplier ?? 1).toFixed(2)} · ${settings.displayCurrency}`;
+        $('cost-input').textContent = formatMoney(estimate.parts.input);
+        $('cost-cached').textContent = formatMoney(estimate.parts.cached);
+        $('cost-cache-write').textContent = formatMoney(estimate.parts.cacheWrite);
+        $('cost-output').textContent = formatMoney(estimate.parts.output);
+        $('cost-input-note').textContent = `${compactEn.format(estimate.tokens.regularInput)} tokens`;
+        $('cost-cached-note').textContent = `${compactEn.format(estimate.tokens.cached)} tokens`;
+        $('cost-cache-write-note').textContent = `${compactEn.format(estimate.tokens.cacheWrite)} tokens`;
+        $('cost-output-note').textContent = `${compactEn.format(estimate.tokens.output)} tokens`;
+
+        const coverage = `${(estimate.coverage * 100).toFixed(1)}% Token 已定价`;
+        const notes = [coverage];
+        if (estimate.longContextCalls) notes.push(`${nf.format(estimate.longContextCalls)} 次长上下文`);
+        if (estimate.unknownModels.size) notes.push(`缺少价格：${[...estimate.unknownModels].join('、')}`);
+        if (estimate.unsupportedModeModels.size) notes.push(`${mode.label} 不适用：${[...estimate.unsupportedModeModels].join('、')}`);
+        $('cost-coverage').textContent = notes.join(' · ');
+        $('cost-model-count').textContent = `${estimate.models.length} 个已定价模型`;
+        $('cost-models').innerHTML = estimate.models.length
+          ? estimate.models.slice(0, 6).map(model => `<div class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 py-2.5"><span class="truncate font-mono text-[11px]" title="${esc(model.model)}">${esc(model.model)}</span><span class="text-[11px] text-[rgb(var(--muted))]">${nf.format(model.calls)} 次</span><span class="metric-number min-w-20 text-right text-xs font-medium">${formatMoney(model.total)}</span></div>`).join('')
+          : '<div class="py-4 text-xs text-[rgb(var(--muted))]">当前范围没有可定价调用</div>';
+
+        document.querySelectorAll('[data-cost-mode]').forEach(button => {
+          const active = button.dataset.costMode === state.costMode;
+          button.dataset.active = String(active);
+          button.setAttribute('aria-pressed', String(active));
+        });
+        const budget = renderBudget();
+        renderCostAlerts(items, estimate, budget);
+      }
+
+      function renderPricingTable() {
+        const rates = Object.entries(pricing.models || {});
+        const dash = value => value == null ? 'Input rate' : `$${Number(value).toFixed(value < 0.1 ? 3 : 2)}`;
+        $('pricing-source').textContent = `${pricing.source?.capturedAt || '日期未知'} 价格快照 · ${pricing.source?.officiallyVerified ? '已核验官方来源' : '用户提供，未实时核验'} · USD / 1M tokens`;
+        $('pricing-table').innerHTML = rates.length ? `<table class="min-w-[560px] w-full border-collapse"><thead><tr class="table-head"><th class="table-cell">Model</th><th class="table-cell">Input</th><th class="table-cell">Cache read</th><th class="table-cell">Cache write</th><th class="table-cell">Output</th></tr></thead><tbody>${rates.map(([model, rate]) => `<tr><td class="table-cell font-mono text-[11px]">${esc(model)}</td><td class="table-cell">$${Number(rate.input).toFixed(2)}</td><td class="table-cell">${dash(rate.cachedInput)}</td><td class="table-cell">${dash(rate.cacheWriteInput)}</td><td class="table-cell">$${Number(rate.output).toFixed(2)}</td></tr>`).join('')}</tbody></table>` : '<p class="text-[rgb(var(--muted))]">没有价格配置</p>';
       }
 
       function bucketConfig(bounds) {
@@ -565,6 +982,9 @@
         $('matrix-wrap').innerHTML = html;
         $('matrix-wrap').querySelectorAll('button[data-project]').forEach(button => button.addEventListener('click', () => {
           state.project = button.dataset.project; state.model = button.dataset.model; state.visibleTasks = 16;
+          localStorage.setItem('codex-token-project', state.project);
+          localStorage.setItem('codex-token-model', state.model);
+          syncViewQuery();
           $('project-filter').value = state.project; $('model-filter').value = state.model; render();
         }));
       }
@@ -611,22 +1031,131 @@
         $('drawer-title').textContent = task.id;
         $('drawer-range').textContent = `${fullDtf.format(task.start)} — ${fullDtf.format(task.end)} · ${formatDuration(task.duration)}`;
         $('drawer-chips').innerHTML = [...task.projectNames.map(name => `<span class="chip">${esc(name)}</span>`), ...task.modelNames.map(name => `<span class="chip font-mono">${esc(name)}</span>`)].join('');
+        const taskCost = estimateCost(task.events);
         const stats = [
           ['总 Token', compactEn.format(task.total), nf.format(task.total)],
           ['缓存命中率', `${(task.cacheRate * 100).toFixed(1)}%`, `${nf.format(task.cached)} 缓存输入`],
           ['输出 Token', compactEn.format(task.output), `${nf.format(task.reasoning)} 推理`],
-          ['模型调用', nf.format(task.events.length), `${compactEn.format(task.total / Math.max(1, task.events.length))} / 次`]
+          ['模型调用', nf.format(task.events.length), `${compactEn.format(task.total / Math.max(1, task.events.length))} / 次`],
+          ['预计成本', taskCost.coveredCalls ? `≈ ${formatMoney(taskCost.total)}` : '—', `${(taskCost.coverage * 100).toFixed(1)}% 已定价`],
+          ['长上下文', nf.format(taskCost.longContextCalls), `${pricing.modes?.[state.costMode]?.label || 'Standard'} mode`]
         ];
         $('drawer-stats').innerHTML = stats.map(([label, value, note]) => `<div><div class="eyebrow">${esc(label)}</div><div class="metric-number mt-1 text-xl font-semibold">${esc(value)}</div><div class="mt-1 text-[11px] text-[rgb(var(--muted))]">${esc(note)}</div></div>`).join('');
         $('drawer-call-count').textContent = `${task.events.length} 次`;
-        $('drawer-calls').innerHTML = [...task.events].sort((a, b) => b.time - a.time).slice(0, 120).map(item => `<div class="grid grid-cols-[auto_1fr_auto] items-center gap-3 py-3"><span class="font-mono text-[11px] text-[rgb(var(--muted))]">${esc(dtf.format(item.time))}</span><div class="min-w-0"><div class="truncate text-xs">${esc(item.project)}</div><div class="truncate font-mono text-[10px] text-[rgb(var(--muted))]">${esc(item.model)}</div></div><div class="text-right"><div class="metric-number text-xs font-medium">${compactEn.format(item.total)}</div><div class="text-[10px] text-[rgb(var(--muted))]">${(item.input ? item.cachedInput / item.input * 100 : 0).toFixed(0)}% 缓存</div></div></div>`).join('');
+        $('drawer-calls').innerHTML = [...task.events].sort((a, b) => b.time - a.time).slice(0, 120).map(item => {
+          const cost = estimateEvent(item);
+          return `<div class="grid grid-cols-[auto_1fr_auto] items-center gap-3 py-3"><span class="font-mono text-[11px] text-[rgb(var(--muted))]">${esc(dtf.format(item.time))}</span><div class="min-w-0"><div class="truncate text-xs">${esc(item.project)}</div><div class="truncate font-mono text-[10px] text-[rgb(var(--muted))]">${esc(item.model)}</div></div><div class="text-right"><div class="metric-number text-xs font-medium">${compactEn.format(item.total)}</div><div class="text-[10px] text-[rgb(var(--muted))]">${cost.priced ? `≈ ${formatMoney(cost.total)}` : '未定价'} · ${(item.input ? item.cachedInput / item.input * 100 : 0).toFixed(0)}% 缓存</div></div></div>`;
+        }).join('');
         $('drawer-shell').classList.remove('hidden');
         document.body.classList.add('overflow-hidden');
       }
 
       function closeDrawer() {
         $('drawer-shell').classList.add('hidden');
-        document.body.classList.remove('overflow-hidden');
+        syncBodyLock();
+      }
+
+      function syncBodyLock() {
+        const locked = !$('drawer-shell').classList.contains('hidden') || !$('settings-shell').classList.contains('hidden');
+        document.body.classList.toggle('overflow-hidden', locked);
+      }
+
+      function budgetDisplayValue(usd, currency, exchangeRate) {
+        const value = Number(usd || 0) * (currency === 'CNY' ? Math.max(0.01, Number(exchangeRate || 7.2)) : 1);
+        return value ? value.toFixed(2) : '';
+      }
+
+      function renderAliasFields(aliasMap = settings.projectAliases) {
+        const projects = [...new Map(events.map(item => [item.projectId, item.projectOriginal])).entries()]
+          .map(([id, name]) => ({ id, name }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        $('settings-project-count').textContent = `${projects.length} 个项目`;
+        $('settings-project-aliases').innerHTML = projects.length ? projects.map(project => `
+          <label class="grid gap-1.5 sm:grid-cols-[minmax(150px,.8fr)_minmax(0,1.2fr)] sm:items-center">
+            <span class="truncate text-xs text-[rgb(var(--muted))]" title="${esc(project.name)}">${esc(project.name)}</span>
+            <input class="input-control" type="text" data-project-alias="${esc(project.id)}" value="${esc(aliasMap[project.id] || '')}" placeholder="保留原名">
+          </label>`).join('') : '<p class="text-xs text-[rgb(var(--muted))]">还没有可配置的项目。</p>';
+      }
+
+      function updateSettingsCurrencyLabels(currency) {
+        $('settings-daily-currency').textContent = currency;
+        $('settings-monthly-currency').textContent = currency;
+        $('settings-exchange-rate').disabled = currency !== 'CNY';
+        $('settings-exchange-rate').classList.toggle('opacity-50', currency !== 'CNY');
+      }
+
+      function openSettings() {
+        const currency = settings.displayCurrency || 'USD';
+        $('settings-currency').value = currency;
+        $('settings-currency').dataset.previousCurrency = currency;
+        $('settings-exchange-rate').value = Number(settings.exchangeRate || 7.2).toFixed(2);
+        $('settings-relay-multiplier').value = Number(settings.relayMultiplier ?? 1).toFixed(2);
+        $('settings-daily-budget').value = budgetDisplayValue(settings.dailyBudgetUsd, currency, settings.exchangeRate);
+        $('settings-monthly-budget').value = budgetDisplayValue(settings.monthlyBudgetUsd, currency, settings.exchangeRate);
+        updateSettingsCurrencyLabels(currency);
+        renderAliasFields();
+        $('settings-shell').classList.remove('hidden');
+        syncBodyLock();
+        requestAnimationFrame(() => $('settings-currency').focus());
+      }
+
+      function closeSettings() {
+        $('settings-shell').classList.add('hidden');
+        syncBodyLock();
+      }
+
+      function changeSettingsCurrency(nextCurrency) {
+        const previousCurrency = $('settings-currency').dataset.previousCurrency || settings.displayCurrency || 'USD';
+        const rate = Math.max(0.01, Number($('settings-exchange-rate').value || settings.exchangeRate || 7.2));
+        ['settings-daily-budget', 'settings-monthly-budget'].forEach(id => {
+          const node = $(id);
+          const value = Math.max(0, Number(node.value || 0));
+          const usd = previousCurrency === 'CNY' ? value / rate : value;
+          node.value = budgetDisplayValue(usd, nextCurrency, rate);
+        });
+        $('settings-currency').dataset.previousCurrency = nextCurrency;
+        updateSettingsCurrencyLabels(nextCurrency);
+      }
+
+      function resetSettingsForm() {
+        $('settings-currency').value = defaultSettings.displayCurrency;
+        $('settings-currency').dataset.previousCurrency = defaultSettings.displayCurrency;
+        $('settings-exchange-rate').value = defaultSettings.exchangeRate.toFixed(2);
+        $('settings-relay-multiplier').value = defaultSettings.relayMultiplier.toFixed(2);
+        $('settings-daily-budget').value = '';
+        $('settings-monthly-budget').value = '';
+        updateSettingsCurrencyLabels(defaultSettings.displayCurrency);
+        renderAliasFields({});
+      }
+
+      function saveSettings() {
+        const displayCurrency = $('settings-currency').value === 'CNY' ? 'CNY' : 'USD';
+        const exchangeRate = Math.max(0.01, Number($('settings-exchange-rate').value || 7.2));
+        const relayRaw = $('settings-relay-multiplier').value.trim();
+        const relayValue = relayRaw === '' ? 1 : Number(relayRaw);
+        const relayMultiplier = Number.isFinite(relayValue) ? Math.max(0, relayValue) : 1;
+        const toUsd = value => {
+          const parsed = Number(value || 0);
+          return (Number.isFinite(parsed) ? Math.max(0, parsed) : 0) / (displayCurrency === 'CNY' ? exchangeRate : 1);
+        };
+        const projectAliases = {};
+        document.querySelectorAll('[data-project-alias]').forEach(input => {
+          const alias = input.value.trim();
+          if (alias) projectAliases[input.dataset.projectAlias] = alias;
+        });
+        settings = {
+          displayCurrency,
+          exchangeRate,
+          relayMultiplier,
+          dailyBudgetUsd: toUsd($('settings-daily-budget').value),
+          monthlyBudgetUsd: toUsd($('settings-monthly-budget').value),
+          projectAliases
+        };
+        localStorage.setItem('codex-day-settings', JSON.stringify(settings));
+        events.forEach(item => { item.project = settings.projectAliases[item.projectId] || item.projectOriginal; });
+        initializeFilters();
+        closeSettings();
+        render();
       }
 
       function setMobileActions(open) {
@@ -636,8 +1165,11 @@
 
       function exportCsv() {
         const items = currentAndPrevious().current;
-        const headers = ['时间', '项目', '项目标识', '模型', '输入', '缓存输入', '非缓存输入', '输出', '推理输出', '未分类', '总计', '任务ID'];
-        const rows = items.map(item => [item.timestamp, item.project, item.projectId, item.model, item.input, item.cachedInput, item.uncachedInput, item.output, item.reasoningOutput, item.unclassified || 0, item.total, item.sessionId]);
+        const headers = ['时间', '项目', '项目标识', '模型', '输入', '普通输入', '缓存输入', '缓存写入', '非缓存输入', '输出', '推理输出', '未分类', '总计', '任务ID', '价格模型', '计价模式', '中转倍率', '长上下文', '预计成本USD'];
+        const rows = items.map(item => {
+          const estimate = estimateEvent(item);
+          return [item.timestamp, item.project, item.projectId, item.model, item.input, estimate.priced ? estimate.tokens.regularInput : '', item.cachedInput, item.cacheWriteInput || 0, item.uncachedInput, item.output, item.reasoningOutput, item.unclassified || 0, item.total, item.sessionId, estimate.modelId, state.costMode, Number(settings.relayMultiplier ?? 1), estimate.priced ? estimate.longContext : '', estimate.priced ? estimate.total.toFixed(6) : ''];
+        });
         const quote = value => `"${String(value ?? '').replace(/"/g, '""')}"`;
         const csv = '\ufeff' + [headers, ...rows].map(row => row.map(quote).join(',')).join('\r\n');
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -656,6 +1188,7 @@
       function posterCanvas() {
         const { bounds, current, previous } = currentAndPrevious();
         const summary = aggregate(current);
+        const cost = estimateCost(current);
         const projects = group(current, 'projectId', 'project');
         const models = group(current, 'model');
         const tasks = buildTasks(current);
@@ -693,7 +1226,7 @@
 
         const stats = [
           ['缓存命中率', `${(summary.cacheRate * 100).toFixed(1)}%`, colors.green],
-          ['平均每次', compactEn.format(summary.average), colors.coral],
+          ['预计成本', cost.coveredCalls ? `≈ ${formatMoney(cost.total)}` : '—', colors.coral],
           ['活跃项目', String(new Set(current.map(item => item.projectId)).size), colors.violet]
         ];
         stats.forEach((stat, index) => {
@@ -773,7 +1306,7 @@
           ctx.fillStyle = colors.muted; ctx.font = `400 15px ${font}`; ctx.textAlign = 'right'; ctx.fillText(String(item[2]), x + 298, 1460); ctx.textAlign = 'left';
         });
 
-        ctx.fillStyle = colors.muted; ctx.font = `400 15px ${font}`; ctx.fillText(payload.demo ? '虚构 Demo 数据' : '数据来自本地 Codex 日志', 72, 1550);
+        ctx.fillStyle = colors.muted; ctx.font = `400 15px ${font}`; ctx.fillText(`${payload.demo ? '虚构 Demo 数据' : '数据来自本地 Codex 日志'} · API 标价估算，非实际账单`, 72, 1550);
         ctx.textAlign = 'right'; ctx.fillText('personal AI rhythm · codex.day', 1128, 1550); ctx.textAlign = 'left';
         return canvas;
       }
@@ -806,10 +1339,34 @@
         document.body.appendChild(canvas);
       }
 
+      function startLiveRefresh() {
+        if (!liveMode || query.get('poster') === 'preview') return;
+        const currentVersion = String(payload.generatedAt || '');
+        let checking = false;
+        window.setInterval(() => {
+          if (checking || document.hidden) return;
+          checking = true;
+          const signal = document.createElement('script');
+          signal.src = `live-update.js?t=${Date.now()}`;
+          signal.async = true;
+          signal.onload = () => {
+            signal.remove();
+            checking = false;
+            if (window.__CODEX_DAY_LIVE__ && String(window.__CODEX_DAY_LIVE__) !== currentVersion) {
+              sessionStorage.setItem('codex-day-scroll', String(window.scrollY));
+              location.reload();
+            }
+          };
+          signal.onerror = () => { signal.remove(); checking = false; };
+          document.head.appendChild(signal);
+        }, 4000);
+      }
+
       function render() {
         const { bounds, current, previous } = currentAndPrevious();
         const tasks = buildTasks(current);
         renderMetrics(current, previous);
+        renderCost(current);
         const buckets = renderTrend(current, previous, bounds);
         renderInsights(current, buckets, tasks);
         renderMatrix(current);
@@ -818,11 +1375,19 @@
 
       document.querySelectorAll('[data-range]').forEach(button => button.addEventListener('click', () => {
         state.range = button.dataset.range; state.visibleTasks = 16;
+        localStorage.setItem('codex-token-range', state.range);
+        syncViewQuery();
         document.querySelectorAll('[data-range]').forEach(item => item.dataset.active = String(item === button));
         render();
       }));
-      $('model-filter').addEventListener('change', event => { state.model = event.target.value; state.visibleTasks = 16; render(); });
-      $('project-filter').addEventListener('change', event => { state.project = event.target.value; state.visibleTasks = 16; render(); });
+      $('model-filter').addEventListener('change', event => { state.model = event.target.value; state.visibleTasks = 16; localStorage.setItem('codex-token-model', state.model); syncViewQuery(); render(); });
+      $('project-filter').addEventListener('change', event => { state.project = event.target.value; state.visibleTasks = 16; localStorage.setItem('codex-token-project', state.project); syncViewQuery(); render(); });
+      document.querySelectorAll('[data-cost-mode]').forEach(button => button.addEventListener('click', () => {
+        state.costMode = button.dataset.costMode;
+        localStorage.setItem('codex-cost-mode', state.costMode);
+        syncViewQuery();
+        render();
+      }));
       $('show-more').addEventListener('click', () => { state.visibleTasks += 24; renderTasks(buildTasks(currentAndPrevious().current)); });
       $('export-csv').addEventListener('click', exportCsv);
       $('export-poster').addEventListener('click', exportPoster);
@@ -835,8 +1400,15 @@
       $('mobile-export-csv').addEventListener('click', () => { setMobileActions(false); exportCsv(); });
       $('drawer-close').addEventListener('click', closeDrawer);
       $('drawer-backdrop').addEventListener('click', closeDrawer);
+      $('settings-toggle').addEventListener('click', openSettings);
+      $('settings-close').addEventListener('click', closeSettings);
+      $('settings-cancel').addEventListener('click', closeSettings);
+      $('settings-backdrop').addEventListener('click', closeSettings);
+      $('settings-reset').addEventListener('click', resetSettingsForm);
+      $('settings-save').addEventListener('click', saveSettings);
+      $('settings-currency').addEventListener('change', event => changeSettingsCurrency(event.target.value));
       document.addEventListener('click', () => setMobileActions(false));
-      document.addEventListener('keydown', event => { if (event.key === 'Escape') { closeDrawer(); setMobileActions(false); } });
+      document.addEventListener('keydown', event => { if (event.key === 'Escape') { closeDrawer(); closeSettings(); setMobileActions(false); } });
       $('theme-toggle').addEventListener('click', () => {
         document.documentElement.classList.toggle('dark');
         localStorage.setItem('codex-token-theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
@@ -848,13 +1420,21 @@
       window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { const current = currentAndPrevious(); renderTrend(current.current, current.previous, current.bounds); }, 120); });
 
       initializeFilters();
+      syncViewQuery();
+      renderPricingTable();
       document.querySelectorAll('[data-range]').forEach(item => item.dataset.active = String(item.dataset.range === state.range));
-      $('generated-meta').textContent = payload.generatedAt ? `${payload.demo ? '虚构 Demo' : '本地日志'} · 更新于 ${fullDtf.format(new Date(payload.generatedAt))}` : '尚未生成数据';
+      $('generated-meta').textContent = payload.generatedAt ? `${payload.demo ? '虚构 Demo' : liveMode ? '本地日志 · 动态更新' : '本地日志 · 静态快照'} · ${fullDtf.format(new Date(payload.generatedAt))}` : '尚未生成数据';
       $('source-summary').textContent = payload.demo
         ? `虚构 Demo · ${nf.format(payload.sessionsScanned || 0)} 个任务`
         : `${nf.format(payload.sessionsScanned || 0)} 个任务 · ${nf.format(payload.filesScanned || 0)} 个日志文件 · ${payload.timezone || '本地时区'}`;
       render();
-      if (new URLSearchParams(location.search).get('poster') === 'preview') showPosterPreview();
+      const savedScroll = Number(sessionStorage.getItem('codex-day-scroll') || 0);
+      if (savedScroll > 0) {
+        sessionStorage.removeItem('codex-day-scroll');
+        requestAnimationFrame(() => window.scrollTo(0, savedScroll));
+      }
+      startLiveRefresh();
+      if (query.get('poster') === 'preview') showPosterPreview();
     })();
   </script>
 </body>

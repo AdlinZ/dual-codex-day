@@ -4,6 +4,7 @@ param(
     [string]$DashboardPath,
     [string]$TemplatePath,
     [string]$StylesheetPath,
+    [string]$PricingPath,
     [switch]$Open
 )
 
@@ -18,6 +19,9 @@ if ([string]::IsNullOrWhiteSpace($TemplatePath)) {
 }
 if ([string]::IsNullOrWhiteSpace($StylesheetPath)) {
     $StylesheetPath = Join-Path $repoRoot 'src\token-dashboard.css'
+}
+if ([string]::IsNullOrWhiteSpace($PricingPath)) {
+    $PricingPath = Join-Path $repoRoot 'config\pricing.json'
 }
 if ([string]::IsNullOrWhiteSpace($CodexRoot)) {
     $CodexRoot = Join-Path $env:USERPROFILE '.codex'
@@ -217,23 +221,37 @@ if (-not (Test-Path -LiteralPath $TemplatePath)) {
 if (-not (Test-Path -LiteralPath $StylesheetPath)) {
     throw "Dashboard stylesheet not found: $StylesheetPath"
 }
+if (-not (Test-Path -LiteralPath $PricingPath)) {
+    throw "Pricing configuration not found: $PricingPath"
+}
 
 $json = $payload | ConvertTo-Json -Depth 12 -Compress
+$pricing = [IO.File]::ReadAllText($PricingPath) | ConvertFrom-Json
+$pricingJson = $pricing | ConvertTo-Json -Depth 12 -Compress
 $html = [IO.File]::ReadAllText($TemplatePath)
 $replacement = '<script id="token-data">window.__TOKEN_DATA__ = ' + $json + ';</script>'
 $pattern = '(?s)<script id="token-data">.*?</script>'
+$pricingReplacement = '<script id="pricing-data">window.__PRICING_DATA__ = ' + $pricingJson + ';</script>'
+$pricingPattern = '(?s)<script id="pricing-data">.*?</script>'
 
 if (-not [Text.RegularExpressions.Regex]::IsMatch($html, $pattern)) {
     throw 'The token-data marker is missing from the dashboard.'
 }
+if (-not [Text.RegularExpressions.Regex]::IsMatch($html, $pricingPattern)) {
+    throw 'The pricing-data marker is missing from the dashboard.'
+}
 
 $updated = [Text.RegularExpressions.Regex]::Replace($html, $pattern, [Text.RegularExpressions.MatchEvaluator]{ param($match) $replacement }, 1)
+$updated = [Text.RegularExpressions.Regex]::Replace($updated, $pricingPattern, [Text.RegularExpressions.MatchEvaluator]{ param($match) $pricingReplacement }, 1)
 $outputDirectory = Split-Path -Parent $DashboardPath
 if (-not (Test-Path -LiteralPath $outputDirectory)) {
     [void](New-Item -ItemType Directory -Path $outputDirectory -Force)
 }
 [IO.File]::WriteAllText($DashboardPath, $updated, [Text.UTF8Encoding]::new($false))
 Copy-Item -LiteralPath $StylesheetPath -Destination (Join-Path $outputDirectory 'token-dashboard.css') -Force
+$liveSignalPath = Join-Path $outputDirectory 'live-update.js'
+$liveSignal = 'window.__CODEX_DAY_LIVE__ = ' + ($payload.generatedAt | ConvertTo-Json -Compress) + ';'
+[IO.File]::WriteAllText($liveSignalPath, $liveSignal, [Text.UTF8Encoding]::new($false))
 
 Write-Host ('Refreshed: {0} calls, {1} sessions, {2} log files' -f $events.Count, $sessionIds.Count, $files.Count)
 Write-Host ('Dashboard: {0}' -f $DashboardPath)
