@@ -1734,10 +1734,11 @@
       renderPricingTable();
       document.querySelectorAll('[data-range]').forEach(item => item.dataset.active = String(item.dataset.range === state.range));
       document.querySelectorAll('[data-report-period]').forEach(item => item.dataset.active = String(item.dataset.reportPeriod === state.reportPeriod));
-      $('generated-meta').textContent = payload.generatedAt ? `${payload.demo ? '虚构 Demo' : liveMode ? '本地日志 · 动态更新' : '本地日志 · 静态快照'} · ${fullDtf.format(new Date(payload.generatedAt))}` : '尚未生成数据';
+      const sourceMode = payload.demo ? '虚构 Demo' : payload.index?.engine === 'sqlite' ? `SQLite 索引 · ${liveMode ? '动态更新' : '静态快照'}` : liveMode ? '本地日志 · 动态更新' : '本地日志 · 静态快照';
+      $('generated-meta').textContent = payload.generatedAt ? `${sourceMode} · ${fullDtf.format(new Date(payload.generatedAt))}` : '尚未生成数据';
       $('source-summary').textContent = payload.demo
         ? `虚构 Demo · ${nf.format(payload.sessionsScanned || 0)} 个任务`
-        : `${nf.format(payload.sessionsScanned || 0)} 个任务 · ${nf.format(payload.filesScanned || 0)} 个日志文件 · ${payload.timezone || '本地时区'}`;
+        : `${nf.format(payload.sessionsScanned || 0)} 个任务 · ${nf.format(payload.filesScanned || 0)} 个日志文件 · ${payload.index?.engine === 'sqlite' ? 'SQLite 增量索引' : payload.timezone || '本地时区'}`;
       render();
       const savedScroll = Number(sessionStorage.getItem('codex-day-scroll') || 0);
       if (savedScroll > 0) {

@@ -1,14 +1,20 @@
 {
   "name": "codex-day",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "A private, local-first dashboard for personal Codex token activity.",
   "license": "MIT",
   "scripts": {
+    "start": "node ./scripts/codex-day.mjs --open",
+    "index": "node ./scripts/codex-day.mjs --once",
     "build:css": "tailwindcss -i ./src/styles.css -o ./src/token-dashboard.css --minify",
     "build:demo": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-demo.ps1",
     "build": "npm run build:css && npm run build:demo",
-    "test": "node ./scripts/check-dashboard.js"
+    "test:index": "node ./scripts/check-indexer.mjs",
+    "test": "node ./scripts/check-dashboard.js && npm run test:index"
+  },
+  "engines": {
+    "node": ">=22.5.0"
   },
   "devDependencies": {
     "tailwindcss": "^3.4.17"

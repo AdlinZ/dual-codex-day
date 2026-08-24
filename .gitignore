@@ -1,5 +1,6 @@
 # Personal generated output
 dist/
+.codex-day/
 *.csv
 codex-day-*.png
 
