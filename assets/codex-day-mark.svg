@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="title description">
+  <title id="title">codex-day</title>
+  <desc id="description">A geometric day ring forming a C and D monogram, capped by an orange token square.</desc>
+  <path
+    d="M96 16 H64 A48 48 0 1 0 64 112 H96 V94 H64 A30 30 0 1 1 64 34 H96 Z"
+    fill="#141619"
+  />
+  <rect x="89" y="28" width="14" height="66" fill="#141619" />
+  <rect x="84" y="8" width="24" height="24" rx="4" fill="#FF5B4C" />
+</svg>
