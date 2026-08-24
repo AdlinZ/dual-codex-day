@@ -64,6 +64,11 @@
   .task-dot { @apply inline-grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-semibold; }
   .budget-track { @apply h-1.5 overflow-hidden rounded-full bg-[rgb(var(--panel-subtle))]; }
   .budget-fill { @apply h-full rounded-full bg-[rgb(var(--blue))] transition-[width]; }
+  .calendar-cell { @apply block h-4 w-4 rounded-sm border border-[rgb(var(--line))] bg-[rgb(var(--panel-subtle))]; }
+  .calendar-cell[data-level="1"] { background: color-mix(in srgb, rgb(var(--blue)) 24%, rgb(var(--panel))); }
+  .calendar-cell[data-level="2"] { background: color-mix(in srgb, rgb(var(--blue)) 44%, rgb(var(--panel))); }
+  .calendar-cell[data-level="3"] { background: color-mix(in srgb, rgb(var(--emerald)) 64%, rgb(var(--panel))); }
+  .calendar-cell[data-level="4"] { background: rgb(var(--emerald)); }
 }
 
 .chart-axis { fill: rgb(var(--muted)); font-size: 11px; }

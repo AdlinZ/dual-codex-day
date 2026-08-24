@@ -167,6 +167,66 @@
       </div>
     </section>
 
+    <section id="report-center" class="mb-14 border-y border-[rgb(var(--line))] py-8" aria-labelledby="report-title">
+      <div class="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p class="mb-2 text-xs font-medium text-[rgb(var(--violet))]">定期回顾</p>
+          <h2 id="report-title" class="text-2xl font-semibold">本周报告</h2>
+          <p id="report-period-label" class="mt-2 text-xs text-[rgb(var(--muted))]"></p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="inline-grid grid-cols-2 gap-1 rounded-lg bg-[rgb(var(--panel-subtle))] p-1" role="group" aria-label="报告周期">
+            <button class="cost-mode-btn" type="button" data-report-period="week" data-active="true">周报</button>
+            <button class="cost-mode-btn" type="button" data-report-period="month" data-active="false">月报</button>
+          </div>
+          <button id="export-report-poster" class="control inline-flex items-center gap-2" type="button"><span aria-hidden="true">▣</span><span>导出报告</span></button>
+        </div>
+      </div>
+
+      <div class="mt-7 grid grid-cols-2 gap-x-4 gap-y-6 border-y border-[rgb(var(--line))] py-6 lg:grid-cols-4">
+        <article class="story-stat">
+          <div class="eyebrow">Token 总量 <span id="report-token-delta" class="ml-1 normal-case">--</span></div>
+          <div id="report-token" class="metric-number mt-2 text-2xl font-semibold">0</div>
+          <div id="report-token-note" class="mt-1 text-[10px] text-[rgb(var(--muted))]"></div>
+        </article>
+        <article class="story-stat">
+          <div class="eyebrow">预计成本 <span id="report-cost-delta" class="ml-1 normal-case">--</span></div>
+          <div id="report-cost" class="metric-number mt-2 text-2xl font-semibold">$0.00</div>
+          <div id="report-cost-note" class="mt-1 text-[10px] text-[rgb(var(--muted))]"></div>
+        </article>
+        <article class="story-stat border-l-0 pl-0 lg:border-l lg:pl-6">
+          <div class="eyebrow">任务 <span id="report-task-delta" class="ml-1 normal-case">--</span></div>
+          <div id="report-tasks" class="metric-number mt-2 text-2xl font-semibold">0</div>
+          <div id="report-task-note" class="mt-1 text-[10px] text-[rgb(var(--muted))]"></div>
+        </article>
+        <article class="story-stat">
+          <div class="eyebrow">缓存率 <span id="report-cache-delta" class="ml-1 normal-case">--</span></div>
+          <div id="report-cache" class="metric-number mt-2 text-2xl font-semibold">0%</div>
+          <div id="report-cache-note" class="mt-1 text-[10px] text-[rgb(var(--muted))]"></div>
+        </article>
+      </div>
+
+      <div class="mt-7 grid gap-8 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div class="min-w-0">
+          <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 class="section-title">近 12 周活跃日历</h3>
+              <p id="report-heatmap-range" class="mt-1 text-[11px] text-[rgb(var(--muted))]"></p>
+            </div>
+            <div class="flex items-center gap-1.5 text-[10px] text-[rgb(var(--muted))]" aria-label="活跃度图例"><span>少</span><span class="calendar-cell" data-level="0"></span><span class="calendar-cell" data-level="1"></span><span class="calendar-cell" data-level="2"></span><span class="calendar-cell" data-level="3"></span><span class="calendar-cell" data-level="4"></span><span>多</span></div>
+          </div>
+          <div id="report-heatmap" class="thin-scrollbar overflow-x-auto pb-2" role="img" aria-label="近十二周 Token 活跃日历"></div>
+        </div>
+        <aside class="border-t border-[rgb(var(--line))] pt-6 xl:border-l xl:border-t-0 xl:pl-7 xl:pt-0">
+          <div class="mb-3 flex items-center justify-between gap-3">
+            <h3 class="section-title">这段周期</h3>
+            <span id="report-active-days" class="chip">0 个活跃日</span>
+          </div>
+          <div id="report-insights" class="divide-y divide-[rgb(var(--line))]"></div>
+        </aside>
+      </div>
+    </section>
+
     <section class="mb-14 grid overflow-hidden border-y border-[rgb(var(--line))] xl:grid-cols-[minmax(0,1fr)_290px]">
       <div class="min-w-0 py-6 pr-0 xl:pr-8">
         <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -354,20 +414,29 @@
       const savedCostMode = localStorage.getItem('codex-cost-mode');
       const requestedCostMode = query.get('mode');
       const initialCostMode = [requestedCostMode, savedCostMode, 'standard'].find(value => pricing.modes?.[value]) || 'standard';
+      const requestedReportPeriod = query.get('report');
+      const savedReportPeriod = localStorage.getItem('codex-report-period');
+      const initialReportPeriod = [requestedReportPeriod, savedReportPeriod, 'week'].find(value => ['week', 'month'].includes(value));
       const liveMode = !payload.demo && query.get('live') === '1';
-      const state = { range: initialRange, model: query.get('model') || localStorage.getItem('codex-token-model') || '', project: query.get('project') || localStorage.getItem('codex-token-project') || '', visibleTasks: 16, costMode: initialCostMode };
+      const state = { range: initialRange, model: query.get('model') || localStorage.getItem('codex-token-model') || '', project: query.get('project') || localStorage.getItem('codex-token-project') || '', visibleTasks: 16, costMode: initialCostMode, reportPeriod: initialReportPeriod };
       const nf = new Intl.NumberFormat('zh-CN');
       const compactEn = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
       const dtf = new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
       const fullDtf = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+      const reportDtf = new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric' });
+      const weekdayDtf = new Intl.DateTimeFormat('zh-CN', { weekday: 'short' });
       const $ = id => document.getElementById(id);
       const sum = (items, key) => items.reduce((total, item) => total + Number(item[key] || 0), 0);
       const esc = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
       const addDays = (date, count) => { const next = new Date(date); next.setDate(next.getDate() + count); return next; };
+      const dateKey = value => {
+        const date = new Date(value);
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      };
 
       function syncViewQuery() {
         const url = new URL(location.href);
-        const values = { range: state.range, mode: state.costMode, model: state.model, project: state.project };
+        const values = { range: state.range, mode: state.costMode, report: state.reportPeriod, model: state.model, project: state.project };
         Object.entries(values).forEach(([key, value]) => value ? url.searchParams.set(key, value) : url.searchParams.delete(key));
         history.replaceState(null, '', url);
       }
@@ -570,6 +639,109 @@
         setDelta('cache-delta', previousItems.length ? deltaText(current.cacheRate, previous.cacheRate) : { text: '--', positive: null });
         setDelta('average-delta', previousItems.length ? deltaText(current.average, previous.average) : { text: '--', positive: null });
         setDelta('task-delta', previousItems.length ? deltaText(current.tasks, previous.tasks) : { text: '--', positive: null });
+      }
+
+      function reportBounds(period = state.reportPeriod) {
+        const now = payload.demo && payload.generatedAt ? new Date(payload.generatedAt) : new Date();
+        let start;
+        let previousStart;
+        let previousEnd;
+        if (period === 'month') {
+          start = new Date(now.getFullYear(), now.getMonth(), 1);
+          previousStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          const previousMonthEnd = new Date(now.getFullYear(), now.getMonth(), 1);
+          previousEnd = new Date(Math.min(previousMonthEnd.getTime() - 1, previousStart.getTime() + (now - start)));
+        } else {
+          start = startOfDay(now);
+          start.setDate(start.getDate() - ((start.getDay() || 7) - 1));
+          previousStart = addDays(start, -7);
+          previousEnd = new Date(previousStart.getTime() + (now - start));
+        }
+        return { start, end: now, previousStart, previousEnd };
+      }
+
+      function dailyTotals(items, start, end) {
+        const totals = new Map();
+        items.forEach(item => totals.set(dateKey(item.time), (totals.get(dateKey(item.time)) || 0) + Number(item.total || 0)));
+        const days = [];
+        for (let cursor = startOfDay(start); cursor <= startOfDay(end); cursor = addDays(cursor, 1)) {
+          days.push({ date: new Date(cursor), key: dateKey(cursor), total: totals.get(dateKey(cursor)) || 0 });
+        }
+        return days;
+      }
+
+      function reportSnapshot(period = state.reportPeriod) {
+        const bounds = reportBounds(period);
+        const currentItems = between(bounds.start, bounds.end);
+        const previousItems = between(bounds.previousStart, bounds.previousEnd);
+        const current = aggregate(currentItems);
+        const previous = aggregate(previousItems);
+        const currentCost = estimateCost(currentItems);
+        const previousCost = estimateCost(previousItems);
+        const days = dailyTotals(currentItems, bounds.start, bounds.end);
+        const activeDays = days.filter(day => day.total > 0).length;
+        const peakDay = [...days].sort((a, b) => b.total - a.total)[0];
+        return { period, bounds, currentItems, previousItems, current, previous, currentCost, previousCost, days, activeDays, peakDay };
+      }
+
+      function reportHeatmapDays() {
+        const now = payload.demo && payload.generatedAt ? new Date(payload.generatedAt) : new Date();
+        const currentWeekStart = startOfDay(now);
+        currentWeekStart.setDate(currentWeekStart.getDate() - ((currentWeekStart.getDay() || 7) - 1));
+        const start = addDays(currentWeekStart, -77);
+        const end = addDays(start, 83);
+        const filtered = events.filter(matchesFilters);
+        return { start, end, days: dailyTotals(filtered, start, end), now };
+      }
+
+      function renderReport() {
+        const report = reportSnapshot();
+        const comparisonName = report.period === 'month' ? '上月同期' : '上周同期';
+        const filterNote = state.model || state.project ? ' · 当前筛选' : '';
+        $('report-title').textContent = report.period === 'month' ? `${report.bounds.start.getFullYear()} 年 ${report.bounds.start.getMonth() + 1} 月报告` : '本周报告';
+        $('report-period-label').textContent = `${reportDtf.format(report.bounds.start)} - ${reportDtf.format(report.bounds.end)} · 对比${comparisonName}${filterNote}`;
+        $('report-token').textContent = compactEn.format(report.current.total);
+        $('report-token').title = nf.format(report.current.total);
+        $('report-token-note').textContent = `${nf.format(report.current.calls)} 次调用 · ${report.activeDays} 个活跃日`;
+        $('report-cost').textContent = report.currentCost.coveredCalls || !report.currentItems.length ? formatMoney(report.currentCost.total) : '—';
+        $('report-cost-note').textContent = `${(report.currentCost.coverage * 100).toFixed(1)}% Token 已定价`;
+        $('report-tasks').textContent = nf.format(report.current.tasks);
+        $('report-task-note').textContent = `${new Set(report.currentItems.map(item => item.projectId)).size} 个项目 · ${new Set(report.currentItems.map(item => item.model)).size} 个模型`;
+        $('report-cache').textContent = `${(report.current.cacheRate * 100).toFixed(1)}%`;
+        $('report-cache-note').textContent = `${compactEn.format(report.current.cached)} / ${compactEn.format(report.current.input)} 输入`;
+        setDelta('report-token-delta', report.previousItems.length ? deltaText(report.current.total, report.previous.total) : { text: '--', positive: null });
+        setDelta('report-cost-delta', report.previousItems.length ? deltaText(report.currentCost.total, report.previousCost.total) : { text: '--', positive: null });
+        setDelta('report-task-delta', report.previousItems.length ? deltaText(report.current.tasks, report.previous.tasks) : { text: '--', positive: null });
+        setDelta('report-cache-delta', report.previousItems.length ? deltaText(report.current.cacheRate, report.previous.cacheRate) : { text: '--', positive: null });
+
+        const heatmap = reportHeatmapDays();
+        const maxTotal = Math.max(...heatmap.days.map(day => day.total), 1);
+        const weekdayLabels = ['一', '二', '三', '四', '五', '六', '日'];
+        $('report-heatmap-range').textContent = `${reportDtf.format(heatmap.start)} - ${reportDtf.format(heatmap.end)}${filterNote}`;
+        $('report-heatmap').innerHTML = `<div class="grid min-w-max grid-cols-[18px_auto] gap-2"><div class="grid grid-rows-7 gap-1">${weekdayLabels.map(label => `<span class="grid h-4 place-items-center text-[9px] text-[rgb(var(--muted))]">${label}</span>`).join('')}</div><div class="grid grid-flow-col grid-rows-7 gap-1">${heatmap.days.map(day => {
+          const ratio = day.total / maxTotal;
+          const level = day.total === 0 ? 0 : ratio <= 0.2 ? 1 : ratio <= 0.45 ? 2 : ratio <= 0.7 ? 3 : 4;
+          const future = day.date > heatmap.now;
+          const label = `${day.key} ${weekdayDtf.format(day.date)} · ${nf.format(day.total)} Token`;
+          return `<span class="calendar-cell${future ? ' opacity-40' : ''}" data-level="${level}" title="${esc(label)}" aria-label="${esc(label)}"></span>`;
+        }).join('')}</div></div>`;
+
+        const projects = group(report.currentItems, 'projectId', 'project');
+        const models = group(report.currentItems, 'model');
+        const insights = [
+          ['峰值日期', report.peakDay?.total ? `${reportDtf.format(report.peakDay.date)} ${weekdayDtf.format(report.peakDay.date)}` : '--', report.peakDay?.total ? `${compactEn.format(report.peakDay.total)} Token` : '暂无数据'],
+          ['主要项目', projects[0]?.label || '--', projects[0] ? `${(projects[0].total / Math.max(1, report.current.total) * 100).toFixed(1)}% 占比` : '暂无数据'],
+          ['主要模型', models[0]?.label || '--', models[0] ? `${compactEn.format(models[0].total)} Token` : '暂无数据'],
+          [comparisonName, compactEn.format(report.previous.total), `${nf.format(report.previous.calls)} 次调用`]
+        ];
+        $('report-active-days').textContent = `${report.activeDays} 个活跃日`;
+        $('report-insights').innerHTML = insights.map(([label, value, note]) => `<div class="flex items-center justify-between gap-4 py-3 first:pt-1"><div class="min-w-0"><div class="text-[10px] uppercase text-[rgb(var(--muted))]">${esc(label)}</div><div class="mt-1 truncate text-xs font-medium" title="${esc(value)}">${esc(value)}</div></div><span class="shrink-0 text-right text-[10px] text-[rgb(var(--muted))]">${esc(note)}</span></div>`).join('');
+        document.querySelectorAll('[data-report-period]').forEach(button => {
+          const active = button.dataset.reportPeriod === state.reportPeriod;
+          button.dataset.active = String(active);
+          button.setAttribute('aria-pressed', String(active));
+        });
+        return report;
       }
 
       function budgetSnapshot() {
@@ -1328,6 +1500,125 @@
         }, 'image/png');
       }
 
+      function canvasEllipsis(ctx, value, maxWidth) {
+        const text = String(value || '—');
+        if (ctx.measureText(text).width <= maxWidth) return text;
+        let fitted = text;
+        while (fitted.length > 1 && ctx.measureText(`${fitted}…`).width > maxWidth) fitted = fitted.slice(0, -1);
+        return `${fitted}…`;
+      }
+
+      function reportPosterCanvas() {
+        const report = reportSnapshot();
+        const heatmap = reportHeatmapDays();
+        const projects = group(report.currentItems, 'projectId', 'project');
+        const models = group(report.currentItems, 'model');
+        const periodLabel = report.period === 'month' ? '月报' : '周报';
+        const comparisonLabel = report.period === 'month' ? '较上月同期' : '较上周同期';
+        const totalDelta = report.previous.total ? (report.current.total - report.previous.total) / report.previous.total : null;
+        const canvas = document.createElement('canvas');
+        canvas.width = 1200;
+        canvas.height = 1600;
+        const ctx = canvas.getContext('2d');
+        const colors = { bg: '#f4f6f8', panel: '#ffffff', ink: '#141619', muted: '#68727c', line: '#dfe4e8', blue: '#3366ff', green: '#00b07d', coral: '#ff5b4c', violet: '#844aff', lime: '#beec48', pale: '#edf0f3' };
+        const font = '"Segoe UI", "Microsoft YaHei", sans-serif';
+        const mono = '"Cascadia Code", Consolas, monospace';
+        ctx.fillStyle = colors.bg;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = colors.blue;
+        ctx.fillRect(72, 64, 22, 22);
+        ctx.beginPath(); ctx.arc(98, 90, 11, 0, Math.PI * 2); ctx.fillStyle = colors.lime; ctx.fill();
+        ctx.fillStyle = colors.ink; ctx.font = `600 30px ${font}`; ctx.fillText('codex.day', 122, 91);
+        ctx.fillStyle = colors.muted; ctx.font = `400 18px ${font}`; ctx.fillText(`${reportDtf.format(report.bounds.start)} - ${reportDtf.format(report.bounds.end)} · ${fullDtf.format(new Date(payload.generatedAt || Date.now()))}`, 72, 142);
+
+        roundedRect(ctx, 72, 190, 130, 48, 24, colors.ink);
+        ctx.fillStyle = colors.panel; ctx.font = `600 19px ${font}`; ctx.textAlign = 'center'; ctx.fillText(periodLabel, 137, 221); ctx.textAlign = 'left';
+        ctx.fillStyle = colors.ink; ctx.font = `600 48px ${font}`; ctx.fillText('我的 Codex 使用报告', 72, 322);
+        const totalDisplay = compactEn.format(report.current.total);
+        ctx.fillStyle = colors.blue; ctx.font = `700 102px ${font}`; ctx.fillText(totalDisplay, 68, 454);
+        const totalWidth = ctx.measureText(totalDisplay).width;
+        ctx.fillStyle = colors.ink; ctx.font = `500 44px ${font}`; ctx.fillText('tokens', 68 + totalWidth + 28, 446);
+        ctx.fillStyle = colors.muted; ctx.font = `400 19px ${font}`;
+        const deltaLabel = totalDelta == null ? `${comparisonLabel}暂无样本` : `${comparisonLabel} ${totalDelta >= 0 ? '增加' : '减少'} ${Math.abs(totalDelta * 100).toFixed(1)}%`;
+        ctx.fillText(`${deltaLabel} · ${nf.format(report.current.calls)} 次调用 · ${report.activeDays} 个活跃日`, 72, 510);
+
+        const stats = [
+          ['预计成本', report.currentCost.coveredCalls ? `≈ ${formatMoney(report.currentCost.total)}` : '—', colors.coral],
+          ['任务', nf.format(report.current.tasks), colors.violet],
+          ['缓存率', `${(report.current.cacheRate * 100).toFixed(1)}%`, colors.green],
+          ['活跃项目', nf.format(new Set(report.currentItems.map(item => item.projectId)).size), colors.blue]
+        ];
+        stats.forEach((stat, index) => {
+          const x = 72 + index * 272;
+          if (index) { ctx.fillStyle = colors.line; ctx.fillRect(x - 22, 554, 1, 102); }
+          ctx.fillStyle = stat[2]; ctx.fillRect(x, 566, 30, 5);
+          ctx.fillStyle = colors.muted; ctx.font = `400 16px ${font}`; ctx.fillText(stat[0], x, 608);
+          ctx.fillStyle = colors.ink; ctx.font = `600 30px ${font}`; ctx.fillText(stat[1], x, 648);
+        });
+
+        roundedRect(ctx, 52, 704, 1096, 354, 24, colors.panel);
+        ctx.fillStyle = colors.ink; ctx.font = `600 25px ${font}`; ctx.fillText('近 12 周活跃日历', 82, 758);
+        ctx.fillStyle = colors.muted; ctx.font = `400 15px ${font}`; ctx.fillText(`${reportDtf.format(heatmap.start)} - ${reportDtf.format(heatmap.end)}`, 82, 786);
+        const heatMax = Math.max(...heatmap.days.map(day => day.total), 1);
+        const heatColors = [colors.pale, '#dbe5ff', '#9db6ff', '#72d6b7', colors.green];
+        heatmap.days.forEach((day, index) => {
+          const column = Math.floor(index / 7);
+          const row = index % 7;
+          const ratio = day.total / heatMax;
+          const level = day.total === 0 ? 0 : ratio <= 0.2 ? 1 : ratio <= 0.45 ? 2 : ratio <= 0.7 ? 3 : 4;
+          roundedRect(ctx, 82 + column * 35, 818 + row * 30, 24, 24, 4, heatColors[level]);
+        });
+        const peakLabel = report.peakDay?.total ? `${reportDtf.format(report.peakDay.date)} ${weekdayDtf.format(report.peakDay.date)}` : '—';
+        const reportFacts = [
+          ['峰值日期', peakLabel, report.peakDay?.total ? `${compactEn.format(report.peakDay.total)} Token` : '暂无数据'],
+          ['主要项目', projects[0]?.label || '—', projects[0] ? `${(projects[0].total / Math.max(1, report.current.total) * 100).toFixed(1)}% 占比` : '暂无数据'],
+          ['主要模型', models[0]?.label || '—', models[0] ? compactEn.format(models[0].total) : '暂无数据']
+        ];
+        reportFacts.forEach((fact, index) => {
+          const y = 830 + index * 72;
+          ctx.fillStyle = colors.muted; ctx.font = `400 15px ${font}`; ctx.fillText(fact[0], 610, y);
+          ctx.fillStyle = colors.ink; ctx.font = index === 2 ? `600 20px ${mono}` : `600 22px ${font}`; ctx.fillText(canvasEllipsis(ctx, fact[1], 360), 610, y + 28);
+          ctx.fillStyle = colors.muted; ctx.font = `400 15px ${font}`; ctx.textAlign = 'right'; ctx.fillText(fact[2], 1110, y + 28); ctx.textAlign = 'left';
+        });
+
+        ctx.fillStyle = colors.ink; ctx.font = `600 25px ${font}`; ctx.fillText(`${periodLabel}每日节奏`, 72, 1122);
+        const chart = { x: 82, y: 1160, w: 1036, h: 220 };
+        const dayMax = Math.max(...report.days.map(day => day.total), 1);
+        const slot = chart.w / Math.max(1, report.days.length);
+        report.days.forEach((day, index) => {
+          const barWidth = Math.max(5, Math.min(48, slot * 0.6));
+          const height = chart.h * day.total / dayMax;
+          const x = chart.x + index * slot + (slot - barWidth) / 2;
+          if (height > 0) roundedRect(ctx, x, chart.y + chart.h - height, barWidth, Math.max(3, height), 4, colors.blue);
+          const labelStep = Math.max(1, Math.ceil(report.days.length / 8));
+          if (index % labelStep === 0 || index === report.days.length - 1) {
+            ctx.fillStyle = colors.muted; ctx.font = `400 13px ${font}`; ctx.textAlign = 'center'; ctx.fillText(`${day.date.getMonth() + 1}/${day.date.getDate()}`, x + barWidth / 2, chart.y + chart.h + 28); ctx.textAlign = 'left';
+          }
+        });
+
+        ctx.fillStyle = colors.muted; ctx.font = `400 15px ${font}`; ctx.fillText(`${payload.demo ? '虚构 Demo 数据' : '数据来自本地 Codex 日志'} · API 标价估算，非实际账单`, 72, 1548);
+        ctx.textAlign = 'right'; ctx.fillText(`${periodLabel.toLowerCase()} · codex.day`, 1128, 1548); ctx.textAlign = 'left';
+        return canvas;
+      }
+
+      function exportReportPoster(event) {
+        const button = event?.currentTarget || $('export-report-poster');
+        const original = button.innerHTML;
+        button.disabled = true;
+        button.textContent = '生成中…';
+        const canvas = reportPosterCanvas();
+        canvas.toBlob(blob => {
+          const link = document.createElement('a');
+          link.href = URL.createObjectURL(blob);
+          link.download = `codex-day-${state.reportPeriod}-report-${new Date().toISOString().slice(0, 10)}.png`;
+          link.click();
+          URL.revokeObjectURL(link.href);
+          button.disabled = false;
+          button.innerHTML = original;
+        }, 'image/png');
+      }
+
       function showPosterPreview() {
         const canvas = posterCanvas();
         document.body.innerHTML = '';
@@ -1339,8 +1630,19 @@
         document.body.appendChild(canvas);
       }
 
+      function showReportPosterPreview() {
+        const canvas = reportPosterCanvas();
+        document.body.innerHTML = '';
+        document.body.style.margin = '0';
+        document.body.style.background = '#f4f6f8';
+        canvas.style.display = 'block';
+        canvas.style.width = '1200px';
+        canvas.style.height = '1600px';
+        document.body.appendChild(canvas);
+      }
+
       function startLiveRefresh() {
-        if (!liveMode || query.get('poster') === 'preview') return;
+        if (!liveMode || query.get('poster') === 'preview' || query.get('reportPoster') === 'preview') return;
         const currentVersion = String(payload.generatedAt || '');
         let checking = false;
         window.setInterval(() => {
@@ -1367,6 +1669,7 @@
         const tasks = buildTasks(current);
         renderMetrics(current, previous);
         renderCost(current);
+        renderReport();
         const buckets = renderTrend(current, previous, bounds);
         renderInsights(current, buckets, tasks);
         renderMatrix(current);
@@ -1388,9 +1691,16 @@
         syncViewQuery();
         render();
       }));
+      document.querySelectorAll('[data-report-period]').forEach(button => button.addEventListener('click', () => {
+        state.reportPeriod = button.dataset.reportPeriod;
+        localStorage.setItem('codex-report-period', state.reportPeriod);
+        syncViewQuery();
+        renderReport();
+      }));
       $('show-more').addEventListener('click', () => { state.visibleTasks += 24; renderTasks(buildTasks(currentAndPrevious().current)); });
       $('export-csv').addEventListener('click', exportCsv);
       $('export-poster').addEventListener('click', exportPoster);
+      $('export-report-poster').addEventListener('click', exportReportPoster);
       $('mobile-actions-toggle').addEventListener('click', event => {
         event.stopPropagation();
         setMobileActions($('mobile-actions').classList.contains('hidden'));
@@ -1423,6 +1733,7 @@
       syncViewQuery();
       renderPricingTable();
       document.querySelectorAll('[data-range]').forEach(item => item.dataset.active = String(item.dataset.range === state.range));
+      document.querySelectorAll('[data-report-period]').forEach(item => item.dataset.active = String(item.dataset.reportPeriod === state.reportPeriod));
       $('generated-meta').textContent = payload.generatedAt ? `${payload.demo ? '虚构 Demo' : liveMode ? '本地日志 · 动态更新' : '本地日志 · 静态快照'} · ${fullDtf.format(new Date(payload.generatedAt))}` : '尚未生成数据';
       $('source-summary').textContent = payload.demo
         ? `虚构 Demo · ${nf.format(payload.sessionsScanned || 0)} 个任务`
@@ -1435,6 +1746,7 @@
       }
       startLiveRefresh();
       if (query.get('poster') === 'preview') showPosterPreview();
+      if (query.get('reportPoster') === 'preview') showReportPosterPreview();
     })();
   </script>
 </body>
