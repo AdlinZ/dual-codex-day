@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
-import { buildDashboard, openIndex, refreshIndex } from './lib/session-index.mjs';
+import { buildDashboard, openIndex, readDailySummary, refreshIndex } from './lib/session-index.mjs';
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const root = path.dirname(scriptDirectory);
@@ -49,6 +49,7 @@ try {
     '{invalid-json',
     tokenEvent('2026-06-01T01:00:00.000Z', 500, 200, 50),
     tokenEvent('2026-08-24T01:00:00.000Z', 1000, 700, 100),
+    JSON.stringify({ type: 'turn_context', payload: { model: 'gpt-5.6-sol', cwd: path.join(temporaryRoot, 'fictional-project') } }),
     tokenEvent('2026-08-24T02:00:00.000Z', 2000, 1500, 200),
     tokenEvent('2026-08-24T02:00:00.000Z', 2000, 1500, 200),
     tokenEvent('invalid-time', 100, 50, 10),
@@ -68,7 +69,9 @@ try {
     indexResult: first
   });
   assert(payload.index.engine === 'sqlite' && payload.events.length === 3, 'dashboard payload should come from SQLite');
-  assert(payload.diagnostics.schemaVersion === 2 && payload.diagnostics.status === 'warning', 'dashboard should expose schema v2 diagnostics');
+  assert(payload.diagnostics.schemaVersion === 3 && payload.diagnostics.status === 'warning', 'dashboard should expose schema v3 diagnostics');
+  const daily = readDailySummary(database, '2026-08-24');
+  assert(daily.calls === 2 && daily.turns === 2 && daily.tasks === 1, 'daily summary must distinguish model calls, user turns, and tasks');
   assert(payload.diagnostics.counts.invalidJson === 1 && payload.diagnostics.counts.invalidTimestamp === 1, 'diagnostics should count invalid JSON and timestamps');
   assert(payload.diagnostics.counts.duplicateEvents === 1 && payload.diagnostics.counts.emptyUsage === 1, 'diagnostics should count duplicate and empty usage records');
   assert(!readFileSync(dashboardPath, 'utf8').includes('private-session-id'), 'generated dashboard must not expose raw session ids');
@@ -101,8 +104,9 @@ try {
   `);
   legacy.close();
   const migrated = openIndex(migrationPath);
-  const columns = new Set(migrated.prepare('PRAGMA table_info(source_files)').all().map(column => column.name));
-  assert(Number(migrated.prepare('PRAGMA user_version').get().user_version) === 2 && columns.has('invalid_json') && columns.has('parse_status'), 'schema v1 should migrate to v2');
+  const sourceColumns = new Set(migrated.prepare('PRAGMA table_info(source_files)').all().map(column => column.name));
+  const eventColumns = new Set(migrated.prepare('PRAGMA table_info(usage_events)').all().map(column => column.name));
+  assert(Number(migrated.prepare('PRAGMA user_version').get().user_version) === 3 && sourceColumns.has('invalid_json') && sourceColumns.has('parse_status') && eventColumns.has('turn_id'), 'schema v1 should migrate through v3');
   migrated.close();
 
   const secondCodexRoot = path.join(temporaryRoot, '.codex-profile');

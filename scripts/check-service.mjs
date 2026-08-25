@@ -89,7 +89,7 @@ try {
   assert(firstStatus.ok && firstStatus.version === packageMetadata.version && firstStatus.sourceId === 'service-test', 'service health should report liveness, version, and the isolated source id');
   const statusResponse = await fetch(`http://127.0.0.1:${port}/api/status`);
   const status = await statusResponse.json();
-  assert(status.ok && status.diagnostics.schemaVersion === 2 && status.diagnostics.counts.events === 1, 'status endpoint should expose schema v2 diagnostics');
+  assert(status.ok && status.diagnostics.schemaVersion === 3 && status.diagnostics.counts.events === 1, 'status endpoint should expose schema v3 diagnostics');
   assert(!JSON.stringify(status).includes(temporaryRoot), 'status endpoint must not expose private local paths');
   const summaryResponse = await fetch(`http://127.0.0.1:${port}/api/summary?date=2026-08-24`);
   const summaryPayload = await summaryResponse.json();

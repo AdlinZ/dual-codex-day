@@ -24,6 +24,9 @@ import CircleAlert from '../../node_modules/lucide/dist/esm/icons/circle-alert.m
 import Database from '../../node_modules/lucide/dist/esm/icons/database.mjs';
 import Download from '../../node_modules/lucide/dist/esm/icons/download.mjs';
 import ImageDown from '../../node_modules/lucide/dist/esm/icons/image-down.mjs';
+import Pencil from '../../node_modules/lucide/dist/esm/icons/pencil.mjs';
+import Trash2 from '../../node_modules/lucide/dist/esm/icons/trash-2.mjs';
+import LogIn from '../../node_modules/lucide/dist/esm/icons/log-in.mjs';
 
 const iconNodes = {
   'refresh-cw': RefreshCw,
@@ -50,7 +53,10 @@ const iconNodes = {
   'circle-alert': CircleAlert,
   database: Database,
   download: Download,
-  'image-down': ImageDown
+  'image-down': ImageDown,
+  pencil: Pencil,
+  'trash-2': Trash2,
+  'log-in': LogIn
 };
 
 const targetMetadata = {
@@ -75,7 +81,10 @@ const state = {
   usageModel: '',
   usageProject: '',
   usageSettings: { relayMultiplier: 1, monthlyBudget: 0, costMode: 'standard' },
-  posterCanvas: null
+  reportPeriod: 'week',
+  posterCanvas: null,
+  posterFilename: '',
+  posterSuccessMessage: '海报已保存。'
 };
 
 const elements = {
@@ -100,6 +109,7 @@ const elements = {
   usagePosterButton: document.querySelector('#usage-poster-button'),
   usagePosterDialog: document.querySelector('#usage-poster-dialog'),
   usagePosterPreview: document.querySelector('#usage-poster-preview'),
+  usagePosterTitle: document.querySelector('#usage-poster-title'),
   usagePosterCancel: document.querySelector('#usage-poster-cancel'),
   usagePosterSave: document.querySelector('#usage-poster-save'),
   usageSettingsButton: document.querySelector('#usage-settings-button'),
@@ -113,17 +123,37 @@ const elements = {
   usageDiagnosticsDialog: document.querySelector('#usage-diagnostics-dialog'),
   usageDiagnosticsContent: document.querySelector('#usage-diagnostics-content'),
   usageDiagnosticsClose: document.querySelector('#usage-diagnostics-close'),
+  reportPeriod: document.querySelector('#report-period'),
+  reportPosterButton: document.querySelector('#report-poster-button'),
+  reportTitle: document.querySelector('#period-report-title'),
+  reportDates: document.querySelector('#period-report-dates'),
+  reportMetrics: document.querySelector('#report-metrics'),
+  reportChart: document.querySelector('#report-chart'),
+  reportLeaders: document.querySelector('#report-leaders'),
   addProfile: document.querySelector('#add-profile-button'),
   profileList: document.querySelector('#profile-list'),
   profileName: document.querySelector('#selected-profile-name'),
   profilePath: document.querySelector('#selected-profile-path'),
   profileRuntime: document.querySelector('#selected-profile-runtime'),
   openProfileFolder: document.querySelector('#open-profile-folder-button'),
+  renameProfile: document.querySelector('#rename-profile-button'),
+  deleteProfile: document.querySelector('#delete-profile-button'),
+  renameProfileDialog: document.querySelector('#rename-profile-dialog'),
+  renameProfileForm: document.querySelector('#rename-profile-form'),
+  renameProfileInput: document.querySelector('#rename-profile-input'),
+  renameProfileCancel: document.querySelector('#rename-profile-cancel'),
+  deleteProfileDialog: document.querySelector('#delete-profile-dialog'),
+  deleteProfileForm: document.querySelector('#delete-profile-form'),
+  deleteProfileName: document.querySelector('#delete-profile-name'),
+  deleteProfileCancel: document.querySelector('#delete-profile-cancel'),
   usageSourceButton: document.querySelector('#profile-usage-source-button'),
   usageSourceLabel: document.querySelector('#profile-usage-source-label'),
   usageSourceDialog: document.querySelector('#profile-usage-source-dialog'),
   usageSourceForm: document.querySelector('#profile-usage-source-form'),
   usageSourceCancel: document.querySelector('#profile-usage-source-cancel'),
+  profileLoginStatus: document.querySelector('#profile-login-status'),
+  profileRuntimeSource: document.querySelector('#profile-runtime-source'),
+  profileLoginState: document.querySelector('#profile-login-state'),
   workspacePath: document.querySelector('#workspace-path'),
   chooseWorkspace: document.querySelector('#choose-workspace-button'),
   providerName: document.querySelector('#provider-name'),
@@ -252,6 +282,8 @@ function setBusy(value) {
   elements.addProfile.disabled = value;
   elements.saveProvider.disabled = value;
   elements.importProviderConfig.disabled = value;
+  elements.renameProfile.disabled = value || !selectedProfile();
+  elements.deleteProfile.disabled = value || !selectedProfile();
 }
 
 function renderProfiles() {
@@ -265,7 +297,7 @@ function renderProfiles() {
       <span class="profile-avatar">${escapeHtml(initials(profile.name))}</span>
       <span class="profile-copy">
         <strong>${escapeHtml(profile.name)}</strong>
-        <span>${activeLaunches(profile.id).length ? `${activeLaunches(profile.id).length} 个实例运行中` : escapeHtml(profile.provider?.name || 'OpenAI 官方')}</span>
+        <span>${activeLaunches(profile.id).length ? `${activeLaunches(profile.id).length} 个实例运行中` : profile.runtimeSource === 'default' ? '当前默认 Codex' : escapeHtml(profile.provider?.name || 'OpenAI 官方')}</span>
       </span>
       <i data-lucide="chevron-right"></i>
     </button>
@@ -286,38 +318,71 @@ function renderSelectedProfile() {
     elements.providerState.classList.remove('is-ready', 'is-error');
     elements.editProvider.disabled = true;
     elements.openProfileFolder.disabled = true;
+    elements.renameProfile.disabled = true;
+    elements.deleteProfile.disabled = true;
     elements.usageSourceButton.disabled = true;
+    elements.profileLoginStatus.textContent = '未选择账号';
+    elements.profileRuntimeSource.textContent = '请选择一个账号配置';
+    elements.profileLoginState.textContent = '未选择';
+    elements.profileLoginState.classList.remove('is-ready', 'is-error');
     launchButtons.forEach(button => { button.disabled = true; });
     return;
   }
   elements.profileName.textContent = profile.name;
-  elements.profilePath.textContent = profile.codexHome;
+  elements.profilePath.textContent = profile.runtimeRoot || profile.codexHome;
   const running = activeLaunches(profile.id).length;
   elements.profileRuntime.textContent = running ? `${running} 个实例运行中` : '当前未运行';
   elements.profileRuntime.classList.toggle('is-active', running > 0);
-  elements.usageSourceLabel.textContent = profile.usageSource === 'default' ? '默认 Codex 用量' : '独立用量';
+  const sameSource = profile.runtimeSource === profile.usageSource;
+  elements.usageSourceLabel.textContent = sameSource
+    ? profile.runtimeSource === 'default' ? '默认账号' : '独立账号'
+    : '混合来源';
   elements.usageSourceButton.disabled = state.busy;
+  elements.renameProfile.disabled = state.busy;
+  elements.deleteProfile.disabled = state.busy;
   const provider = profile.provider || { type: 'official', name: 'OpenAI 官方' };
   const providerReady = provider.type === 'official'
     || provider.authMode !== 'environment'
     || profile.hasProviderCredential;
-  elements.providerName.textContent = provider.name;
-  elements.providerDetail.textContent = provider.type === 'custom'
+  elements.providerName.textContent = profile.runtimeSource === 'default' ? '当前默认 Codex' : provider.name;
+  elements.providerDetail.textContent = profile.runtimeSource === 'default'
+    ? '沿用系统账号配置'
+    : provider.type === 'custom'
     ? provider.note || `${provider.model} · ${provider.baseUrl}`
     : 'ChatGPT 官方登录';
-  elements.providerState.textContent = provider.type === 'custom'
+  elements.providerState.textContent = profile.runtimeSource === 'default'
+    ? '系统配置'
+    : provider.type === 'custom'
     ? provider.authMode === 'environment'
       ? profile.hasProviderCredential ? '密钥已保存' : '缺少密钥'
       : provider.authMode === 'openai' ? 'Codex 登录' : '无需认证'
     : '官方认证';
   elements.providerState.classList.toggle('is-ready', providerReady);
   elements.providerState.classList.toggle('is-error', !providerReady);
-  elements.editProvider.disabled = state.busy;
+  elements.editProvider.disabled = state.busy || profile.runtimeSource === 'default';
   elements.openProfileFolder.disabled = state.busy;
+  const login = profile.loginStatus || { state: 'unknown', method: 'unknown' };
+  const loginLabels = {
+    chatgpt: 'ChatGPT 已登录',
+    'api-key': 'API Key 已登录',
+    'provider-key': profile.hasProviderCredential ? '中转密钥已就绪' : '缺少中转密钥',
+    none: login.state === 'signed-out' ? '尚未登录' : '无需登录',
+    unknown: '状态未知'
+  };
+  elements.profileLoginStatus.textContent = loginLabels[login.method] || '状态未知';
+  elements.profileRuntimeSource.textContent = profile.runtimeSource === 'default' ? '系统默认运行环境' : '独立运行环境';
+  elements.profileLoginState.textContent = login.state === 'authenticated' || login.state === 'ready'
+    ? '已就绪'
+    : login.state === 'signed-out' ? '未登录' : login.state === 'missing' ? '缺少配置' : '未知';
+  elements.profileLoginState.classList.toggle('is-ready', login.state === 'authenticated' || login.state === 'ready');
+  elements.profileLoginState.classList.toggle('is-error', login.state === 'signed-out' || login.state === 'missing');
   launchButtons.forEach(button => {
     const target = button.dataset.target;
     button.disabled = state.busy || !providerReady || !state.snapshot.targets[target]?.available;
   });
+  const desktopButton = elements.launchActions.querySelector('[data-target="desktop"]');
+  desktopButton.querySelector('span').textContent = login.state === 'signed-out' ? '打开 Codex 并登录' : profile.runtimeSource === 'default' ? '打开默认 Codex' : '打开独立 Codex';
+  desktopButton.querySelector('small').textContent = profile.runtimeSource === 'default' ? '现有账号' : '多开';
 }
 
 function selectedProviderType() {
@@ -414,7 +479,7 @@ function renderUsage() {
   elements.metricTokens.textContent = formatTokens(summary.tokens.total);
   elements.metricModel.textContent = summary.topModel?.name || '暂无模型';
   elements.metricCalls.textContent = Number(summary.calls).toLocaleString('zh-CN');
-  elements.metricAverage.textContent = `平均 ${formatTokens(summary.averageTokens)}`;
+  elements.metricAverage.textContent = `${Number(summary.turns || 0).toLocaleString('zh-CN')} 回合 · 平均 ${formatTokens(summary.averageTokens)}`;
   elements.metricTasks.textContent = Number(summary.tasks).toLocaleString('zh-CN');
   elements.metricCache.textContent = `${(Number(summary.cacheRate || 0) * 100).toFixed(1)}%`;
   elements.metricUpdated.textContent = usage.available ? `${formatTime(usage.updatedAt)} 更新` : '等待首次索引';
@@ -429,14 +494,17 @@ function renderUsage() {
 }
 
 function renderTargets() {
+  const profile = selectedProfile();
+  const isolated = profile?.runtimeSource !== 'default';
   elements.targetList.innerHTML = Object.entries(targetMetadata).map(([key, metadata]) => {
     const target = state.snapshot.targets[key] || { available: false };
+    const detail = isolated ? metadata.detail : key === 'desktop' ? '当前默认客户端数据' : key === 'vscode' ? '当前 VS Code 用户数据' : '系统 CODEX_HOME';
     return `
       <div class="target-row">
         <span class="target-icon"><i data-lucide="${metadata.icon}"></i></span>
         <span class="target-copy">
           <strong>${metadata.label}</strong>
-          <span>${metadata.detail}</span>
+          <span>${detail}</span>
         </span>
         <span class="availability${target.available ? '' : ' is-missing'}">${target.available ? '可用' : '未找到'}</span>
       </div>
@@ -457,7 +525,7 @@ function renderRecent() {
         <span class="recent-icon"><i data-lucide="${metadata.icon}"></i></span>
         <span class="recent-copy">
           <strong>${escapeHtml(item.profileName)}</strong>
-          <span>${metadata.label}</span>
+          <span>${metadata.label} · ${item.runtimeSource === 'default' ? '默认账号' : '独立账号'}</span>
         </span>
         <span class="launch-state${item.active ? ' is-active' : ''}">${item.active ? '运行中' : formatTime(item.launchedAt)}</span>
       </div>
@@ -517,6 +585,7 @@ function renderDashboardState(errorMessage = '') {
   elements.dashboardErrorMessage.textContent = errorMessage || '本地用量服务未能启动。';
   elements.usageSourceSelect.disabled = state.dashboardLoading;
   elements.usagePosterButton.disabled = state.dashboardLoading || !state.dashboardLoaded;
+  elements.reportPosterButton.disabled = state.dashboardLoading || !state.dashboardLoaded;
   if (state.snapshot) renderUsage();
 }
 
@@ -599,6 +668,7 @@ function usageAggregate(events) {
     input, cached, total, cost,
     output: events.reduce((sum, event) => sum + Number(event.output || 0), 0),
     calls: events.length,
+    turns: new Set(events.map(event => event.turnId).filter(Boolean)).size,
     tasks: new Set(events.map(event => event.sessionId)).size,
     projects: new Set(events.map(event => event.projectId)).size,
     cacheRate: input ? cached / input : 0,
@@ -606,6 +676,108 @@ function usageAggregate(events) {
     coverage: total ? events.reduce((sum, event, index) => sum + (estimates[index].priced ? Number(event.total || 0) : 0), 0) / total : 1,
     parts: estimates.reduce((parts, estimate) => ({ input: parts.input + estimate.parts.input, cached: parts.cached + estimate.parts.cached, output: parts.output + estimate.parts.output }), { input: 0, cached: 0, output: 0 })
   };
+}
+
+function filteredUsageEvents() {
+  return (state.usageData?.events || []).filter(event => (!state.usageModel || event.model === state.usageModel)
+    && (!state.usageProject || event.projectId === state.usageProject));
+}
+
+function reportBounds(period = state.reportPeriod, now = new Date()) {
+  const currentStart = new Date(now.getFullYear(), now.getMonth(), period === 'month' ? 1 : now.getDate());
+  if (period === 'week') currentStart.setDate(currentStart.getDate() - ((currentStart.getDay() || 7) - 1));
+  const previousStart = period === 'month'
+    ? new Date(currentStart.getFullYear(), currentStart.getMonth() - 1, 1)
+    : new Date(currentStart.getFullYear(), currentStart.getMonth(), currentStart.getDate() - 7);
+  const previousPeriodEnd = period === 'month'
+    ? new Date(currentStart.getFullYear(), currentStart.getMonth(), 1)
+    : new Date(previousStart.getFullYear(), previousStart.getMonth(), previousStart.getDate() + 7);
+  const elapsed = now.getTime() - currentStart.getTime();
+  const previousEnd = new Date(Math.min(previousPeriodEnd.getTime(), previousStart.getTime() + elapsed + 1));
+  return { currentStart, currentEnd: new Date(now.getTime() + 1), previousStart, previousEnd };
+}
+
+function reportData() {
+  const bounds = reportBounds();
+  const events = filteredUsageEvents();
+  const currentEvents = events.filter(event => {
+    const time = new Date(event.timestamp);
+    return time >= bounds.currentStart && time < bounds.currentEnd;
+  });
+  const previousEvents = events.filter(event => {
+    const time = new Date(event.timestamp);
+    return time >= bounds.previousStart && time < bounds.previousEnd;
+  });
+  const current = usageAggregate(currentEvents);
+  const previous = usageAggregate(previousEvents);
+  const days = [];
+  const dayCursor = new Date(bounds.currentStart);
+  const today = new Date(bounds.currentEnd.getFullYear(), bounds.currentEnd.getMonth(), bounds.currentEnd.getDate());
+  while (dayCursor <= today) {
+    const next = new Date(dayCursor.getFullYear(), dayCursor.getMonth(), dayCursor.getDate() + 1);
+    const dayEvents = currentEvents.filter(event => {
+      const time = new Date(event.timestamp);
+      return time >= dayCursor && time < next;
+    });
+    days.push({ date: new Date(dayCursor), ...usageAggregate(dayEvents) });
+    dayCursor.setDate(dayCursor.getDate() + 1);
+  }
+  return {
+    bounds,
+    currentEvents,
+    previousEvents,
+    current,
+    previous,
+    days,
+    projects: posterGroups(currentEvents, 'projectId', 'project'),
+    models: posterGroups(currentEvents, 'model'),
+    peakDay: [...days].sort((a, b) => b.total - a.total)[0] || null
+  };
+}
+
+function reportDelta(current, previous) {
+  if (!previous) return current ? { text: '上期无数据', className: 'is-up' } : { text: '暂无变化', className: '' };
+  const value = (current - previous) / previous * 100;
+  return { text: `${value >= 0 ? '+' : ''}${value.toFixed(1)}% 较上期`, className: value > 0 ? 'is-up' : value < 0 ? 'is-down' : '' };
+}
+
+function reportDate(value) {
+  return new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric' }).format(value);
+}
+
+function renderPeriodReport() {
+  const report = reportData();
+  const periodLabel = state.reportPeriod === 'month' ? '本月报告' : '本周报告';
+  elements.reportTitle.textContent = periodLabel;
+  elements.reportDates.textContent = `${reportDate(report.bounds.currentStart)} - ${reportDate(new Date(report.bounds.currentEnd.getTime() - 1))}`;
+  const metrics = [
+    ['Token', formatTokens(report.current.total), reportDelta(report.current.total, report.previous.total)],
+    ['交互回合', report.current.turns.toLocaleString('zh-CN'), reportDelta(report.current.turns, report.previous.turns)],
+    ['模型调用', report.current.calls.toLocaleString('zh-CN'), reportDelta(report.current.calls, report.previous.calls)],
+    ['任务', report.current.tasks.toLocaleString('zh-CN'), reportDelta(report.current.tasks, report.previous.tasks)]
+  ];
+  elements.reportMetrics.innerHTML = metrics.map(([label, value, delta]) => `<div class="report-metric"><span>${label}</span><strong>${value}</strong><small class="${delta.className}">${delta.text}</small></div>`).join('');
+  const max = Math.max(1, ...report.days.map(day => day.total));
+  const labelStep = Math.max(1, Math.ceil(report.days.length / 10));
+  const chartWidth = 900, chartHeight = 230, chartTop = 10, chartBottom = 34, slot = chartWidth / Math.max(1, report.days.length);
+  const chartBodyHeight = chartHeight - chartTop - chartBottom;
+  elements.reportChart.innerHTML = `<svg viewBox="0 0 ${chartWidth} ${chartHeight}" preserveAspectRatio="none" aria-label="报告每日 Token">
+    <line class="report-grid-line" x1="0" x2="${chartWidth}" y1="${chartTop + chartBodyHeight}" y2="${chartTop + chartBodyHeight}"></line>
+    ${report.days.map((day, index) => {
+      const barWidth = Math.max(5, Math.min(28, slot * .58));
+      const height = day.total ? Math.max(4, chartBodyHeight * day.total / max) : 2;
+      const x = index * slot + (slot - barWidth) / 2;
+      const label = index % labelStep === 0 || index === report.days.length - 1 ? `${day.date.getMonth() + 1}/${day.date.getDate()}` : '';
+      return `<rect class="report-bar" x="${x}" y="${chartTop + chartBodyHeight - height}" width="${barWidth}" height="${height}" rx="3"><title>${reportDate(day.date)} · ${formatTokens(day.total)}</title></rect><text class="report-chart-label" x="${x + barWidth / 2}" y="${chartHeight - 8}" text-anchor="middle">${label}</text>`;
+    }).join('')}
+  </svg>`;
+  const leaders = [
+    ['峰值日期', report.peakDay?.total ? reportDate(report.peakDay.date) : '暂无数据', report.peakDay?.total ? formatTokens(report.peakDay.total) : '0'],
+    ['主要项目', report.projects[0]?.label || '暂无数据', report.projects[0] ? formatTokens(report.projects[0].total) : '0'],
+    ['主要模型', report.models[0]?.label || '暂无数据', report.models[0] ? formatTokens(report.models[0].total) : '0'],
+    ['预计成本', formatUsd(report.current.cost), `${(report.current.coverage * 100).toFixed(0)}% 已定价`]
+  ];
+  elements.reportLeaders.innerHTML = leaders.map(([label, value, detail]) => `<div class="report-leader"><span>${label}</span><strong>${escapeHtml(value)}</strong><b>${escapeHtml(detail)}</b></div>`).join('');
 }
 
 function formatUsd(value) {
@@ -740,7 +912,7 @@ function createUsagePoster() {
   context.fillText('tokens', Math.min(900, 86 + tokenWidth), 416);
   context.fillStyle = colors.muted;
   context.font = `400 19px ${font}`;
-  context.fillText(`${aggregate.calls.toLocaleString('zh-CN')} 次调用  ·  输入 ${formatTokens(aggregate.input)}  ·  输出 ${formatTokens(aggregate.output)}  ·  ${aggregate.tasks} 个任务`, 72, 476);
+  context.fillText(`${aggregate.turns.toLocaleString('zh-CN')} 回合  ·  ${aggregate.calls.toLocaleString('zh-CN')} 次模型调用  ·  输入 ${formatTokens(aggregate.input)}  ·  输出 ${formatTokens(aggregate.output)}`, 72, 476);
 
   const stats = [
     ['缓存命中率', `${(aggregate.cacheRate * 100).toFixed(1)}%`, colors.green],
@@ -763,7 +935,7 @@ function createUsagePoster() {
   posterRoundedRect(context, 52, 690, 1096, 500, 20, colors.panel);
   context.fillStyle = colors.ink;
   context.font = `700 26px ${font}`;
-  context.fillText(state.usageRange === 'today' ? '今天的调用节奏' : 'Token 使用节奏', 86, 750);
+  context.fillText(state.usageRange === 'today' ? '今天的 Token 节奏' : 'Token 使用节奏', 86, 750);
   const legend = [['缓存', colors.blue], ['新输入', colors.green], ['输出', colors.coral]];
   let legendX = 790;
   context.font = `400 14px ${font}`;
@@ -852,9 +1024,146 @@ function createUsagePoster() {
   return canvas;
 }
 
+function createPeriodReportPoster() {
+  const report = reportData();
+  const periodLabel = state.reportPeriod === 'month' ? '月报' : '周报';
+  const canvas = document.createElement('canvas');
+  canvas.width = 1200;
+  canvas.height = 1600;
+  const context = canvas.getContext('2d');
+  const colors = { bg: '#f3f5f2', panel: '#ffffff', ink: '#111815', muted: '#68736d', line: '#dce2dd', green: '#087f5b', blue: '#2563a9', coral: '#c65d18', violet: '#6950a1', lime: '#b7df4b' };
+  const font = '"Segoe UI", "Microsoft YaHei", sans-serif';
+  const mono = '"Cascadia Code", Consolas, monospace';
+  context.fillStyle = colors.bg;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  context.strokeStyle = colors.blue;
+  context.lineWidth = 7;
+  context.strokeRect(72, 61, 20, 36);
+  context.strokeStyle = colors.green;
+  context.strokeRect(98, 61, 20, 36);
+  context.fillStyle = colors.lime;
+  context.fillRect(111, 58, 13, 7);
+  context.fillStyle = colors.ink;
+  context.font = `700 30px ${font}`;
+  context.fillText('Dual Codex Day', 146, 91);
+  context.fillStyle = colors.muted;
+  context.font = `400 17px ${font}`;
+  context.textAlign = 'right';
+  context.fillText(state.usageData?.source?.name || '全部账号', 1128, 88);
+  context.textAlign = 'left';
+
+  posterRoundedRect(context, 72, 145, 128, 46, 23, colors.ink);
+  context.fillStyle = colors.panel;
+  context.font = `650 18px ${font}`;
+  context.textAlign = 'center';
+  context.fillText(periodLabel, 136, 175);
+  context.textAlign = 'left';
+  context.fillStyle = colors.muted;
+  context.font = `500 18px ${font}`;
+  context.fillText(`${reportDate(report.bounds.currentStart)} - ${reportDate(new Date(report.bounds.currentEnd.getTime() - 1))}`, 224, 176);
+
+  context.fillStyle = colors.ink;
+  context.font = `700 49px ${font}`;
+  context.fillText(`${periodLabel}工作节奏`, 72, 294);
+  context.fillStyle = colors.green;
+  context.font = `760 108px ${font}`;
+  context.fillText(formatTokens(report.current.total), 68, 430);
+  const totalDelta = reportDelta(report.current.total, report.previous.total);
+  context.fillStyle = colors.muted;
+  context.font = `500 21px ${font}`;
+  context.fillText(`${totalDelta.text}  ·  ${report.current.turns.toLocaleString('zh-CN')} 回合  ·  ${report.current.calls.toLocaleString('zh-CN')} 次模型调用`, 72, 478);
+
+  const metricValues = [
+    ['任务', report.current.tasks.toLocaleString('zh-CN'), `${report.current.projects} 个项目`, colors.blue],
+    ['缓存率', `${(report.current.cacheRate * 100).toFixed(1)}%`, `${formatTokens(report.current.cached)} cached`, colors.green],
+    ['预计成本', formatUsd(report.current.cost), `${(report.current.coverage * 100).toFixed(0)}% 已定价`, colors.coral],
+    ['每次模型调用', formatTokens(report.current.average), '平均 Token', colors.violet]
+  ];
+  metricValues.forEach((item, index) => {
+    const x = 72 + index * 264;
+    posterRoundedRect(context, x, 548, 240, 154, 12, colors.panel);
+    context.fillStyle = item[3];
+    context.fillRect(x + 20, 570, 31, 5);
+    context.fillStyle = colors.muted;
+    context.font = `400 15px ${font}`;
+    context.fillText(item[0], x + 20, 611);
+    context.fillStyle = colors.ink;
+    context.font = `700 30px ${font}`;
+    context.fillText(posterEllipsis(context, item[1], 195), x + 20, 653);
+    context.fillStyle = colors.muted;
+    context.font = `400 14px ${font}`;
+    context.fillText(item[2], x + 20, 681);
+  });
+
+  context.fillStyle = colors.ink;
+  context.font = `700 25px ${font}`;
+  context.fillText(`${periodLabel}每日 Token`, 72, 790);
+  const chart = { x: 82, y: 838, w: 1036, h: 300 };
+  const max = Math.max(1, ...report.days.map(day => day.total));
+  const slot = chart.w / Math.max(1, report.days.length);
+  const labelStep = Math.max(1, Math.ceil(report.days.length / 10));
+  report.days.forEach((day, index) => {
+    const barWidth = Math.max(5, Math.min(46, slot * 0.62));
+    const height = chart.h * day.total / max;
+    const x = chart.x + index * slot + (slot - barWidth) / 2;
+    if (height > 0) posterRoundedRect(context, x, chart.y + chart.h - height, barWidth, Math.max(3, height), 4, colors.blue);
+    if (index % labelStep === 0 || index === report.days.length - 1) {
+      context.fillStyle = colors.muted;
+      context.font = `400 13px ${font}`;
+      context.textAlign = 'center';
+      context.fillText(`${day.date.getMonth() + 1}/${day.date.getDate()}`, x + barWidth / 2, chart.y + chart.h + 28);
+    }
+  });
+  context.textAlign = 'left';
+
+  context.fillStyle = colors.ink;
+  context.font = `700 24px ${font}`;
+  context.fillText('本期重点', 72, 1242);
+  const leaders = [
+    ['峰值日期', report.peakDay?.total ? reportDate(report.peakDay.date) : '暂无数据', report.peakDay?.total ? formatTokens(report.peakDay.total) : '0'],
+    ['主要项目', report.projects[0]?.label || '暂无数据', report.projects[0] ? formatTokens(report.projects[0].total) : '0'],
+    ['主要模型', report.models[0]?.label || '暂无数据', report.models[0] ? formatTokens(report.models[0].total) : '0']
+  ];
+  leaders.forEach((item, index) => {
+    const x = 72 + index * 352;
+    posterRoundedRect(context, x, 1280, 320, 150, 12, colors.panel);
+    context.fillStyle = colors.muted;
+    context.font = `400 15px ${font}`;
+    context.fillText(item[0], x + 20, 1314);
+    context.fillStyle = colors.ink;
+    context.font = index === 2 ? `650 21px ${mono}` : `650 23px ${font}`;
+    context.fillText(posterEllipsis(context, item[1], 270), x + 20, 1358);
+    context.fillStyle = colors.muted;
+    context.font = `400 14px ${font}`;
+    context.fillText(item[2], x + 20, 1391);
+  });
+
+  context.fillStyle = colors.muted;
+  context.font = `400 14px ${font}`;
+  context.fillText('数据来自本地 Codex 日志 · API 标价估算，非实际账单', 72, 1546);
+  context.textAlign = 'right';
+  context.fillText(`${periodLabel.toLowerCase()} · Dual Codex Day`, 1128, 1546);
+  context.textAlign = 'left';
+  return canvas;
+}
+
 function openUsagePoster() {
   if (!state.dashboardLoaded) return;
   state.posterCanvas = createUsagePoster();
+  state.posterFilename = `dual-codex-day-${(state.usageData?.source?.name || 'all').replace(/[^a-z0-9\u4e00-\u9fff-]/gi, '-')}-${state.usageRange}-${new Date().toISOString().slice(0, 10)}.png`;
+  state.posterSuccessMessage = '用量海报已保存。';
+  elements.usagePosterTitle.textContent = '用量海报';
+  elements.usagePosterPreview.src = state.posterCanvas.toDataURL('image/png');
+  elements.usagePosterDialog.showModal();
+}
+
+function openReportPoster() {
+  if (!state.dashboardLoaded) return;
+  state.posterCanvas = createPeriodReportPoster();
+  state.posterFilename = `dual-codex-day-${state.reportPeriod}-report-${new Date().toISOString().slice(0, 10)}.png`;
+  state.posterSuccessMessage = `${state.reportPeriod === 'month' ? '月报' : '周报'}海报已保存。`;
+  elements.usagePosterTitle.textContent = state.reportPeriod === 'month' ? '月报海报' : '周报海报';
   elements.usagePosterPreview.src = state.posterCanvas.toDataURL('image/png');
   elements.usagePosterDialog.showModal();
 }
@@ -870,14 +1179,13 @@ function saveUsagePoster() {
     }
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    const source = state.usageData?.source?.name || 'all';
     link.href = url;
-    link.download = `dual-codex-day-${source.replace(/[^a-z0-9\u4e00-\u9fff-]/gi, '-')}-${state.usageRange}-${new Date().toISOString().slice(0, 10)}.png`;
+    link.download = state.posterFilename || `dual-codex-day-poster-${new Date().toISOString().slice(0, 10)}.png`;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     elements.usagePosterSave.disabled = false;
     elements.usagePosterDialog.close();
-    showToast('用量海报已保存。');
+    showToast(state.posterSuccessMessage);
   }, 'image/png');
 }
 
@@ -928,7 +1236,7 @@ function renderNativeUsage() {
   document.querySelector('#usage-title').textContent = labels[state.usageRange];
   document.querySelector('#usage-subtitle').textContent = `${state.usageData.source.name} · ${new Date(state.usageData.generatedAt).toLocaleString('zh-CN')}`;
   document.querySelector('#usage-kpi-total').textContent = formatTokens(aggregate.total);
-  document.querySelector('#usage-kpi-total-note').textContent = `${aggregate.calls.toLocaleString('zh-CN')} 次调用`;
+  document.querySelector('#usage-kpi-total-note').textContent = `${aggregate.turns.toLocaleString('zh-CN')} 回合 · ${aggregate.calls.toLocaleString('zh-CN')} 次模型调用`;
   document.querySelector('#usage-kpi-cost').textContent = formatUsd(aggregate.cost);
   document.querySelector('#usage-kpi-coverage').textContent = `${(aggregate.coverage * 100).toFixed(0)}% Token 已定价`;
   document.querySelector('#usage-kpi-tasks').textContent = aggregate.tasks.toLocaleString('zh-CN');
@@ -938,10 +1246,10 @@ function renderNativeUsage() {
   document.querySelector('#usage-kpi-average').textContent = formatTokens(aggregate.average);
   document.querySelector('#usage-cost-total').textContent = formatUsd(aggregate.cost);
   const maxPart = Math.max(aggregate.parts.input, aggregate.parts.cached, aggregate.parts.output, .000001);
-  document.querySelector('#usage-cost-breakdown').innerHTML = [['普通输入', aggregate.parts.input], ['缓存输入', aggregate.parts.cached], ['输出', aggregate.parts.output]].map(([label, value]) => `<div class="cost-row"><span>${label}</span><span class="cost-track"><i style="width:${value / maxPart * 100}%"></i></span><strong>${formatUsd(value)}</strong></div>`).join('');
+  document.querySelector('#usage-cost-breakdown').innerHTML = [['普通输入', aggregate.parts.input], ['缓存输入', aggregate.parts.cached], ['输出', aggregate.parts.output]].map(([label, value]) => `<div class="cost-row"><span>${label}</span><progress class="cost-track" max="${maxPart}" value="${value}"></progress><strong>${formatUsd(value)}</strong></div>`).join('');
   const budget = state.usageSettings.monthlyBudget;
   document.querySelector('#usage-budget-label').textContent = budget ? `${formatUsd(aggregate.cost)} / ${formatUsd(budget)}` : '未设置';
-  document.querySelector('#usage-budget-bar').style.width = `${budget ? Math.min(100, aggregate.cost / budget * 100) : 0}%`;
+  document.querySelector('#usage-budget-bar').value = budget ? Math.min(100, aggregate.cost / budget * 100) : 0;
   renderTrend(events);
 
   const groups = new Map();
@@ -950,16 +1258,17 @@ function renderNativeUsage() {
     group.calls += 1; group.total += Number(event.total || 0); group.cost += estimateUsageEvent(event).total; groups.set(event.model, group);
   });
   const rows = [...groups.values()].sort((a, b) => b.total - a.total).slice(0, 7);
-  document.querySelector('#usage-distribution').innerHTML = rows.length ? `<div class="usage-table-row header"><span>模型</span><span>调用</span><span>Token</span><span>成本</span></div>${rows.map(row => `<div class="usage-table-row"><strong>${escapeHtml(row.label)}</strong><span>${row.calls}</span><span>${formatTokens(row.total)}</span><span>${formatUsd(row.cost)}</span></div>`).join('')}` : '<div class="usage-empty">当前范围暂无模型记录</div>';
+  document.querySelector('#usage-distribution').innerHTML = rows.length ? `<div class="usage-table-row header"><span>模型</span><span>模型调用</span><span>Token</span><span>成本</span></div>${rows.map(row => `<div class="usage-table-row"><strong>${escapeHtml(row.label)}</strong><span>${row.calls}</span><span>${formatTokens(row.total)}</span><span>${formatUsd(row.cost)}</span></div>`).join('')}` : '<div class="usage-empty">当前范围暂无模型记录</div>';
 
   const tasks = new Map();
   events.forEach(event => {
-    const task = tasks.get(event.sessionId) || { id: event.sessionId, project: event.project, model: event.model, timestamp: event.timestamp, calls: 0, total: 0 };
-    task.calls += 1; task.total += Number(event.total || 0); if (event.timestamp > task.timestamp) task.timestamp = event.timestamp; tasks.set(event.sessionId, task);
+    const task = tasks.get(event.sessionId) || { id: event.sessionId, project: event.project, model: event.model, timestamp: event.timestamp, calls: 0, turns: new Set(), total: 0 };
+    task.calls += 1; if (event.turnId) task.turns.add(event.turnId); task.total += Number(event.total || 0); if (event.timestamp > task.timestamp) task.timestamp = event.timestamp; tasks.set(event.sessionId, task);
   });
   const taskRows = [...tasks.values()].sort((a, b) => b.timestamp.localeCompare(a.timestamp)).slice(0, 7);
   document.querySelector('#usage-task-count').textContent = `${tasks.size} 个任务`;
-  document.querySelector('#usage-task-list').innerHTML = taskRows.length ? taskRows.map(task => `<div class="usage-task-row"><div><strong>${escapeHtml(task.project)}</strong><span>${escapeHtml(task.model)} · ${new Date(task.timestamp).toLocaleString('zh-CN')}</span></div><div class="usage-task-metric"><strong>${formatTokens(task.total)}</strong><span>${task.calls} 次调用</span></div></div>`).join('') : '<div class="usage-empty">当前范围暂无任务</div>';
+  document.querySelector('#usage-task-list').innerHTML = taskRows.length ? taskRows.map(task => `<div class="usage-task-row"><div><strong>${escapeHtml(task.project)}</strong><span>${escapeHtml(task.model)} · ${new Date(task.timestamp).toLocaleString('zh-CN')}</span></div><div class="usage-task-metric"><strong>${formatTokens(task.total)}</strong><span>${task.turns.size} 回合 · ${task.calls} 次模型调用</span></div></div>`).join('') : '<div class="usage-empty">当前范围暂无任务</div>';
+  renderPeriodReport();
 }
 
 function initializeUsageFilters() {
@@ -1025,6 +1334,8 @@ elements.addProfile.addEventListener('click', () => {
 });
 
 elements.cancelProfile.addEventListener('click', () => elements.dialog.close());
+elements.renameProfileCancel.addEventListener('click', () => elements.renameProfileDialog.close());
+elements.deleteProfileCancel.addEventListener('click', () => elements.deleteProfileDialog.close());
 elements.cancelProvider.addEventListener('click', () => elements.providerDialog.close());
 elements.editProvider.addEventListener('click', openProviderEditor);
 elements.toggleProviderKey.addEventListener('click', () => {
@@ -1095,6 +1406,60 @@ elements.createForm.addEventListener('submit', async event => {
   }
 });
 
+elements.renameProfile.addEventListener('click', () => {
+  const profile = selectedProfile();
+  if (!profile || state.busy) return;
+  elements.renameProfileInput.value = profile.name;
+  elements.renameProfileDialog.showModal();
+  elements.renameProfileInput.select();
+});
+
+elements.renameProfileForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  const profile = selectedProfile();
+  const name = elements.renameProfileInput.value.trim();
+  if (!profile || !name || state.busy) return;
+  setBusy(true);
+  try {
+    const updated = await window.dualCodexDay.renameProfile(profile.id, name);
+    elements.renameProfileDialog.close();
+    await refreshSnapshot(updated.id, true);
+    showToast(`账号已重命名为“${updated.name}”。`);
+  } catch (error) {
+    showToast(error.message || '无法重命名账号。', true);
+  } finally {
+    setBusy(false);
+    renderSelectedProfile();
+  }
+});
+
+elements.deleteProfile.addEventListener('click', () => {
+  const profile = selectedProfile();
+  if (!profile || state.busy) return;
+  elements.deleteProfileName.textContent = profile.name;
+  elements.deleteProfileDialog.showModal();
+});
+
+elements.deleteProfileForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  const profile = selectedProfile();
+  if (!profile || state.busy) return;
+  setBusy(true);
+  try {
+    await window.dualCodexDay.deleteProfile(profile.id);
+    elements.deleteProfileDialog.close();
+    state.selectedProfileId = null;
+    state.dashboardLoaded = false;
+    await refreshSnapshot(null, true);
+    showToast(`“${profile.name}”的独立配置已移入回收站。`);
+  } catch (error) {
+    showToast(error.message || '无法删除账号配置。', true);
+  } finally {
+    setBusy(false);
+    renderSelectedProfile();
+  }
+});
+
 elements.chooseWorkspace.addEventListener('click', async () => {
   if (state.busy) return;
   setBusy(true);
@@ -1143,6 +1508,11 @@ elements.usageSourceButton.addEventListener('click', () => {
   if (!profile || state.busy) return;
   const input = elements.usageSourceForm.querySelector(`input[name="profileUsageSource"][value="${profile.usageSource || 'profile'}"]`);
   if (input) input.checked = true;
+  const runtimeInput = elements.usageSourceForm.querySelector(`input[name="profileRuntimeSource"][value="${profile.runtimeSource || 'profile'}"]`);
+  if (runtimeInput) runtimeInput.checked = true;
+  const defaultRuntime = elements.usageSourceForm.querySelector('input[name="profileRuntimeSource"][value="default"]');
+  defaultRuntime.disabled = profile.provider?.type === 'custom';
+  defaultRuntime.closest('label').classList.toggle('is-disabled', defaultRuntime.disabled);
   elements.usageSourceDialog.showModal();
 });
 elements.usageSourceCancel.addEventListener('click', () => elements.usageSourceDialog.close());
@@ -1150,16 +1520,18 @@ elements.usageSourceForm.addEventListener('submit', async event => {
   event.preventDefault();
   const profile = selectedProfile();
   const source = elements.usageSourceForm.querySelector('input[name="profileUsageSource"]:checked')?.value;
-  if (!profile || !source || state.busy) return;
+  const runtimeSource = elements.usageSourceForm.querySelector('input[name="profileRuntimeSource"]:checked')?.value;
+  if (!profile || !source || !runtimeSource || state.busy) return;
   setBusy(true);
   try {
+    await window.dualCodexDay.setProfileRuntimeSource(profile.id, runtimeSource);
     const updated = await window.dualCodexDay.setProfileUsageSource(profile.id, source);
     elements.usageSourceDialog.close();
     state.dashboardLoaded = false;
     await refreshSnapshot(updated.id, true);
-    showToast(`“${updated.name}”已关联${source === 'default' ? '当前默认 Codex' : '独立 Profile'}用量。`);
+    showToast(`“${updated.name}”已使用${runtimeSource === 'default' ? '当前默认 Codex' : '独立 Profile'}运行环境。`);
   } catch (error) {
-    showToast(error.message || '无法保存账号用量来源。', true);
+    showToast(error.message || '无法保存账号来源。', true);
   } finally {
     setBusy(false);
     renderSelectedProfile();
@@ -1222,6 +1594,14 @@ elements.usageDiagnosticsButton.addEventListener('click', () => {
 });
 elements.usageDiagnosticsClose.addEventListener('click', () => elements.usageDiagnosticsDialog.close());
 elements.usagePosterButton.addEventListener('click', openUsagePoster);
+elements.reportPosterButton.addEventListener('click', openReportPoster);
+elements.reportPeriod.addEventListener('click', event => {
+  const button = event.target.closest('[data-report-period]');
+  if (!button) return;
+  state.reportPeriod = button.dataset.reportPeriod;
+  elements.reportPeriod.querySelectorAll('[data-report-period]').forEach(item => item.classList.toggle('is-active', item === button));
+  renderPeriodReport();
+});
 elements.usagePosterCancel.addEventListener('click', () => elements.usagePosterDialog.close());
 elements.usagePosterSave.addEventListener('click', saveUsagePoster);
 elements.usageExport.addEventListener('click', () => {

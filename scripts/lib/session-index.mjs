@@ -3,7 +3,8 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSyn
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
+const PARSER_VERSION = '2';
 
 function number(value) {
   const parsed = Number(value || 0);
@@ -142,6 +143,8 @@ export function parseSessionFile(filePath, options = {}) {
 
   const events = [];
   const eventKeys = new Set();
+  let turnIndex = 0;
+  let currentTurnId = privateId(`${rawSessionId}|turn|0`, 'turn');
   for (const row of rows) {
     if (row?.type === 'session_meta') {
       rawSessionId = String(row.payload?.session_id || row.payload?.id || rawSessionId);
@@ -149,6 +152,8 @@ export function parseSessionFile(filePath, options = {}) {
       continue;
     }
     if (row?.type === 'turn_context') {
+      turnIndex += 1;
+      currentTurnId = privateId(`${rawSessionId}|turn|${turnIndex}`, 'turn');
       if (row.payload?.model) model = String(row.payload.model);
       if (row.payload?.cwd) cwd = String(row.payload.cwd);
       continue;
@@ -189,6 +194,7 @@ export function parseSessionFile(filePath, options = {}) {
     diagnostics.newestEvent = diagnostics.newestEvent && diagnostics.newestEvent > timestamp ? diagnostics.newestEvent : timestamp;
     events.push({
       eventKey,
+      turnId: currentTurnId,
       timestamp,
       date: timestamp.slice(0, 10),
       sessionId: privateId(rawSessionId, 'task'),
@@ -241,6 +247,7 @@ export function openIndex(databasePath) {
     CREATE TABLE IF NOT EXISTS usage_events (
       source_path TEXT NOT NULL REFERENCES source_files(path) ON DELETE CASCADE,
       event_key TEXT NOT NULL,
+      turn_id TEXT NOT NULL,
       timestamp TEXT NOT NULL,
       date TEXT NOT NULL,
       session_id TEXT NOT NULL,
@@ -266,7 +273,8 @@ export function openIndex(databasePath) {
     CREATE INDEX IF NOT EXISTS usage_events_event_key ON usage_events(event_key);
     CREATE INDEX IF NOT EXISTS usage_events_session ON usage_events(session_id);
   `);
-  if (version < 2) {
+  let migratedVersion = version;
+  if (migratedVersion < 2) {
     database.exec('BEGIN IMMEDIATE');
     try {
       const additions = [
@@ -278,7 +286,18 @@ export function openIndex(databasePath) {
         ['parse_status', "TEXT NOT NULL DEFAULT 'unknown'"]
       ];
       additions.forEach(([name, definition]) => addColumn(database, 'source_files', name, definition));
-      database.exec(`PRAGMA user_version = ${SCHEMA_VERSION}; COMMIT`);
+      database.exec('PRAGMA user_version = 2; COMMIT');
+      migratedVersion = 2;
+    } catch (error) {
+      database.exec('ROLLBACK');
+      throw error;
+    }
+  }
+  if (migratedVersion < 3) {
+    database.exec('BEGIN IMMEDIATE');
+    try {
+      addColumn(database, 'usage_events', 'turn_id', "TEXT NOT NULL DEFAULT ''");
+      database.exec('PRAGMA user_version = 3; COMMIT');
     } catch (error) {
       database.exec('ROLLBACK');
       throw error;
@@ -293,6 +312,7 @@ export function refreshIndex(database, codexRoot, options = {}) {
   const setting = retentionSetting(retentionDays);
   const previousSetting = metadataValue(database, 'retention_days');
   const policyChanged = previousSetting !== setting;
+  const parserChanged = metadataValue(database, 'parser_version') !== PARSER_VERSION;
   const files = scanLogFiles(codexRoot, { allowEmpty: true });
   const known = new Map(database.prepare('SELECT path, size, mtime_ms, session_id FROM source_files').all().map(row => [row.path, row]));
   const diskPaths = new Set(files);
@@ -302,7 +322,7 @@ export function refreshIndex(database, codexRoot, options = {}) {
   for (const filePath of files) {
     const stats = statSync(filePath);
     const row = known.get(filePath);
-    if (policyChanged || !row || Number(row.size) !== stats.size || Number(row.mtime_ms) !== stats.mtimeMs) changed.push({ filePath, stats, row });
+    if (policyChanged || parserChanged || !row || Number(row.size) !== stats.size || Number(row.mtime_ms) !== stats.mtimeMs) changed.push({ filePath, stats, row });
     else unchanged.push(filePath);
   }
 
@@ -321,9 +341,9 @@ export function refreshIndex(database, codexRoot, options = {}) {
       outside_retention = excluded.outside_retention, oldest_event = excluded.oldest_event,
       newest_event = excluded.newest_event, parse_status = excluded.parse_status`);
   const insertEvent = database.prepare(`INSERT OR IGNORE INTO usage_events(
-    source_path, event_key, timestamp, date, session_id, model, project, project_id, input, cached_input,
+    source_path, event_key, turn_id, timestamp, date, session_id, model, project, project_id, input, cached_input,
     cache_write_input, uncached_input, output, reasoning_output, unclassified, total, context_window
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
   let parsedEvents = 0;
   let failedFiles = 0;
@@ -351,7 +371,7 @@ export function refreshIndex(database, codexRoot, options = {}) {
       );
       for (const event of parsed.events) {
         insertEvent.run(
-          filePath, event.eventKey, event.timestamp, event.date, event.sessionId, event.model, event.project, event.projectId,
+          filePath, event.eventKey, event.turnId, event.timestamp, event.date, event.sessionId, event.model, event.project, event.projectId,
           event.input, event.cachedInput, event.cacheWriteInput, event.uncachedInput, event.output, event.reasoningOutput,
           event.unclassified, event.total, event.contextWindow
         );
@@ -360,6 +380,7 @@ export function refreshIndex(database, codexRoot, options = {}) {
     }
     if (cutoffDate) prunedEvents = Number(database.prepare('DELETE FROM usage_events WHERE date < ?').run(cutoffDate).changes);
     setMetadata(database, 'retention_days', setting);
+    setMetadata(database, 'parser_version', PARSER_VERSION);
     setMetadata(database, 'last_refresh_at', formatLocalIso());
     setMetadata(database, 'last_cutoff_date', cutoffDate || '');
     database.exec('COMMIT');
@@ -382,7 +403,8 @@ export function refreshIndex(database, codexRoot, options = {}) {
     sessionCount,
     retentionDays: retentionDays ?? 'all',
     cutoffDate,
-    policyChanged
+    policyChanged,
+    parserChanged
   };
 }
 
@@ -390,7 +412,7 @@ export function readIndexedEvents(database) {
   return database.prepare(`WITH deduplicated AS (
       SELECT MIN(rowid) AS row_id FROM usage_events GROUP BY event_key
     )
-    SELECT timestamp, date, session_id AS "sessionId", model, project, project_id AS "projectId",
+    SELECT turn_id AS "turnId", timestamp, date, session_id AS "sessionId", model, project, project_id AS "projectId",
       input, cached_input AS "cachedInput", cache_write_input AS "cacheWriteInput", uncached_input AS "uncachedInput",
       output, reasoning_output AS "reasoningOutput", unclassified, total, context_window AS "contextWindow"
     FROM usage_events JOIN deduplicated ON usage_events.rowid = deduplicated.row_id
@@ -402,7 +424,7 @@ export function readDailySummary(database, date = formatLocalIso().slice(0, 10))
   const totals = database.prepare(`WITH deduplicated AS (
       SELECT MIN(rowid) AS row_id FROM usage_events WHERE date = ? GROUP BY event_key
     )
-    SELECT COUNT(*) AS calls, COUNT(DISTINCT session_id) AS tasks,
+    SELECT COUNT(*) AS calls, COUNT(DISTINCT NULLIF(turn_id, '')) AS turns, COUNT(DISTINCT session_id) AS tasks,
       SUM(input) AS input, SUM(cached_input) AS cached_input,
       SUM(cache_write_input) AS cache_write_input, SUM(uncached_input) AS uncached_input,
       SUM(output) AS output, SUM(reasoning_output) AS reasoning_output,
@@ -420,6 +442,7 @@ export function readDailySummary(database, date = formatLocalIso().slice(0, 10))
   return {
     date: String(date),
     calls: number(totals.calls),
+    turns: number(totals.turns),
     tasks: number(totals.tasks),
     tokens: {
       input,

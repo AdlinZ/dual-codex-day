@@ -16,7 +16,11 @@ import {
   normalizeProfileProvider,
   PROFILE_TARGETS,
   providerConfigPreview,
+  readProfileLoginStatus,
+  removeProfile,
+  renameProfile,
   updateProfileProvider,
+  updateProfileRuntimeSource,
   updateProfileUsageSource
 } from '../scripts/lib/profile-store.mjs';
 import { getIndexDiagnostics, openIndex, readDailySummary, readIndexedEvents, refreshIndex } from '../scripts/lib/session-index.mjs';
@@ -37,6 +41,7 @@ const profilesRoot = defaultProfilesRoot();
 let mainWindow = null;
 let currentWorkspace = app.isPackaged ? os.homedir() : repoRoot;
 let targetCache = null;
+const loginStatusCache = new Map();
 
 function serializableTargets(targets) {
   return Object.fromEntries(Object.entries(targets).map(([key, value]) => [key, {
@@ -45,16 +50,38 @@ function serializableTargets(targets) {
   }]));
 }
 
-function readTargets() {
+function detectedTargets() {
   const now = Date.now();
   if (targetCache && now - targetCache.at < 15_000) return targetCache.value;
-  const value = serializableTargets(detectProfileTargets());
+  const value = detectProfileTargets();
   targetCache = { at: now, value };
+  return value;
+}
+
+function readTargets() {
+  return serializableTargets(detectedTargets());
+}
+
+function loginStatus(profile, hasProviderCredential) {
+  const cacheKey = `${profile.id}:${profile.updatedAt}:${profile.runtimeSource}:${hasProviderCredential}`;
+  const cached = loginStatusCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < 15_000) return cached.value;
+  const value = readProfileLoginStatus(profile, {
+    hasProviderCredential,
+    targets: detectedTargets(),
+    defaultCodexHome: defaultCodexRoot,
+    defaultSqliteHome: process.env.CODEX_SQLITE_HOME || defaultCodexRoot,
+    workingDirectory: currentWorkspace
+  });
+  loginStatusCache.set(cacheKey, { at: Date.now(), value });
   return value;
 }
 
 function publicProfile(profile) {
   const encryptedSecretPath = path.join(profile.paths.root, 'provider-key.bin');
+  const hasProviderCredential = profile.provider.type === 'custom'
+    && profile.provider.authMode === 'environment'
+    && existsSync(encryptedSecretPath);
   return {
     id: profile.id,
     name: profile.name,
@@ -62,11 +89,12 @@ function publicProfile(profile) {
     updatedAt: profile.updatedAt,
     root: profile.paths.root,
     codexHome: profile.paths.codexHome,
+    runtimeRoot: profile.runtimeSource === 'default' ? defaultCodexRoot : profile.paths.codexHome,
+    runtimeSource: profile.runtimeSource,
     usageSource: profile.usageSource,
     provider: profile.provider,
-    hasProviderCredential: profile.provider.type === 'custom'
-      && profile.provider.authMode === 'environment'
-      && existsSync(encryptedSecretPath)
+    hasProviderCredential,
+    loginStatus: loginStatus(profile, hasProviderCredential)
   };
 }
 
@@ -165,6 +193,7 @@ function emptySummary() {
   return {
     date: new Date().toLocaleDateString('en-CA'),
     calls: 0,
+    turns: 0,
     tasks: 0,
     tokens: {
       input: 0,
@@ -262,6 +291,19 @@ function registerIpc() {
     const profile = createProfile(profilesRoot, requestedName);
     return publicProfile(profile);
   });
+  ipcMain.handle('profiles:rename', (_event, payload) => {
+    return publicProfile(renameProfile(profilesRoot, String(payload?.profileId || ''), payload?.name));
+  });
+  ipcMain.handle('profiles:delete', async (_event, profileId) => {
+    const profile = findProfile(profilesRoot, String(profileId || ''));
+    if (listProfileLaunches(profilesRoot, { limit: 24 }).some(launch => launch.profileId === profile.id && launch.active)) {
+      throw new Error('请先关闭该账号正在运行的客户端，再删除配置。');
+    }
+    if (existsSync(profile.paths.root)) await shell.trashItem(profile.paths.root);
+    removeProfile(profilesRoot, profile.id);
+    loginStatusCache.clear();
+    return true;
+  });
   ipcMain.handle('profiles:provider-preview', (_event, payload) => {
     const profile = findProfile(profilesRoot, String(payload?.profileId || ''));
     const configPath = path.join(profile.paths.codexHome, 'config.toml');
@@ -292,6 +334,15 @@ function registerIpc() {
     );
     return publicProfile(profile);
   });
+  ipcMain.handle('profiles:set-runtime-source', (_event, payload) => {
+    const profile = updateProfileRuntimeSource(
+      profilesRoot,
+      String(payload?.profileId || ''),
+      String(payload?.source || '')
+    );
+    loginStatusCache.clear();
+    return publicProfile(profile);
+  });
   ipcMain.handle('profiles:import-config', async (_event, profileId) => {
     const profile = findProfile(profilesRoot, String(profileId || ''));
     const defaultCodexHome = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
@@ -314,12 +365,19 @@ function registerIpc() {
     const providerApiKey = profile.provider.type === 'custom' && profile.provider.authMode === 'environment'
       ? readProviderSecret(profile)
       : undefined;
-    const result = launchProfile(profilesRoot, profile.id, target, { workingDirectory: currentWorkspace, providerApiKey });
+    const result = launchProfile(profilesRoot, profile.id, target, {
+      workingDirectory: currentWorkspace,
+      providerApiKey,
+      targets: detectedTargets(),
+      defaultCodexHome: defaultCodexRoot,
+      defaultSqliteHome: process.env.CODEX_SQLITE_HOME || defaultCodexRoot
+    });
     return confirmLaunch(result);
   });
   ipcMain.handle('profiles:open-folder', async (_event, profileId) => {
     const profile = findProfile(profilesRoot, String(profileId || ''));
-    const error = await shell.openPath(profile.paths.root);
+    const target = profile.runtimeSource === 'default' ? defaultCodexRoot : profile.paths.root;
+    const error = await shell.openPath(target);
     if (error) throw new Error(error);
     return true;
   });
@@ -456,6 +514,27 @@ async function captureRequestedScreenshot(window) {
         return false;
       })()`);
       if (!profileLoaded) throw new Error('Isolated Profile dashboard did not load for the screenshot check.');
+    }
+    if (screenshotView === 'dashboard-report') {
+      const reportVisible = await window.webContents.executeJavaScript(`(() => {
+        const report = document.querySelector('.period-report');
+        report?.scrollIntoView({ block: 'center' });
+        return Boolean(report && document.querySelector('#report-metrics')?.children.length === 4);
+      })()`);
+      if (!reportVisible) throw new Error('Periodic report did not render for the screenshot check.');
+    }
+    if (screenshotView === 'dashboard-report-poster') {
+      const reportPosterOpened = await window.webContents.executeJavaScript(`(async () => {
+        document.querySelector('#report-poster-button')?.click();
+        for (let attempt = 0; attempt < 80; attempt += 1) {
+          const dialog = document.querySelector('#usage-poster-dialog');
+          const preview = document.querySelector('#usage-poster-preview');
+          if (dialog?.open && preview?.complete && preview.naturalWidth === 1200 && preview.naturalHeight === 1600) return true;
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+        return false;
+      })()`);
+      if (!reportPosterOpened) throw new Error('Periodic report poster did not render at 1200 by 1600 pixels.');
     }
     if (screenshotView === 'dashboard-poster' || screenshotView === 'dashboard-poster-save') {
       const posterOpened = await window.webContents.executeJavaScript(`(async () => {

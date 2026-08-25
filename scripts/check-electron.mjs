@@ -28,8 +28,12 @@ assert(/lucide\/dist\/esm\/createElement\.mjs/.test(renderer) && /icons\/refresh
 assert(/profiles:create/.test(main) && /profiles:launch/.test(main), 'Electron main process must use profile IPC handlers');
 assert(/profiles:save-provider/.test(main) && /profiles:provider-preview/.test(main), 'Electron main process must expose scoped provider configuration handlers');
 assert(/profiles:set-usage-source/.test(main) && /setProfileUsageSource/.test(preload), 'Electron must expose scoped Profile usage-source settings');
+assert(/profiles:set-runtime-source/.test(main) && /setProfileRuntimeSource/.test(preload), 'Electron must expose scoped Profile runtime-source settings');
+assert(/profiles:rename/.test(main) && /profiles:delete/.test(main) && /shell\.trashItem/.test(main), 'Electron must support rename and recoverable Profile deletion');
+assert(/readProfileLoginStatus/.test(main) && /loginStatus/.test(renderer), 'Electron must show sanitized Codex login status without reading credential files');
 assert(/profile\.usageSource === 'default' \? defaultCodexRoot : profile\.paths\.codexHome/.test(main), 'Profile summaries must resolve either the default Codex root or isolated Profile root');
 assert(/profile-usage-source-dialog/.test(html) && /profileUsageSource/.test(renderer), 'Electron must provide a non-technical Profile usage-source control');
+assert(/profileRuntimeSource/.test(html + renderer) && /当前默认 Codex/.test(html), 'Electron must distinguish the system-default runtime from isolated Profiles');
 assert(/screenshotView === 'usage-source'/.test(main) && /profile-usage-source-dialog/.test(main), 'visual verification must cover the Profile usage-source dialog');
 assert(/profiles:import-config/.test(main) && /importProfileConfig/.test(main), 'Electron main process must expose a scoped config.toml import flow');
 assert(/confirmLaunch/.test(main) && /listProfileLaunches/.test(main), 'Electron must verify launches and expose persistent instance status');
@@ -47,6 +51,8 @@ assert(/codex-day-\$\{slug\}\.sqlite/.test(main) && /refreshIndex\(database, sou
 assert(/getUsageData:\s*sourceId/.test(preload) && /selectedUsageSourceId/.test(renderer), 'renderer must pass only the selected usage source id to the main process');
 assert(/usage-trend-chart/.test(html) && /estimateUsageEvent/.test(renderer) && /usage-export-button/.test(html), 'native usage analysis must provide trends, cost estimates, and CSV export');
 assert(/usage-poster-button/.test(html) && /createUsagePoster/.test(renderer) && /canvas\.width = 1200/.test(renderer) && /canvas\.height = 1600/.test(renderer), 'native usage analysis must export a filtered 1200 by 1600 poster');
+assert(/data-report-period="week"/.test(html) && /data-report-period="month"/.test(html) && /createPeriodReportPoster/.test(renderer), 'native usage analysis must provide weekly and monthly reports with a dedicated poster');
+assert(/turnId/.test(renderer) && /交互回合/.test(html + renderer) && /模型调用/.test(html + renderer), 'usage metrics must distinguish interaction turns from model calls');
 assert(/dashboard-poster/.test(main) && /naturalWidth === 1200.*naturalHeight === 1600/s.test(main), 'visual verification must validate the rendered poster dimensions');
 assert(/will-download/.test(main) && /nativeImage\.createFromPath/.test(main), 'packaged verification must exercise the PNG download and validate the saved file');
 assert(!/auth\.json/i.test(main + preload + renderer + html), 'Electron code must never reference profile credential files');

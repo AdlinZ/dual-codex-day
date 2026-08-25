@@ -70,15 +70,18 @@ npm run package:electron
 
 ## 多账号启动
 
-在启动器中新建“工作账号”“个人账号”等配置，选择启动目录，然后打开 CLI、VS Code 或桌面客户端。首次启动某个配置时，在官方登录页面完成对应账号的登录。
+在启动器中新建“工作账号”“个人账号”等配置，选择启动目录，然后打开 CLI、VS Code 或桌面客户端。账号来源可以设为“当前默认 Codex”或“独立 Profile”：前者复用现有系统账号，后者保存独立登录和配置。首次启动独立 Profile 时，在官方登录页面完成对应账号的登录。
 
 配置默认保存在 `%LOCALAPPDATA%\dual-codex-day\profiles`，不会覆盖、迁移或修改现有的 `%USERPROFILE%\.codex`。显示名称不参与路径拼接，每个配置使用随机 ID 目录。
 
-隔离范围：
+运行来源与隔离范围：
 
-- **CLI**：独立 `CODEX_HOME` 与 SQLite 状态。
-- **VS Code**：独立 `CODEX_HOME` 和 `--user-data-dir`，会打开真正独立的 VS Code 实例。
-- **Codex 桌面客户端**：独立 `CODEX_HOME` 和 Electron `--user-data-dir`。该入口标记为实验性，因为官方没有承诺商店版客户端始终支持多实例。
+- **当前默认 Codex**：CLI、VS Code 和桌面端沿用系统现有账号与数据目录，适合把已在工作的主账号直接接入 DCD。
+- **独立 Profile / CLI**：独立 `CODEX_HOME` 与 SQLite 状态。
+- **独立 Profile / VS Code**：独立 `CODEX_HOME` 和 `--user-data-dir`，打开独立的 VS Code 实例。
+- **独立 Profile / Codex 桌面客户端**：独立 `CODEX_HOME` 和 Electron `--user-data-dir`。该入口标记为实验性，因为官方没有承诺商店版客户端始终支持多实例。
+
+官方环境变量说明确认 `CODEX_HOME` 覆盖 CLI、IDE 扩展和 app-server 的配置、认证、日志、Session 与 SQLite 状态；桌面客户端本身不在该兼容承诺中，所以 DCD 还必须为独立桌面实例设置单独的 Electron 用户数据目录。账号列表会通过 `codex login status` 显示经过脱敏的登录状态，不读取认证文件。Profile 可以重命名；删除前会要求确认，并把其独立目录移入系统回收站，默认 Codex 数据不受影响。
 
 每个配置都会生成自己的 `config.toml`。官方模式写入 `cli_auth_credentials_store = "file"`；中转站模式还会写入 `model_provider`、`base_url`、认证方式和 `wire_api = "responses"` 等字段。不要上传或分享 `%LOCALAPPDATA%\dual-codex-day\profiles`。
 
@@ -116,12 +119,12 @@ Electron `v0.10.0` 使用沙箱渲染进程和受限预加载桥接，账号与�
 
 ### 同时打开两个 Codex 桌面账号
 
-1. 在 Electron 控制台中创建两个账号配置。
-2. 选择第一个配置，点击“打开独立 Codex”，并在首次打开时完成官方登录。
-3. 回到控制台选择第二个配置，再次点击“打开独立 Codex”并登录另一个账号。
+1. 为现有工作账号创建 Profile，并把运行环境和用量记录都设为“当前默认 Codex”。
+2. 创建第二个 Profile，保留“独立 Profile”，点击“打开独立 Codex”并完成另一个账号的官方登录。
+3. 回到控制台分别打开两个账号。
 4. 左侧账号列表和“运行与最近启动”会分别显示两个正在运行的实例。
 
-启动器会等待确认客户端主进程仍然存活，并让每个实例使用独立的 `CODEX_HOME`、SQLite 和 Electron `--user-data-dir`。在 Windows Store 版 `OpenAI.Codex 26.818.8289.0` 上已经完成双实例实测；由于官方尚未把多实例作为稳定接口承诺，后续客户端更新仍需重新验证。
+启动器会等待确认客户端主进程仍然存活；默认账号使用系统数据目录，第二个实例使用独立的 `CODEX_HOME`、SQLite 和 Electron `--user-data-dir`。在 Windows Store 版 `OpenAI.Codex 26.818.8289.0` 上已经完成“默认实例 + 独立实例”双开实测；由于官方尚未把多实例作为稳定接口承诺，后续客户端更新仍需重新验证。
 
 ## 用量仪表盘
 
@@ -134,7 +137,7 @@ Electron `v0.10.0` 使用沙箱渲染进程和受限预加载桥接，账号与�
 
 页面设置可以保存币种、汇率、中转站倍率、预算和项目别名，也可以导出带版本号的 JSON 配置并在导入前预览。设置保存在浏览器 `localStorage`，不会写入原始日志。
 
-服务提供 `/healthz`、`/api/status` 与 `/api/summary` 三个只读接口。`/api/summary?date=YYYY-MM-DD` 只返回汇总 Token、调用数、任务数、缓存率和主要模型，不返回项目名称或 Session ID。
+服务提供 `/healthz`、`/api/status` 与 `/api/summary` 三个只读接口。`/api/summary?date=YYYY-MM-DD` 只返回汇总 Token、交互回合、模型调用数、任务数、缓存率和主要模型，不返回项目名称或 Session ID。Electron 用量中心还提供周报/月报、同期对比、CSV、用量海报与周期报告海报。
 
 常用命令：
 

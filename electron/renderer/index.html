@@ -69,8 +69,10 @@
             <div class="profile-header-actions">
               <button class="secondary-button" id="profile-usage-source-button" type="button" disabled>
                 <i data-lucide="database"></i>
-                <span id="profile-usage-source-label">独立用量</span>
+                <span id="profile-usage-source-label">独立账号</span>
               </button>
+              <button class="icon-button" id="rename-profile-button" type="button" title="重命名账号" aria-label="重命名账号" disabled><i data-lucide="pencil"></i></button>
+              <button class="icon-button danger-icon-button" id="delete-profile-button" type="button" title="删除账号配置" aria-label="删除账号配置" disabled><i data-lucide="trash-2"></i></button>
               <button class="secondary-button" id="open-profile-folder-button" type="button" disabled>
                 <i data-lucide="folder-open"></i>
                 <span>配置目录</span>
@@ -102,6 +104,16 @@
                 <i data-lucide="settings-2"></i>
               </button>
             </div>
+
+            <div class="workspace-picker account-picker">
+              <i data-lucide="log-in"></i>
+              <div class="workspace-value">
+                <span>登录状态</span>
+                <strong id="profile-login-status">正在检查...</strong>
+                <small id="profile-runtime-source">独立运行环境</small>
+              </div>
+              <span class="provider-state" id="profile-login-state">检查中</span>
+            </div>
           </div>
 
           <div class="launch-actions" id="launch-actions">
@@ -115,8 +127,8 @@
             </button>
             <button class="launch-button launch-primary" type="button" data-target="desktop" disabled>
               <i data-lucide="monitor-up"></i>
-              <span>打开独立 Codex</span>
-              <small>多开</small>
+              <span>打开 Codex</span>
+              <small>桌面端</small>
             </button>
           </div>
         </section>
@@ -139,7 +151,7 @@
               <small id="metric-model">暂无模型</small>
             </div>
             <div class="metric">
-              <span>调用</span>
+              <span>模型调用</span>
               <strong id="metric-calls">0</strong>
               <small id="metric-average">平均 0</small>
             </div>
@@ -208,11 +220,11 @@
           </header>
 
           <section class="usage-kpis" aria-label="用量指标">
-            <article><span>总 Token</span><strong id="usage-kpi-total">0</strong><small id="usage-kpi-total-note">0 次调用</small></article>
+            <article><span>总 Token</span><strong id="usage-kpi-total">0</strong><small id="usage-kpi-total-note">0 回合 · 0 次模型调用</small></article>
             <article><span>API 等价预计成本</span><strong id="usage-kpi-cost">$0.00</strong><small id="usage-kpi-coverage">等待定价</small></article>
             <article><span>任务</span><strong id="usage-kpi-tasks">0</strong><small id="usage-kpi-projects">0 个项目</small></article>
             <article><span>缓存率</span><strong id="usage-kpi-cache">0%</strong><small id="usage-kpi-cached">0 cached</small></article>
-            <article><span>每次调用</span><strong id="usage-kpi-average">0</strong><small>平均 Token</small></article>
+            <article><span>每次模型调用</span><strong id="usage-kpi-average">0</strong><small>平均 Token</small></article>
           </section>
 
           <section class="usage-overview-grid">
@@ -223,7 +235,7 @@
             <div class="usage-panel cost-panel">
               <div class="usage-panel-heading"><div><span class="eyebrow">Cost breakdown</span><h2>预计成本构成</h2></div><span id="usage-cost-total" class="panel-total">$0.00</span></div>
               <div class="cost-breakdown" id="usage-cost-breakdown"></div>
-              <div class="budget-progress"><div><span>预算使用</span><strong id="usage-budget-label">未设置</strong></div><span class="budget-track"><i id="usage-budget-bar"></i></span></div>
+              <div class="budget-progress"><div><span>预算使用</span><strong id="usage-budget-label">未设置</strong></div><progress class="budget-track" id="usage-budget-bar" max="100" value="0"></progress></div>
             </div>
           </section>
 
@@ -235,6 +247,24 @@
             <div class="usage-panel">
               <div class="usage-panel-heading"><div><span class="eyebrow">Recent tasks</span><h2>最近任务</h2></div><span id="usage-task-count" class="panel-meta"></span></div>
               <div class="usage-task-list" id="usage-task-list"></div>
+            </div>
+          </section>
+
+          <section class="usage-panel period-report" aria-labelledby="period-report-title">
+            <div class="usage-panel-heading report-heading">
+              <div><span class="eyebrow">Periodic report</span><h2 id="period-report-title">本周报告</h2><p id="period-report-dates"></p></div>
+              <div class="report-actions">
+                <div class="usage-range report-period" id="report-period" role="group" aria-label="报告周期">
+                  <button type="button" data-report-period="week" class="is-active">周报</button>
+                  <button type="button" data-report-period="month">月报</button>
+                </div>
+                <button class="secondary-button" id="report-poster-button" type="button"><i data-lucide="image-down"></i><span>导出报告</span></button>
+              </div>
+            </div>
+            <div class="report-metrics" id="report-metrics"></div>
+            <div class="report-body">
+              <div class="report-chart" id="report-chart"></div>
+              <div class="report-leaders" id="report-leaders"></div>
             </div>
           </section>
         </div>
@@ -414,7 +444,22 @@
 
   <dialog class="modal usage-source-modal" id="profile-usage-source-dialog">
     <form id="profile-usage-source-form">
-      <div class="modal-heading"><div class="modal-icon"><i data-lucide="database"></i></div><div><span class="eyebrow">Account data</span><h2>账号用量来源</h2></div></div>
+      <div class="modal-heading"><div class="modal-icon"><i data-lucide="database"></i></div><div><span class="eyebrow">Account source</span><h2>账号来源</h2></div></div>
+      <fieldset class="source-fieldset">
+        <legend>运行环境</legend>
+        <div class="usage-source-options" role="radiogroup" aria-label="账号运行来源">
+          <label class="usage-source-option">
+            <input type="radio" name="profileRuntimeSource" value="default">
+            <span><strong>当前默认 Codex</strong><small>使用现有工作账号和系统配置</small></span>
+          </label>
+          <label class="usage-source-option">
+            <input type="radio" name="profileRuntimeSource" value="profile">
+            <span><strong>独立 Profile</strong><small>使用独立登录、配置和客户端数据</small></span>
+          </label>
+        </div>
+      </fieldset>
+      <fieldset class="source-fieldset">
+        <legend>用量记录</legend>
       <div class="usage-source-options" role="radiogroup" aria-label="账号用量来源">
         <label class="usage-source-option">
           <input type="radio" name="profileUsageSource" value="default">
@@ -425,7 +470,25 @@
           <span><strong>独立 Profile</strong><small>只读取由此 Profile 产生的记录</small></span>
         </label>
       </div>
+      </fieldset>
       <div class="modal-actions"><button class="secondary-button" id="profile-usage-source-cancel" type="button">取消</button><button class="primary-button" type="submit">保存</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="modal" id="rename-profile-dialog">
+    <form id="rename-profile-form">
+      <div class="modal-heading"><div class="modal-icon"><i data-lucide="pencil"></i></div><div><span class="eyebrow">Rename profile</span><h2>重命名账号</h2></div></div>
+      <label class="field-label" for="rename-profile-input">显示名称</label>
+      <input id="rename-profile-input" maxlength="40" autocomplete="off" required>
+      <div class="modal-actions"><button class="secondary-button" id="rename-profile-cancel" type="button">取消</button><button class="primary-button" type="submit">保存名称</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="modal danger-modal" id="delete-profile-dialog">
+    <form id="delete-profile-form">
+      <div class="modal-heading"><div class="modal-icon danger-modal-icon"><i data-lucide="trash-2"></i></div><div><span class="eyebrow">Delete profile</span><h2>删除账号配置</h2></div></div>
+      <p class="danger-copy">“<strong id="delete-profile-name"></strong>”的独立配置将移入回收站。系统默认 Codex 数据不会被删除。</p>
+      <div class="modal-actions"><button class="secondary-button" id="delete-profile-cancel" type="button">取消</button><button class="danger-button" type="submit">移入回收站</button></div>
     </form>
   </dialog>
 
@@ -437,7 +500,7 @@
 
   <dialog class="modal poster-modal" id="usage-poster-dialog">
     <div class="poster-dialog-body">
-      <div class="modal-heading"><div class="modal-icon"><i data-lucide="image-down"></i></div><div><span class="eyebrow">Poster preview</span><h2>用量海报</h2></div></div>
+      <div class="modal-heading"><div class="modal-icon"><i data-lucide="image-down"></i></div><div><span class="eyebrow">Poster preview</span><h2 id="usage-poster-title">用量海报</h2></div></div>
       <div class="poster-preview-frame"><img id="usage-poster-preview" alt="当前筛选条件的用量海报预览"></div>
       <div class="modal-actions"><button class="secondary-button" id="usage-poster-cancel" type="button">取消</button><button class="primary-button" id="usage-poster-save" type="button"><i data-lucide="download"></i><span>保存 PNG</span></button></div>
     </div>

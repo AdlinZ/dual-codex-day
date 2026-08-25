@@ -15,7 +15,10 @@ import {
   PROFILE_PROVIDER_ENV_KEY,
   profileEnvironment,
   providerConfigPreview,
+  removeProfile,
+  renameProfile,
   updateProfileProvider,
+  updateProfileRuntimeSource,
   updateProfileUsageSource
 } from './lib/profile-store.mjs';
 
@@ -58,9 +61,18 @@ try {
   assert(findProfile(profileRoot, first.id).name === 'Work account', 'profile lookup by id should work');
   assert(findProfile(profileRoot, 'personal account').id === second.id, 'profile lookup by name should be case insensitive');
   assert(first.usageSource === 'profile', 'new profiles must default to isolated usage data');
+  assert(first.runtimeSource === 'profile', 'new profiles must default to an isolated runtime');
   const defaultUsageFirst = updateProfileUsageSource(profileRoot, first.id, 'default');
   assert(defaultUsageFirst.usageSource === 'default' && findProfile(profileRoot, first.id).usageSource === 'default', 'Profile usage source must persist independently');
+  const defaultRuntimeSecond = updateProfileRuntimeSource(profileRoot, second.id, 'default');
+  assert(defaultRuntimeSecond.runtimeSource === 'default', 'Profile runtime source must persist independently');
   assertThrows(() => updateProfileUsageSource(profileRoot, first.id, 'shared'), /Unsupported Profile usage source/, 'unsupported Profile usage sources must be rejected');
+  assertThrows(() => updateProfileRuntimeSource(profileRoot, first.id, 'shared'), /Unsupported Profile runtime source/, 'unsupported Profile runtime sources must be rejected');
+  const renamedSecond = renameProfile(profileRoot, second.id, 'Personal renamed');
+  assert(renamedSecond.name === 'Personal renamed' && findProfile(profileRoot, second.id).name === 'Personal renamed', 'Profile names must be editable without changing ids');
+  assertThrows(() => renameProfile(profileRoot, second.id, 'Work account'), /already exists/, 'Profile rename must reject duplicate names');
+  const disposable = createProfile(profileRoot, 'Disposable');
+  assert(removeProfile(profileRoot, disposable.id).id === disposable.id && !listProfiles(profileRoot).some(profile => profile.id === disposable.id), 'Profile registry entries must be removable without touching another Profile');
   assertThrows(() => createProfile(profileRoot, 'work ACCOUNT'), /already exists/, 'duplicate display names must be rejected');
   assertThrows(() => createProfile(profileRoot, '   '), /1 to 40/, 'blank display names must be rejected');
 
@@ -88,6 +100,8 @@ try {
   const customConfig = readFileSync(path.join(first.paths.codexHome, 'config.toml'), 'utf8');
   const parsedConfig = parseToml(customConfig);
   assert(updatedFirst.provider.type === 'custom' && updatedFirst.provider.baseUrl === 'https://relay.example.test/v1', 'custom provider settings must persist per profile');
+  assert(updatedFirst.runtimeSource === 'profile', 'custom providers must always use an isolated runtime');
+  assertThrows(() => updateProfileRuntimeSource(profileRoot, first.id, 'default'), /require an isolated Profile runtime/, 'custom providers must reject the default runtime');
   assert(parsedConfig.model_provider === 'custom' && parsedConfig.model_providers.custom.wire_api === 'responses', 'custom provider TOML must select the requested Responses API provider id');
   assert(parsedConfig.model_providers.custom.env_key === PROFILE_PROVIDER_ENV_KEY && parsedConfig.model_providers.custom.requires_openai_auth === false, 'environment authentication must use only the dedicated launch variable');
   assert(parsedConfig.model_reasoning_effort === 'high' && parsedConfig.personality === 'pragmatic' && parsedConfig.disable_response_storage === true, 'advanced model settings must persist in generated TOML');
@@ -132,16 +146,22 @@ command = "figma-bridge"
   assert(environment.CODEX_SQLITE_HOME === first.paths.sqliteHome, 'child process must receive isolated SQLite state');
   assert(environment[PROFILE_PROVIDER_ENV_KEY] === 'secret-provider-key', 'custom provider key must be injected only into the selected child environment');
   assert(!Object.keys(environment).some(key => ['CODEX_ACCESS_TOKEN', 'CODEX_API_KEY', 'OPENAI_API_KEY'].includes(key.toUpperCase())), 'inherited credential variables must be removed case-insensitively');
-  const officialEnvironment = profileEnvironment(second, fakeEnvironment);
+  const officialEnvironment = profileEnvironment(findProfile(profileRoot, second.id), fakeEnvironment);
   assert(!officialEnvironment[PROFILE_PROVIDER_ENV_KEY], 'official profiles must not inherit a custom provider key');
+  assert(officialEnvironment.OPENAI_API_KEY === 'must-not-leak', 'the explicit system-default runtime must preserve its normal environment');
 
   const providerOptions = { targets: fakeTargets, environment: fakeEnvironment, workingDirectory: root, providerApiKey: 'secret-provider-key' };
   const cliPlan = buildLaunchPlan(updatedFirst, 'cli', providerOptions);
   const vscodePlan = buildLaunchPlan(updatedFirst, 'vscode', providerOptions);
   const desktopPlan = buildLaunchPlan(updatedFirst, 'desktop', providerOptions);
+  const defaultDesktopPlan = buildLaunchPlan(findProfile(profileRoot, second.id), 'desktop', {
+    ...providerOptions,
+    defaultCodexHome: path.join(temporaryRoot, 'system-codex')
+  });
   assert(cliPlan.args.includes(first.paths.codexHome) && cliPlan.args.includes(first.paths.sqliteHome), 'CLI runner must receive both isolated state paths');
   assert(vscodePlan.args.includes('--user-data-dir') && vscodePlan.args.includes(first.paths.vscodeData), 'VS Code must receive an isolated user data directory');
   assert(desktopPlan.args.includes(`--user-data-dir=${first.paths.desktopData}`), 'desktop app must receive an isolated Electron data directory');
+  assert(defaultDesktopPlan.args.length === 0 && defaultDesktopPlan.environment.CODEX_HOME === path.join(temporaryRoot, 'system-codex'), 'default desktop launches must use the system Codex state without an isolated user-data argument');
   assert(desktopPlan.experimental === true && vscodePlan.experimental === false, 'only desktop multi-instance support should be marked experimental');
   assert(!vscodePlan.args.some(argument => argument.includes(first.name)), 'display names must not be used as filesystem arguments');
 

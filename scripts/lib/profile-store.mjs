@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
@@ -11,6 +11,7 @@ export const PROFILE_TARGETS = Object.freeze(['cli', 'vscode', 'desktop']);
 export const PROFILE_PROVIDER_TYPES = Object.freeze(['official', 'custom']);
 export const PROFILE_PROVIDER_AUTH_MODES = Object.freeze(['environment', 'openai', 'none']);
 export const PROFILE_USAGE_SOURCES = Object.freeze(['profile', 'default']);
+export const PROFILE_RUNTIME_SOURCES = Object.freeze(['profile', 'default']);
 export const PROFILE_PROVIDER_ENV_KEY = 'DUAL_CODEX_DAY_PROVIDER_API_KEY';
 const PROFILE_REASONING_EFFORTS = new Set(['minimal', 'low', 'medium', 'high', 'xhigh']);
 const PROFILE_PERSONALITIES = new Set(['none', 'friendly', 'pragmatic']);
@@ -57,6 +58,12 @@ export function defaultProfileProvider() {
 export function normalizeProfileUsageSource(value) {
   const source = String(value || 'profile').trim().toLowerCase();
   if (!PROFILE_USAGE_SOURCES.includes(source)) throw new Error(`Unsupported Profile usage source: ${source}`);
+  return source;
+}
+
+export function normalizeProfileRuntimeSource(value) {
+  const source = String(value || 'profile').trim().toLowerCase();
+  if (!PROFILE_RUNTIME_SOURCES.includes(source)) throw new Error(`Unsupported Profile runtime source: ${source}`);
   return source;
 }
 
@@ -207,6 +214,7 @@ function validateRegistry(registry) {
     normalizeProfileName(profile.name);
     if (profile.provider) normalizeProfileProvider(profile.provider);
     normalizeProfileUsageSource(profile.usageSource);
+    normalizeProfileRuntimeSource(profile.runtimeSource || profile.usageSource);
   }
   return registry;
 }
@@ -326,6 +334,7 @@ function enrichProfile(root, profile) {
     ...profile,
     provider: normalizeProfileProvider(profile.provider || defaultProfileProvider()),
     usageSource: normalizeProfileUsageSource(profile.usageSource),
+    runtimeSource: normalizeProfileRuntimeSource(profile.runtimeSource || profile.usageSource),
     paths: profilePaths(root, profile.id)
   };
 }
@@ -346,6 +355,7 @@ export function createProfile(root = defaultProfilesRoot(), requestedName) {
     name,
     provider: defaultProfileProvider(),
     usageSource: 'profile',
+    runtimeSource: 'profile',
     createdAt: timestamp,
     updatedAt: timestamp
   };
@@ -380,9 +390,38 @@ export function updateProfileProvider(root = defaultProfilesRoot(), reference, r
   const existingConfig = existsSync(configPath) ? readFileSync(configPath, 'utf8') : '';
   writeTextAtomically(configPath, providerConfigPreview(provider, existingConfig, profile.provider));
   profile.provider = provider;
+  if (provider.type === 'custom') profile.runtimeSource = 'profile';
   profile.updatedAt = new Date().toISOString();
   saveProfileRegistry(root, registry);
   return enrichProfile(root, profile);
+}
+
+export function renameProfile(root = defaultProfilesRoot(), reference, requestedName) {
+  const registry = loadProfileRegistry(root);
+  const query = String(reference || '').trim();
+  const index = registry.profiles.findIndex(profile => profile.id === query
+    || profile.name.localeCompare(query, undefined, { sensitivity: 'accent' }) === 0);
+  if (index < 0) throw new Error(`Profile not found: ${query}`);
+  const name = normalizeProfileName(requestedName);
+  if (registry.profiles.some((profile, profileIndex) => profileIndex !== index
+    && profile.name.localeCompare(name, undefined, { sensitivity: 'accent' }) === 0)) {
+    throw new Error(`A profile named "${name}" already exists.`);
+  }
+  registry.profiles[index].name = name;
+  registry.profiles[index].updatedAt = new Date().toISOString();
+  saveProfileRegistry(root, registry);
+  return enrichProfile(root, registry.profiles[index]);
+}
+
+export function removeProfile(root = defaultProfilesRoot(), reference) {
+  const registry = loadProfileRegistry(root);
+  const query = String(reference || '').trim();
+  const index = registry.profiles.findIndex(profile => profile.id === query
+    || profile.name.localeCompare(query, undefined, { sensitivity: 'accent' }) === 0);
+  if (index < 0) throw new Error(`Profile not found: ${query}`);
+  const [removed] = registry.profiles.splice(index, 1);
+  saveProfileRegistry(root, registry);
+  return enrichProfile(root, removed);
 }
 
 export function updateProfileUsageSource(root = defaultProfilesRoot(), reference, requestedSource) {
@@ -392,6 +431,23 @@ export function updateProfileUsageSource(root = defaultProfilesRoot(), reference
     || profile.name.localeCompare(query, undefined, { sensitivity: 'accent' }) === 0);
   if (index < 0) throw new Error(`Profile not found: ${query}`);
   registry.profiles[index].usageSource = normalizeProfileUsageSource(requestedSource);
+  registry.profiles[index].updatedAt = new Date().toISOString();
+  saveProfileRegistry(root, registry);
+  return enrichProfile(root, registry.profiles[index]);
+}
+
+export function updateProfileRuntimeSource(root = defaultProfilesRoot(), reference, requestedSource) {
+  const registry = loadProfileRegistry(root);
+  const query = String(reference || '').trim();
+  const index = registry.profiles.findIndex(profile => profile.id === query
+    || profile.name.localeCompare(query, undefined, { sensitivity: 'accent' }) === 0);
+  if (index < 0) throw new Error(`Profile not found: ${query}`);
+  const source = normalizeProfileRuntimeSource(requestedSource);
+  const provider = normalizeProfileProvider(registry.profiles[index].provider || defaultProfileProvider());
+  if (source === 'default' && provider.type !== 'official') {
+    throw new Error('Custom providers require an isolated Profile runtime.');
+  }
+  registry.profiles[index].runtimeSource = source;
   registry.profiles[index].updatedAt = new Date().toISOString();
   saveProfileRegistry(root, registry);
   return enrichProfile(root, registry.profiles[index]);
@@ -460,10 +516,22 @@ function detectDesktopExecutable(environment = process.env) {
   return result.status === 0 && candidate && existsSync(candidate) ? candidate : null;
 }
 
+function detectUserCodexExecutable(environment = process.env) {
+  for (const variable of ['CODEX_PROFILES_CODEX_EXE', 'CODEX_CLI_PATH']) {
+    if (environment[variable] && existsSync(environment[variable])) return path.resolve(environment[variable]);
+  }
+  if (process.platform !== 'win32') return null;
+  const binRoot = path.join(environment.LOCALAPPDATA || '', 'OpenAI', 'Codex', 'bin');
+  if (!existsSync(binRoot)) return null;
+  return readdirSync(binRoot, { withFileTypes: true })
+    .filter(entry => entry.isDirectory())
+    .map(entry => path.join(binRoot, entry.name, 'codex.exe'))
+    .filter(existsSync)
+    .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0] || null;
+}
+
 export function detectProfileTargets(environment = process.env) {
-  const codex = environment.CODEX_PROFILES_CODEX_EXE && existsSync(environment.CODEX_PROFILES_CODEX_EXE)
-    ? path.resolve(environment.CODEX_PROFILES_CODEX_EXE)
-    : executableFromPath(['codex.exe', 'codex'], environment);
+  const codex = detectUserCodexExecutable(environment) || executableFromPath(['codex.exe', 'codex'], environment);
   const vscode = detectCodeExecutable(environment);
   const desktop = detectDesktopExecutable(environment);
   return {
@@ -473,13 +541,50 @@ export function detectProfileTargets(environment = process.env) {
   };
 }
 
+export function readProfileLoginStatus(profile, options = {}) {
+  const provider = normalizeProfileProvider(profile.provider || defaultProfileProvider());
+  if (provider.type === 'custom' && provider.authMode === 'environment') {
+    return { state: options.hasProviderCredential ? 'ready' : 'missing', method: 'provider-key' };
+  }
+  if (provider.type === 'custom' && provider.authMode === 'none') {
+    return { state: 'ready', method: 'none' };
+  }
+  const environment = options.environment || process.env;
+  const targets = options.targets || detectProfileTargets(environment);
+  if (!targets.cli?.available || !targets.cli.executable) return { state: 'unknown', method: 'unknown' };
+  const runtimeEnvironment = profileEnvironment(profile, environment, {
+    runtimeSource: profile.runtimeSource || profile.usageSource,
+    defaultCodexHome: options.defaultCodexHome,
+    defaultSqliteHome: options.defaultSqliteHome
+  });
+  const result = spawnSync(targets.cli.executable, ['login', 'status'], {
+    cwd: options.workingDirectory || process.cwd(),
+    env: runtimeEnvironment,
+    encoding: 'utf8',
+    windowsHide: true,
+    timeout: 5000
+  });
+  const output = `${result.stdout || ''}\n${result.stderr || ''}`;
+  if (/Logged in using ChatGPT/i.test(output)) return { state: 'authenticated', method: 'chatgpt' };
+  if (/Logged in using an API key/i.test(output)) return { state: 'authenticated', method: 'api-key' };
+  if (/Not logged in/i.test(output)) return { state: 'signed-out', method: 'none' };
+  return { state: 'unknown', method: 'unknown' };
+}
+
 export function profileEnvironment(profile, baseEnvironment = process.env, options = {}) {
   const environment = { ...baseEnvironment };
-  for (const variable of Object.keys(environment)) {
-    if (inheritedCredentialVariableSet.has(variable.toUpperCase())) delete environment[variable];
+  const runtimeSource = normalizeProfileRuntimeSource(options.runtimeSource || profile.runtimeSource || profile.usageSource);
+  if (runtimeSource === 'profile') {
+    for (const variable of Object.keys(environment)) {
+      if (inheritedCredentialVariableSet.has(variable.toUpperCase())) delete environment[variable];
+    }
   }
-  environment.CODEX_HOME = profile.paths.codexHome;
-  environment.CODEX_SQLITE_HOME = profile.paths.sqliteHome;
+  environment.CODEX_HOME = runtimeSource === 'default'
+    ? path.resolve(options.defaultCodexHome || baseEnvironment.CODEX_HOME || path.join(os.homedir(), '.codex'))
+    : profile.paths.codexHome;
+  environment.CODEX_SQLITE_HOME = runtimeSource === 'default'
+    ? path.resolve(options.defaultSqliteHome || baseEnvironment.CODEX_SQLITE_HOME || environment.CODEX_HOME)
+    : profile.paths.sqliteHome;
   environment.CODEX_PROFILE_ID = profile.id;
   environment.CODEX_PROFILE_NAME = profile.name;
   const provider = normalizeProfileProvider(profile.provider || defaultProfileProvider());
@@ -506,7 +611,15 @@ export function buildLaunchPlan(profile, target, options = {}) {
   const targets = options.targets || detectProfileTargets(options.environment || process.env);
   const detected = targets[target];
   if (!detected?.available || !detected.executable) throw new Error(`${target} is not installed or could not be located.`);
-  const environment = profileEnvironment(profile, options.environment || process.env, { providerApiKey: options.providerApiKey });
+  const runtimeSource = normalizeProfileRuntimeSource(profile.runtimeSource || profile.usageSource);
+  const environment = profileEnvironment(profile, options.environment || process.env, {
+    providerApiKey: options.providerApiKey,
+    runtimeSource,
+    defaultCodexHome: options.defaultCodexHome,
+    defaultSqliteHome: options.defaultSqliteHome
+  });
+  const codexHome = runtimeSource === 'default' ? environment.CODEX_HOME : profile.paths.codexHome;
+  const sqliteHome = runtimeSource === 'default' ? environment.CODEX_SQLITE_HOME : profile.paths.sqliteHome;
 
   if (target === 'cli') {
     const powershell = executableFromPath(['powershell.exe', 'pwsh.exe'], options.environment || process.env);
@@ -517,8 +630,8 @@ export function buildLaunchPlan(profile, target, options = {}) {
       command: powershell,
       args: [
         '-NoLogo', '-NoExit', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', runner,
-        '-CodexHome', profile.paths.codexHome,
-        '-SqliteHome', profile.paths.sqliteHome,
+        '-CodexHome', codexHome,
+        '-SqliteHome', sqliteHome,
         '-CodexExecutable', detected.executable,
         '-WorkingDirectory', workingDirectory,
         '-ProfileName', profile.name
@@ -533,7 +646,9 @@ export function buildLaunchPlan(profile, target, options = {}) {
     return {
       target,
       command: detected.executable,
-      args: ['--new-window', '--user-data-dir', profile.paths.vscodeData, workingDirectory],
+      args: runtimeSource === 'default'
+        ? ['--new-window', workingDirectory]
+        : ['--new-window', '--user-data-dir', profile.paths.vscodeData, workingDirectory],
       cwd: workingDirectory,
       environment,
       experimental: false
@@ -543,7 +658,7 @@ export function buildLaunchPlan(profile, target, options = {}) {
   return {
     target,
     command: detected.executable,
-    args: [`--user-data-dir=${profile.paths.desktopData}`],
+    args: runtimeSource === 'default' ? [] : [`--user-data-dir=${profile.paths.desktopData}`],
     cwd: workingDirectory,
     environment,
     experimental: true
@@ -566,6 +681,7 @@ export function launchProfile(root, reference, target, options = {}) {
     id: randomUUID(),
     profile: { id: profile.id, name: profile.name },
     target: plan.target,
+    runtimeSource: normalizeProfileRuntimeSource(profile.runtimeSource || profile.usageSource),
     experimental: plan.experimental,
     pid: child.pid,
     launchedAt: new Date().toISOString()
@@ -575,6 +691,7 @@ export function launchProfile(root, reference, target, options = {}) {
     profileId: result.profile.id,
     profileName: result.profile.name,
     target: result.target,
+    runtimeSource: result.runtimeSource,
     pid: result.pid,
     launchedAt: result.launchedAt
   });
