@@ -104,7 +104,26 @@ try {
   const columns = new Set(migrated.prepare('PRAGMA table_info(source_files)').all().map(column => column.name));
   assert(Number(migrated.prepare('PRAGMA user_version').get().user_version) === 2 && columns.has('invalid_json') && columns.has('parse_status'), 'schema v1 should migrate to v2');
   migrated.close();
-  console.log('SQLite index checks passed: diagnostics, retention recovery, migration, incremental updates, and removal.');
+
+  const secondCodexRoot = path.join(temporaryRoot, '.codex-profile');
+  const secondSessionDirectory = path.join(secondCodexRoot, 'sessions', '2026', '08', '24');
+  mkdirSync(secondSessionDirectory, { recursive: true });
+  writeFileSync(logPath, `${[
+    JSON.stringify({ type: 'session_meta', payload: { id: 'default-account-session', cwd: path.join(temporaryRoot, 'default-project') } }),
+    JSON.stringify({ type: 'turn_context', payload: { model: 'gpt-5.6-sol', cwd: path.join(temporaryRoot, 'default-project') } }),
+    tokenEvent('2026-08-24T04:00:00.000Z', 400, 300, 40)
+  ].join('\n')}\n`, 'utf8');
+  writeFileSync(path.join(secondSessionDirectory, 'profile.jsonl'), `${[
+    JSON.stringify({ type: 'session_meta', payload: { id: 'profile-account-session', cwd: path.join(temporaryRoot, 'profile-project') } }),
+    JSON.stringify({ type: 'turn_context', payload: { model: 'gpt-5.6-sol', cwd: path.join(temporaryRoot, 'profile-project') } }),
+    tokenEvent('2026-08-24T05:00:00.000Z', 800, 600, 80)
+  ].join('\n')}\n`, 'utf8');
+  const combined = refreshIndex(database, [codexRoot, secondCodexRoot]);
+  assert(combined.filesScanned === 2 && combined.eventCount === 2, 'combined source should index both isolated CODEX_HOME roots');
+  const isolated = refreshIndex(database, codexRoot);
+  assert(isolated.filesScanned === 1 && isolated.removedFiles === 1 && isolated.eventCount === 1, 'isolated source must remove events from every unselected CODEX_HOME root');
+
+  console.log('SQLite index checks passed: diagnostics, retention, migration, multi-root totals, and source isolation.');
 } finally {
   if (database) database.close();
   const resolved = path.resolve(temporaryRoot);

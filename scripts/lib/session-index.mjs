@@ -84,10 +84,17 @@ function retentionCutoffDate(retentionDays, now = new Date()) {
   return formatLocalIso(cutoff).slice(0, 10);
 }
 
-export function scanLogFiles(codexRoot) {
-  const roots = ['sessions', 'archived_sessions'].map(name => path.join(codexRoot, name)).filter(existsSync);
-  if (!roots.length) throw new Error(`No Codex session directories were found under: ${codexRoot}`);
-  return roots.flatMap(root => walkJsonl(root)).sort((a, b) => a.localeCompare(b));
+export function scanLogFiles(codexRoot, options = {}) {
+  const codexRoots = (Array.isArray(codexRoot) ? codexRoot : [codexRoot])
+    .map(root => path.resolve(String(root || '')))
+    .filter(Boolean);
+  const roots = codexRoots.flatMap(root => ['sessions', 'archived_sessions']
+    .map(name => path.join(root, name))
+    .filter(existsSync));
+  if (!roots.length && !options.allowEmpty) {
+    throw new Error('No Codex session directories were found under the selected data source.');
+  }
+  return [...new Set(roots.flatMap(root => walkJsonl(root)))].sort((a, b) => a.localeCompare(b));
 }
 
 export function parseSessionFile(filePath, options = {}) {
@@ -286,7 +293,7 @@ export function refreshIndex(database, codexRoot, options = {}) {
   const setting = retentionSetting(retentionDays);
   const previousSetting = metadataValue(database, 'retention_days');
   const policyChanged = previousSetting !== setting;
-  const files = scanLogFiles(codexRoot);
+  const files = scanLogFiles(codexRoot, { allowEmpty: true });
   const known = new Map(database.prepare('SELECT path, size, mtime_ms, session_id FROM source_files').all().map(row => [row.path, row]));
   const diskPaths = new Set(files);
   const removed = [...known.keys()].filter(filePath => !diskPaths.has(filePath));

@@ -10,6 +10,7 @@ export const PROFILE_SCHEMA_VERSION = 1;
 export const PROFILE_TARGETS = Object.freeze(['cli', 'vscode', 'desktop']);
 export const PROFILE_PROVIDER_TYPES = Object.freeze(['official', 'custom']);
 export const PROFILE_PROVIDER_AUTH_MODES = Object.freeze(['environment', 'openai', 'none']);
+export const PROFILE_USAGE_SOURCES = Object.freeze(['profile', 'default']);
 export const PROFILE_PROVIDER_ENV_KEY = 'DUAL_CODEX_DAY_PROVIDER_API_KEY';
 const PROFILE_REASONING_EFFORTS = new Set(['minimal', 'low', 'medium', 'high', 'xhigh']);
 const PROFILE_PERSONALITIES = new Set(['none', 'friendly', 'pragmatic']);
@@ -51,6 +52,12 @@ function launchHistoryPath(root) {
 
 export function defaultProfileProvider() {
   return { type: 'official', name: 'OpenAI 官方' };
+}
+
+export function normalizeProfileUsageSource(value) {
+  const source = String(value || 'profile').trim().toLowerCase();
+  if (!PROFILE_USAGE_SOURCES.includes(source)) throw new Error(`Unsupported Profile usage source: ${source}`);
+  return source;
 }
 
 function normalizeProviderText(value, label, maximumLength) {
@@ -199,6 +206,7 @@ function validateRegistry(registry) {
     ids.add(profile.id);
     normalizeProfileName(profile.name);
     if (profile.provider) normalizeProfileProvider(profile.provider);
+    normalizeProfileUsageSource(profile.usageSource);
   }
   return registry;
 }
@@ -317,6 +325,7 @@ function enrichProfile(root, profile) {
   return {
     ...profile,
     provider: normalizeProfileProvider(profile.provider || defaultProfileProvider()),
+    usageSource: normalizeProfileUsageSource(profile.usageSource),
     paths: profilePaths(root, profile.id)
   };
 }
@@ -336,6 +345,7 @@ export function createProfile(root = defaultProfilesRoot(), requestedName) {
     id: randomUUID(),
     name,
     provider: defaultProfileProvider(),
+    usageSource: 'profile',
     createdAt: timestamp,
     updatedAt: timestamp
   };
@@ -373,6 +383,18 @@ export function updateProfileProvider(root = defaultProfilesRoot(), reference, r
   profile.updatedAt = new Date().toISOString();
   saveProfileRegistry(root, registry);
   return enrichProfile(root, profile);
+}
+
+export function updateProfileUsageSource(root = defaultProfilesRoot(), reference, requestedSource) {
+  const registry = loadProfileRegistry(root);
+  const query = String(reference || '').trim();
+  const index = registry.profiles.findIndex(profile => profile.id === query
+    || profile.name.localeCompare(query, undefined, { sensitivity: 'accent' }) === 0);
+  if (index < 0) throw new Error(`Profile not found: ${query}`);
+  registry.profiles[index].usageSource = normalizeProfileUsageSource(requestedSource);
+  registry.profiles[index].updatedAt = new Date().toISOString();
+  saveProfileRegistry(root, registry);
+  return enrichProfile(root, registry.profiles[index]);
 }
 
 export function importProfileConfig(root = defaultProfilesRoot(), reference, sourceText) {

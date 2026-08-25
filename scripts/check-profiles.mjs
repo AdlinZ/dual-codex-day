@@ -15,7 +15,8 @@ import {
   PROFILE_PROVIDER_ENV_KEY,
   profileEnvironment,
   providerConfigPreview,
-  updateProfileProvider
+  updateProfileProvider,
+  updateProfileUsageSource
 } from './lib/profile-store.mjs';
 
 function assert(condition, message) {
@@ -56,6 +57,10 @@ try {
   assert(listProfiles(profileRoot).length === 2, 'created profiles must persist in the registry');
   assert(findProfile(profileRoot, first.id).name === 'Work account', 'profile lookup by id should work');
   assert(findProfile(profileRoot, 'personal account').id === second.id, 'profile lookup by name should be case insensitive');
+  assert(first.usageSource === 'profile', 'new profiles must default to isolated usage data');
+  const defaultUsageFirst = updateProfileUsageSource(profileRoot, first.id, 'default');
+  assert(defaultUsageFirst.usageSource === 'default' && findProfile(profileRoot, first.id).usageSource === 'default', 'Profile usage source must persist independently');
+  assertThrows(() => updateProfileUsageSource(profileRoot, first.id, 'shared'), /Unsupported Profile usage source/, 'unsupported Profile usage sources must be rejected');
   assertThrows(() => createProfile(profileRoot, 'work ACCOUNT'), /already exists/, 'duplicate display names must be rejected');
   assertThrows(() => createProfile(profileRoot, '   '), /1 to 40/, 'blank display names must be rejected');
 

@@ -23,6 +23,7 @@ function parseArgs(argv) {
     port: 8765,
     intervalSeconds: 4,
     pidFile: null,
+    sourceId: 'default',
     retentionDays: process.env.CODEX_DAY_RETENTION_DAYS || 'all',
     command: 'serve',
     once: false,
@@ -34,7 +35,8 @@ function parseArgs(argv) {
   const valueOptions = new Map([
     ['--codex-root', 'codexRoot'], ['--database', 'databasePath'], ['--dashboard', 'dashboardPath'], ['--pid-file', 'pidFile'],
     ['--pricing', 'pricingPath'], ['--candidate', 'candidatePath'],
-    ['--host', 'host'], ['--port', 'port'], ['--interval', 'intervalSeconds'], ['--retention-days', 'retentionDays'], ['--date', 'date']
+    ['--host', 'host'], ['--port', 'port'], ['--interval', 'intervalSeconds'], ['--retention-days', 'retentionDays'], ['--date', 'date'],
+    ['--source-id', 'sourceId']
   ]);
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -49,18 +51,25 @@ function parseArgs(argv) {
     const key = valueOptions.get(arg);
     if (!key || argv[index + 1] == null) throw new Error(`Unknown or incomplete option: ${arg}`);
     const value = argv[++index];
+    if (key === 'codexRoot') {
+      const resolved = path.resolve(value);
+      options.codexRoot = Array.isArray(options.codexRoot) ? [...options.codexRoot, resolved]
+        : options.codexRoot === path.join(os.homedir(), '.codex') ? [resolved] : [options.codexRoot, resolved];
+      continue;
+    }
     options[key] = ['port', 'intervalSeconds'].includes(key) ? Number(value)
-      : ['host', 'retentionDays', 'date'].includes(key) ? value : path.resolve(value);
+      : ['host', 'retentionDays', 'date', 'sourceId'].includes(key) ? value : path.resolve(value);
   }
   if (!Number.isInteger(options.port) || options.port < 1 || options.port > 65535) throw new Error('Port must be an integer from 1 to 65535.');
   if (!Number.isFinite(options.intervalSeconds) || options.intervalSeconds < 2 || options.intervalSeconds > 60) throw new Error('Interval must be from 2 to 60 seconds.');
+  if (!/^[a-z0-9:-]{1,80}$/i.test(options.sourceId)) throw new Error('Source id must use letters, numbers, colons, or hyphens.');
   options.retentionDays = normalizeRetentionDays(options.retentionDays);
   if (options.date != null && !/^\d{4}-\d{2}-\d{2}$/.test(options.date)) throw new Error('Summary date must use YYYY-MM-DD.');
   return options;
 }
 
 function printHelp() {
-  console.log(`Dual Codex Day v${packageMetadata.version}\n\nUsage:\n  node scripts/codex-day.mjs [options]\n  node scripts/codex-day.mjs doctor [--json] [--verbose]\n  node scripts/codex-day.mjs summary [--date YYYY-MM-DD] [--json]\n  node scripts/codex-day.mjs pricing [--candidate file] [--json]\n\nOptions:\n  --once                 Build once and exit\n  --open                 Open the local dashboard\n  --codex-root <path>    Codex data directory\n  --database <path>      SQLite index path\n  --dashboard <path>     Generated HTML path\n  --pricing <path>       Pricing snapshot path\n  --candidate <path>     Candidate snapshot to compare without writing\n  --pid-file <path>      Write the running service PID to a file\n  --host <host>          HTTP host (default 127.0.0.1)\n  --port <port>          HTTP port (default 8765)\n  --interval <seconds>   Poll interval from 2 to 60\n  --retention-days <n>   Keep all history or 1-36500 days (default all)\n  --date <YYYY-MM-DD>    Local date for the summary command\n  --json                 Print command output as JSON\n  --verbose              Include private local paths in doctor output\n`);
+  console.log(`Dual Codex Day v${packageMetadata.version}\n\nUsage:\n  node scripts/codex-day.mjs [options]\n  node scripts/codex-day.mjs doctor [--json] [--verbose]\n  node scripts/codex-day.mjs summary [--date YYYY-MM-DD] [--json]\n  node scripts/codex-day.mjs pricing [--candidate file] [--json]\n\nOptions:\n  --once                 Build once and exit\n  --open                 Open the local dashboard\n  --codex-root <path>    Codex data directory (repeat for a combined source)\n  --database <path>      SQLite index path\n  --dashboard <path>     Generated HTML path\n  --pricing <path>       Pricing snapshot path\n  --candidate <path>     Candidate snapshot to compare without writing\n  --pid-file <path>      Write the running service PID to a file\n  --source-id <id>       Opaque identifier reported by the local service\n  --host <host>          HTTP host (default 127.0.0.1)\n  --port <port>          HTTP port (default 8765)\n  --interval <seconds>   Poll interval from 2 to 60\n  --retention-days <n>   Keep all history or 1-36500 days (default all)\n  --date <YYYY-MM-DD>    Local date for the summary command\n  --json                 Print command output as JSON\n  --verbose              Include private local paths in doctor output\n`);
 }
 
 function doctorReport(options) {
@@ -303,7 +312,7 @@ const server = createServer((request, response) => {
   }
   const url = new URL(request.url || '/', 'http://localhost');
   if (url.pathname === '/healthz') {
-    const body = JSON.stringify({ ok: true, version: packageMetadata.version });
+    const body = JSON.stringify({ ok: true, version: packageMetadata.version, sourceId: options.sourceId });
     response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store' });
     response.end(method === 'HEAD' ? undefined : body);
     return;
@@ -314,6 +323,7 @@ const server = createServer((request, response) => {
     const body = JSON.stringify({
       ok: !latestError,
       version: packageMetadata.version,
+      sourceId: options.sourceId,
       engine: 'sqlite',
       generatedAt: latestPayload?.generatedAt || null,
       diagnostics,

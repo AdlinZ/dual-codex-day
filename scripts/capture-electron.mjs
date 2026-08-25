@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -11,8 +11,47 @@ const screenshotView = process.argv.find(argument => argument.startsWith('--view
 const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), 'dual-codex-day-electron-'));
 mkdirSync(path.dirname(outputPath), { recursive: true });
 
+function tokenEvent(timestamp, input, cached, output) {
+  return JSON.stringify({
+    timestamp,
+    type: 'event_msg',
+    payload: {
+      type: 'token_count',
+      info: {
+        last_token_usage: {
+          input_tokens: input,
+          cached_input_tokens: cached,
+          cache_write_input_tokens: 0,
+          output_tokens: output,
+          reasoning_output_tokens: Math.floor(output / 4),
+          total_tokens: input + output
+        },
+        model_context_window: 258400
+      }
+    }
+  });
+}
+
+function createUsageFixture(codexRoot, fixtureId = 'default', scale = 1) {
+  const now = new Date();
+  const sessionDirectory = path.join(codexRoot, 'sessions', String(now.getFullYear()), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0'));
+  const project = path.join(temporaryRoot, `fictional-${fixtureId}-project`);
+  mkdirSync(sessionDirectory, { recursive: true });
+  const events = [
+    JSON.stringify({ type: 'session_meta', payload: { id: `synthetic-${fixtureId}-session`, cwd: project } }),
+    JSON.stringify({ type: 'turn_context', payload: { model: 'gpt-5.6-sol', cwd: project } }),
+    tokenEvent(new Date(now.getTime() - 70 * 60 * 1000).toISOString(), 128000 * scale, 96000 * scale, 9200 * scale),
+    tokenEvent(new Date(now.getTime() - 35 * 60 * 1000).toISOString(), 86000 * scale, 61000 * scale, 6800 * scale),
+    tokenEvent(new Date(now.getTime() - 8 * 60 * 1000).toISOString(), 154000 * scale, 122000 * scale, 11300 * scale)
+  ];
+  writeFileSync(path.join(sessionDirectory, 'synthetic.jsonl'), `${events.join('\n')}\n`, 'utf8');
+}
+
 try {
+  const usageRoot = path.join(temporaryRoot, '.codex');
+  createUsageFixture(usageRoot);
   const workProfile = createProfile(temporaryRoot, '工作账号');
+  createUsageFixture(workProfile.paths.codexHome, 'work', 0.35);
   createProfile(temporaryRoot, '个人账号');
   launchProfile(temporaryRoot, workProfile.id, 'desktop', {
     targets: { desktop: { available: true, executable: process.execPath, experimental: true } },
@@ -28,6 +67,7 @@ try {
     env: {
       ...process.env,
       CODEX_PROFILES_ROOT: temporaryRoot,
+      CODEX_USAGE_ROOT: usageRoot,
       DUAL_CODEX_DAY_SCREENSHOT: outputPath,
       DUAL_CODEX_DAY_SCREENSHOT_VIEW: screenshotView
     },

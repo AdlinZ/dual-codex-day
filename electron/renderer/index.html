@@ -17,6 +17,16 @@
           <span id="version-label">v0.10.0</span>
         </div>
       </div>
+      <nav class="primary-tabs" aria-label="主要功能">
+        <button class="primary-tab is-active" type="button" data-view="launcher" aria-selected="true">
+          <i data-lucide="rocket"></i>
+          <span>启动中心</span>
+        </button>
+        <button class="primary-tab" type="button" data-view="dashboard" aria-selected="false">
+          <i data-lucide="chart-no-axes-combined"></i>
+          <span>用量分析</span>
+        </button>
+      </nav>
       <div class="titlebar-status" id="titlebar-status">
         <span class="status-dot"></span>
         <span>本地就绪</span>
@@ -27,7 +37,7 @@
       </button>
     </header>
 
-    <div class="workspace-shell">
+    <div class="workspace-shell" id="launcher-view" data-app-view="launcher">
       <aside class="sidebar">
         <div class="section-heading sidebar-heading">
           <div>
@@ -56,10 +66,16 @@
               </div>
               <p id="selected-profile-path">请选择一个账号配置</p>
             </div>
-            <button class="secondary-button" id="open-profile-folder-button" type="button" disabled>
-              <i data-lucide="folder-open"></i>
-              <span>配置目录</span>
-            </button>
+            <div class="profile-header-actions">
+              <button class="secondary-button" id="profile-usage-source-button" type="button" disabled>
+                <i data-lucide="database"></i>
+                <span id="profile-usage-source-label">独立用量</span>
+              </button>
+              <button class="secondary-button" id="open-profile-folder-button" type="button" disabled>
+                <i data-lucide="folder-open"></i>
+                <span>配置目录</span>
+              </button>
+            </div>
           </div>
 
           <div class="profile-settings">
@@ -109,11 +125,11 @@
           <div class="section-heading usage-heading">
             <div>
               <span class="eyebrow">Today</span>
-              <h2 id="usage-heading">默认账号今日用量</h2>
+              <h2 id="usage-heading">当前账号今日用量</h2>
             </div>
             <button class="secondary-button" id="open-dashboard-button" type="button">
               <i data-lucide="chart-no-axes-combined"></i>
-              <span>详细仪表盘</span>
+              <span>查看用量分析</span>
             </button>
           </div>
           <div class="metric-grid">
@@ -163,6 +179,67 @@
         </div>
       </main>
     </div>
+
+    <section class="dashboard-view" id="dashboard-view" data-app-view="dashboard" aria-label="用量分析" hidden>
+      <div class="usage-toolbar">
+        <label class="usage-select-control"><span>账号</span><select id="usage-source-select"></select></label>
+        <div class="usage-range" id="usage-range" role="group" aria-label="时间范围">
+          <button type="button" data-range="today">今天</button>
+          <button type="button" data-range="week" class="is-active">本周</button>
+          <button type="button" data-range="30d">30 天</button>
+          <button type="button" data-range="all">全部</button>
+        </div>
+        <label class="usage-select-control compact"><span>模型</span><select id="usage-model-filter"><option value="">全部</option></select></label>
+        <label class="usage-select-control compact"><span>项目</span><select id="usage-project-filter"><option value="">全部</option></select></label>
+        <span class="usage-toolbar-spacer"></span>
+        <button class="icon-button" id="usage-diagnostics-button" type="button" title="数据诊断" aria-label="数据诊断"><i data-lucide="database"></i></button>
+        <button class="icon-button" id="usage-settings-button" type="button" title="用量设置" aria-label="用量设置"><i data-lucide="settings-2"></i></button>
+        <button class="secondary-button" id="usage-poster-button" type="button"><i data-lucide="image-down"></i><span>导出海报</span></button>
+        <button class="secondary-button" id="usage-export-button" type="button"><i data-lucide="download"></i><span>导出 CSV</span></button>
+      </div>
+
+      <div class="native-usage-scroll">
+        <div class="dashboard-state" id="dashboard-loading"><span class="dashboard-spinner"></span><strong>正在建立本地索引</strong></div>
+        <div class="dashboard-state dashboard-error" id="dashboard-error" hidden><i data-lucide="circle-alert"></i><strong>读取失败</strong><p id="dashboard-error-message"></p><button class="secondary-button" id="dashboard-retry-button" type="button">重试</button></div>
+        <div class="native-usage" id="native-usage-content" hidden>
+          <header class="usage-heading-row">
+            <div><span class="eyebrow">Usage overview</span><h1 id="usage-title">本周用量</h1><p id="usage-subtitle"></p></div>
+            <div class="usage-source-badge"><span class="status-dot"></span><span id="usage-source-meta">独立本地索引</span></div>
+          </header>
+
+          <section class="usage-kpis" aria-label="用量指标">
+            <article><span>总 Token</span><strong id="usage-kpi-total">0</strong><small id="usage-kpi-total-note">0 次调用</small></article>
+            <article><span>API 等价预计成本</span><strong id="usage-kpi-cost">$0.00</strong><small id="usage-kpi-coverage">等待定价</small></article>
+            <article><span>任务</span><strong id="usage-kpi-tasks">0</strong><small id="usage-kpi-projects">0 个项目</small></article>
+            <article><span>缓存率</span><strong id="usage-kpi-cache">0%</strong><small id="usage-kpi-cached">0 cached</small></article>
+            <article><span>每次调用</span><strong id="usage-kpi-average">0</strong><small>平均 Token</small></article>
+          </section>
+
+          <section class="usage-overview-grid">
+            <div class="usage-panel trend-panel">
+              <div class="usage-panel-heading"><div><span class="eyebrow">Token trend</span><h2>使用趋势</h2></div><div class="trend-legend"><span><i class="legend-input"></i>输入</span><span><i class="legend-output"></i>输出</span></div></div>
+              <div class="usage-chart" id="usage-trend-chart"></div>
+            </div>
+            <div class="usage-panel cost-panel">
+              <div class="usage-panel-heading"><div><span class="eyebrow">Cost breakdown</span><h2>预计成本构成</h2></div><span id="usage-cost-total" class="panel-total">$0.00</span></div>
+              <div class="cost-breakdown" id="usage-cost-breakdown"></div>
+              <div class="budget-progress"><div><span>预算使用</span><strong id="usage-budget-label">未设置</strong></div><span class="budget-track"><i id="usage-budget-bar"></i></span></div>
+            </div>
+          </section>
+
+          <section class="usage-detail-grid">
+            <div class="usage-panel">
+              <div class="usage-panel-heading"><div><span class="eyebrow">Distribution</span><h2>模型与项目</h2></div></div>
+              <div class="usage-table" id="usage-distribution"></div>
+            </div>
+            <div class="usage-panel">
+              <div class="usage-panel-heading"><div><span class="eyebrow">Recent tasks</span><h2>最近任务</h2></div><span id="usage-task-count" class="panel-meta"></span></div>
+              <div class="usage-task-list" id="usage-task-list"></div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
   </div>
 
   <dialog class="modal" id="create-profile-dialog">
@@ -321,6 +398,49 @@
         </button>
       </div>
     </form>
+  </dialog>
+
+  <dialog class="modal usage-settings-modal" id="usage-settings-dialog">
+    <form id="usage-settings-form">
+      <div class="modal-heading"><div class="modal-icon"><i data-lucide="settings-2"></i></div><div><span class="eyebrow">Usage settings</span><h2>用量设置</h2></div></div>
+      <div class="usage-settings-grid">
+        <label><span>中转倍率</span><input id="usage-relay-multiplier" type="number" min="0" step="0.01"></label>
+        <label><span>每月预算（USD）</span><input id="usage-monthly-budget" type="number" min="0" step="1"></label>
+        <label><span>计价模式</span><select id="usage-cost-mode"><option value="standard">Standard</option><option value="batch">Batch</option><option value="flex">Flex</option><option value="fast">Fast</option></select></label>
+      </div>
+      <div class="modal-actions"><button class="secondary-button" id="usage-settings-cancel" type="button">取消</button><button class="primary-button" type="submit">保存</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="modal usage-source-modal" id="profile-usage-source-dialog">
+    <form id="profile-usage-source-form">
+      <div class="modal-heading"><div class="modal-icon"><i data-lucide="database"></i></div><div><span class="eyebrow">Account data</span><h2>账号用量来源</h2></div></div>
+      <div class="usage-source-options" role="radiogroup" aria-label="账号用量来源">
+        <label class="usage-source-option">
+          <input type="radio" name="profileUsageSource" value="default">
+          <span><strong>当前默认 Codex</strong><small>读取当前工作账号的已有记录</small></span>
+        </label>
+        <label class="usage-source-option">
+          <input type="radio" name="profileUsageSource" value="profile">
+          <span><strong>独立 Profile</strong><small>只读取由此 Profile 产生的记录</small></span>
+        </label>
+      </div>
+      <div class="modal-actions"><button class="secondary-button" id="profile-usage-source-cancel" type="button">取消</button><button class="primary-button" type="submit">保存</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="modal diagnostics-modal" id="usage-diagnostics-dialog">
+    <div class="modal-heading"><div class="modal-icon"><i data-lucide="database"></i></div><div><span class="eyebrow">Data health</span><h2>数据诊断</h2></div></div>
+    <div class="diagnostics-grid" id="usage-diagnostics-content"></div>
+    <div class="modal-actions"><button class="primary-button" id="usage-diagnostics-close" type="button">关闭</button></div>
+  </dialog>
+
+  <dialog class="modal poster-modal" id="usage-poster-dialog">
+    <div class="poster-dialog-body">
+      <div class="modal-heading"><div class="modal-icon"><i data-lucide="image-down"></i></div><div><span class="eyebrow">Poster preview</span><h2>用量海报</h2></div></div>
+      <div class="poster-preview-frame"><img id="usage-poster-preview" alt="当前筛选条件的用量海报预览"></div>
+      <div class="modal-actions"><button class="secondary-button" id="usage-poster-cancel" type="button">取消</button><button class="primary-button" id="usage-poster-save" type="button"><i data-lucide="download"></i><span>保存 PNG</span></button></div>
+    </div>
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>

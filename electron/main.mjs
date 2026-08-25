@@ -1,11 +1,8 @@
 import { existsSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
-import { spawn } from 'node:child_process';
-import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DatabaseSync } from 'node:sqlite';
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, safeStorage, shell } from 'electron';
 import {
   createProfile,
   defaultProfilesRoot,
@@ -19,9 +16,10 @@ import {
   normalizeProfileProvider,
   PROFILE_TARGETS,
   providerConfigPreview,
-  updateProfileProvider
+  updateProfileProvider,
+  updateProfileUsageSource
 } from '../scripts/lib/profile-store.mjs';
-import { getIndexDiagnostics, readDailySummary } from '../scripts/lib/session-index.mjs';
+import { getIndexDiagnostics, openIndex, readDailySummary, readIndexedEvents, refreshIndex } from '../scripts/lib/session-index.mjs';
 
 const electronDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.dirname(electronDirectory);
@@ -32,16 +30,11 @@ const externalRepoRoot = repoRoot.endsWith(asarMarker)
     ? repoRoot.replace(`${asarMarker}${path.sep}`, `${asarMarker}.unpacked${path.sep}`)
     : repoRoot;
 const packageMetadata = JSON.parse(readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
-const dashboardUrl = 'http://127.0.0.1:8765/?live=1';
-const dashboardHealthUrl = 'http://127.0.0.1:8765/healthz';
 const usageDataRoot = app.isPackaged ? path.join(app.getPath('userData'), 'usage') : path.join(repoRoot, '.codex-day');
-const databasePath = path.join(usageDataRoot, 'codex-day.sqlite');
-const dashboardPath = path.join(usageDataRoot, 'index.html');
+const defaultCodexRoot = path.resolve(process.env.CODEX_USAGE_ROOT || process.env.CODEX_HOME || path.join(os.homedir(), '.codex'));
 const profilesRoot = defaultProfilesRoot();
 
 let mainWindow = null;
-let dashboardWindow = null;
-let ownedDashboardService = null;
 let currentWorkspace = app.isPackaged ? os.homedir() : repoRoot;
 let targetCache = null;
 
@@ -69,11 +62,64 @@ function publicProfile(profile) {
     updatedAt: profile.updatedAt,
     root: profile.paths.root,
     codexHome: profile.paths.codexHome,
+    usageSource: profile.usageSource,
     provider: profile.provider,
     hasProviderCredential: profile.provider.type === 'custom'
       && profile.provider.authMode === 'environment'
       && existsSync(encryptedSecretPath)
   };
+}
+
+function usageSources() {
+  const profiles = listProfiles(profilesRoot);
+  const profileSources = profiles.map(profile => ({
+    id: `profile:${profile.id}`,
+    name: profile.name,
+    detail: profile.usageSource === 'default' ? '当前默认 Codex' : profile.provider?.name || 'OpenAI 官方',
+    kind: 'profile',
+    roots: [profile.usageSource === 'default' ? defaultCodexRoot : profile.paths.codexHome]
+  }));
+  const defaultSource = {
+    id: 'default',
+    name: '默认账号',
+    detail: '系统 CODEX_HOME',
+    kind: 'default',
+    roots: [defaultCodexRoot]
+  };
+  const allRoots = new Map();
+  for (const root of [defaultCodexRoot, ...profileSources.flatMap(source => source.roots)]) {
+    const resolved = path.resolve(root);
+    allRoots.set(process.platform === 'win32' ? resolved.toLowerCase() : resolved, resolved);
+  }
+  return [
+    {
+      id: 'all',
+      name: '全部账号',
+      detail: `${allRoots.size} 个独立数据源`,
+      kind: 'all',
+      roots: [...allRoots.values()]
+    },
+    defaultSource,
+    ...profileSources
+  ];
+}
+
+function usageSource(sourceId = 'all') {
+  const source = usageSources().find(candidate => candidate.id === String(sourceId || 'all'));
+  if (!source) throw new Error('所选用量数据源不存在，请刷新后重试。');
+  return source;
+}
+
+function publicUsageSources() {
+  return usageSources().map(({ roots: _roots, ...source }) => source);
+}
+
+function usageStoragePaths(sourceId) {
+  if (sourceId === 'default') {
+    return { databasePath: path.join(usageDataRoot, 'codex-day.sqlite') };
+  }
+  const slug = sourceId.replace(/[^a-z0-9-]/gi, '-').toLowerCase();
+  return { databasePath: path.join(usageDataRoot, `codex-day-${slug}.sqlite`) };
 }
 
 function providerSecretPath(profile) {
@@ -136,108 +182,70 @@ function emptySummary() {
   };
 }
 
-function readUsage() {
-  if (!existsSync(databasePath)) {
-    return { available: false, summary: emptySummary(), status: 'new', updatedAt: null };
-  }
+function readUsage(sourceId = 'default') {
+  const source = usageSource(sourceId);
+  const { databasePath } = usageStoragePaths(sourceId);
   let database;
   try {
-    database = new DatabaseSync(databasePath, { readOnly: true, timeout: 3000 });
+    database = openIndex(databasePath);
+    const indexResult = refreshIndex(database, source.roots);
     const summary = readDailySummary(database);
-    const diagnostics = getIndexDiagnostics(database);
+    const diagnostics = getIndexDiagnostics(database, { indexResult });
     return {
       available: true,
+      source: { id: source.id, name: source.name, detail: source.detail, kind: source.kind },
       summary,
       status: diagnostics.status,
-      updatedAt: diagnostics.lastRefreshAt || statSync(databasePath).mtime.toISOString()
+      updatedAt: diagnostics.lastRefreshAt || new Date().toISOString()
     };
   } catch {
-    return { available: false, summary: emptySummary(), status: 'error', updatedAt: null };
+    return {
+      available: false,
+      source: { id: source.id, name: source.name, detail: source.detail, kind: source.kind },
+      summary: emptySummary(),
+      status: 'error',
+      updatedAt: null
+    };
   } finally {
     database?.close();
   }
 }
 
-function getSnapshot() {
+function getSnapshot(profileId) {
+  const profiles = listProfiles(profilesRoot);
+  const selectedProfile = profiles.find(profile => profile.id === String(profileId || '')) || profiles[0] || null;
+  const launcherUsageSourceId = selectedProfile ? `profile:${selectedProfile.id}` : 'default';
   const recentLaunches = listProfileLaunches(profilesRoot, { limit: 10 });
   return {
     version: packageMetadata.version,
     workspace: currentWorkspace,
     profilesRoot,
-    profiles: listProfiles(profilesRoot).map(publicProfile),
+    profiles: profiles.map(publicProfile),
+    usageSources: publicUsageSources(),
     security: { providerSecretsEncrypted: secureProviderStorageAvailable() },
     targets: readTargets(),
-    usage: readUsage(),
+    usage: readUsage(launcherUsageSourceId),
     activeInstanceCount: recentLaunches.filter(launch => launch.active).length,
     recentLaunches
   };
 }
 
-function checkDashboardHealth(timeoutMs = 900) {
-  return new Promise(resolve => {
-    const request = http.get(dashboardHealthUrl, response => {
-      response.resume();
-      resolve(response.statusCode === 200);
-    });
-    request.setTimeout(timeoutMs, () => {
-      request.destroy();
-      resolve(false);
-    });
-    request.on('error', () => resolve(false));
-  });
-}
-
-async function waitForDashboard() {
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    if (await checkDashboardHealth()) return true;
-    await new Promise(resolve => setTimeout(resolve, 250));
+function readUsageData(sourceId) {
+  const source = usageSource(sourceId);
+  const { databasePath } = usageStoragePaths(source.id);
+  const database = openIndex(databasePath);
+  try {
+    const indexResult = refreshIndex(database, source.roots);
+    return {
+      generatedAt: new Date().toISOString(),
+      source: { id: source.id, name: source.name, detail: source.detail, kind: source.kind },
+      events: readIndexedEvents(database),
+      diagnostics: getIndexDiagnostics(database, { indexResult }),
+      pricing: JSON.parse(readFileSync(path.join(externalRepoRoot, 'config', 'pricing.json'), 'utf8'))
+    };
+  } finally {
+    database.close();
   }
-  return false;
-}
-
-async function ensureDashboardService() {
-  if (await checkDashboardHealth()) return;
-  if (!ownedDashboardService || ownedDashboardService.exitCode != null) {
-    ownedDashboardService = spawn(process.execPath, [
-      path.join(externalRepoRoot, 'scripts', 'codex-day.mjs'),
-      '--database', databasePath,
-      '--dashboard', dashboardPath,
-      '--pid-file', path.join(usageDataRoot, 'service.pid')
-    ], {
-      cwd: externalRepoRoot,
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
-      stdio: 'ignore',
-      windowsHide: true
-    });
-    ownedDashboardService.once('exit', () => { ownedDashboardService = null; });
-  }
-  if (!await waitForDashboard()) throw new Error('本地用量服务启动失败，请先运行 npm start 查看诊断信息。');
-}
-
-async function openDashboardWindow() {
-  await ensureDashboardService();
-  if (dashboardWindow && !dashboardWindow.isDestroyed()) {
-    dashboardWindow.show();
-    dashboardWindow.focus();
-    return;
-  }
-  dashboardWindow = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 980,
-    minHeight: 680,
-    title: 'Dual Codex Day - 详细用量',
-    backgroundColor: '#f5f6f3',
-    icon: path.join(externalRepoRoot, 'assets', 'codex-day.ico'),
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true
-    }
-  });
-  dashboardWindow.removeMenu();
-  dashboardWindow.on('closed', () => { dashboardWindow = null; });
-  await dashboardWindow.loadURL(dashboardUrl);
 }
 
 async function confirmLaunch(result) {
@@ -249,7 +257,7 @@ async function confirmLaunch(result) {
 }
 
 function registerIpc() {
-  ipcMain.handle('app:get-snapshot', () => getSnapshot());
+  ipcMain.handle('app:get-snapshot', (_event, profileId) => getSnapshot(profileId));
   ipcMain.handle('profiles:create', (_event, requestedName) => {
     const profile = createProfile(profilesRoot, requestedName);
     return publicProfile(profile);
@@ -275,6 +283,14 @@ function registerIpc() {
       unlinkSync(providerSecretPath(profile));
     }
     return publicProfile(updateProfileProvider(profilesRoot, profile.id, provider));
+  });
+  ipcMain.handle('profiles:set-usage-source', (_event, payload) => {
+    const profile = updateProfileUsageSource(
+      profilesRoot,
+      String(payload?.profileId || ''),
+      String(payload?.source || '')
+    );
+    return publicProfile(profile);
   });
   ipcMain.handle('profiles:import-config', async (_event, profileId) => {
     const profile = findProfile(profilesRoot, String(profileId || ''));
@@ -317,10 +333,7 @@ function registerIpc() {
     currentWorkspace = path.resolve(result.filePaths[0]);
     return currentWorkspace;
   });
-  ipcMain.handle('dashboard:open', async () => {
-    await openDashboardWindow();
-    return true;
-  });
+  ipcMain.handle('usage:get-data', (_event, sourceId) => readUsageData(sourceId));
 }
 
 async function captureRequestedScreenshot(window) {
@@ -374,6 +387,103 @@ async function captureRequestedScreenshot(window) {
     })()`);
     if (!providerOpened) throw new Error('Provider editor did not open for the screenshot check.');
     await new Promise(resolve => setTimeout(resolve, 450));
+  } else if (screenshotView === 'usage-source') {
+    window.setSize(1200, 820);
+    const usageSourceOpened = await window.webContents.executeJavaScript(`(async () => {
+      for (let attempt = 0; attempt < 160; attempt += 1) {
+        const button = document.querySelector('#profile-usage-source-button');
+        if (button && !button.disabled) {
+          button.click();
+          return document.querySelector('#profile-usage-source-dialog')?.open === true;
+        }
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      return false;
+    })()`);
+    if (!usageSourceOpened) throw new Error('Profile usage-source dialog did not open for the screenshot check.');
+    await new Promise(resolve => setTimeout(resolve, 350));
+  } else if (screenshotView.startsWith('launcher')) {
+    window.setSize(1440, 960);
+    const launcherProfileIndex = screenshotView === 'launcher-empty' ? 1 : 0;
+    const launcherLoaded = await window.webContents.executeJavaScript(`(async () => {
+      for (let attempt = 0; attempt < 160; attempt += 1) {
+        const profiles = Array.from(document.querySelectorAll('[data-profile-id]'));
+        if (profiles.length >= 2 && document.querySelector('#metric-tokens')?.textContent !== '0') {
+          if (${launcherProfileIndex} === 1) {
+            profiles[${launcherProfileIndex}].click();
+            for (let profileAttempt = 0; profileAttempt < 160; profileAttempt += 1) {
+              const heading = document.querySelector('#usage-heading')?.textContent || '';
+              const tokens = document.querySelector('#metric-tokens')?.textContent;
+              const calls = document.querySelector('#metric-calls')?.textContent;
+              if (heading.includes('个人账号') && tokens === '0' && calls === '0') return true;
+              await new Promise(resolve => setTimeout(resolve, 50));
+            }
+            return false;
+          }
+          return (document.querySelector('#usage-heading')?.textContent || '').includes('工作账号');
+        }
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      return false;
+    })()`);
+    if (!launcherLoaded) throw new Error('Profile-scoped launcher usage did not load for the screenshot check.');
+    await new Promise(resolve => setTimeout(resolve, 350));
+  } else if (screenshotView.startsWith('dashboard')) {
+    window.setSize(screenshotView === 'dashboard-min' ? 980 : 1440, screenshotView === 'dashboard-min' ? 680 : 960);
+    const dashboardLoaded = await window.webContents.executeJavaScript(`(async () => {
+      const tab = document.querySelector('[data-view="dashboard"]');
+      tab?.click();
+      for (let attempt = 0; attempt < 160; attempt += 1) {
+        const content = document.querySelector('#native-usage-content');
+        if (content && !content.hidden && document.querySelector('#usage-kpi-total')?.textContent !== '0') return true;
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      return false;
+    })()`);
+    if (!dashboardLoaded) throw new Error('Embedded dashboard did not load for the screenshot check.');
+    if (screenshotView === 'dashboard-profile') {
+      const profileLoaded = await window.webContents.executeJavaScript(`(async () => {
+        const select = document.querySelector('#usage-source-select');
+        const profile = Array.from(select?.options || []).find(option => option.value.startsWith('profile:'));
+        if (!select || !profile) return false;
+        select.value = profile.value;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        for (let attempt = 0; attempt < 160; attempt += 1) {
+          const content = document.querySelector('#native-usage-content');
+          if (content && !content.hidden && select.value.startsWith('profile:') && document.querySelector('#usage-kpi-total')?.textContent !== '0') return true;
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+        return false;
+      })()`);
+      if (!profileLoaded) throw new Error('Isolated Profile dashboard did not load for the screenshot check.');
+    }
+    if (screenshotView === 'dashboard-poster' || screenshotView === 'dashboard-poster-save') {
+      const posterOpened = await window.webContents.executeJavaScript(`(async () => {
+        document.querySelector('#usage-poster-button')?.click();
+        for (let attempt = 0; attempt < 80; attempt += 1) {
+          const dialog = document.querySelector('#usage-poster-dialog');
+          const preview = document.querySelector('#usage-poster-preview');
+          if (dialog?.open && preview?.complete && preview.naturalWidth === 1200 && preview.naturalHeight === 1600) return true;
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+        return false;
+      })()`);
+      if (!posterOpened) throw new Error('Usage poster preview did not render at 1200 by 1600 pixels.');
+      if (screenshotView === 'dashboard-poster-save') {
+        const posterPath = `${path.resolve(target)}.poster.png`;
+        const downloadCompleted = new Promise((resolve, reject) => {
+          window.webContents.session.once('will-download', (_event, item) => {
+            item.setSavePath(posterPath);
+            item.once('done', (_doneEvent, state) => state === 'completed' ? resolve() : reject(new Error(`Poster download ended with state: ${state}`)));
+          });
+        });
+        await window.webContents.executeJavaScript(`document.querySelector('#usage-poster-save')?.click()`);
+        await downloadCompleted;
+        const size = nativeImage.createFromPath(posterPath).getSize();
+        if (size.width !== 1200 || size.height !== 1600) throw new Error('Saved usage poster has incorrect dimensions.');
+      }
+    }
+    await new Promise(resolve => setTimeout(resolve, 700));
   }
   const image = await window.webContents.capturePage();
   writeFileSync(path.resolve(target), image.toPNG());
@@ -438,8 +548,4 @@ app.on('activate', () => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
-});
-
-app.on('before-quit', () => {
-  if (ownedDashboardService && ownedDashboardService.exitCode == null) ownedDashboardService.kill();
 });

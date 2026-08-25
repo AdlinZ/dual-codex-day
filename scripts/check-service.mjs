@@ -41,6 +41,7 @@ function startService(port) {
     '--pid-file', pidPath,
     '--host', '127.0.0.1',
     '--port', String(port),
+    '--source-id', 'service-test',
     '--interval', '2'
   ], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
   child.output = '';
@@ -85,7 +86,7 @@ try {
   const port = await availablePort();
   first = startService(port);
   const firstStatus = await waitForHealth(port, first);
-  assert(firstStatus.ok && firstStatus.version === packageMetadata.version, 'service health should report liveness and package version');
+  assert(firstStatus.ok && firstStatus.version === packageMetadata.version && firstStatus.sourceId === 'service-test', 'service health should report liveness, version, and the isolated source id');
   const statusResponse = await fetch(`http://127.0.0.1:${port}/api/status`);
   const status = await statusResponse.json();
   assert(status.ok && status.diagnostics.schemaVersion === 2 && status.diagnostics.counts.events === 1, 'status endpoint should expose schema v2 diagnostics');
