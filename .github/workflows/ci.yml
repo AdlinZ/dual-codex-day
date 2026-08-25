@@ -33,4 +33,4 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - run: docker build --tag codex-day:ci .
+      - run: docker build --tag dual-codex-day:ci .

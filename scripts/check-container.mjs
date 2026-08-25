@@ -18,6 +18,7 @@ const envExample = read('.env.example');
 requireMatch(dockerfile, /^FROM node:22-/m, 'Docker image must use Node.js 22.');
 requireMatch(dockerfile, /^USER node$/m, 'Container must run as the non-root node user.');
 requireMatch(dockerfile, /^HEALTHCHECK /m, 'Docker image must define a health check.');
+requireMatch(dockerfile, /org\.opencontainers\.image\.title="dual-codex-day"/, 'Docker image must use the renamed product title.');
 requireMatch(dockerfile, /"--codex-root", "\/codex"/, 'Container must read logs from /codex.');
 requireMatch(dockerfile, /"--database", "\/data\/codex-day\.sqlite"/, 'Container database must be stored under /data.');
 requireMatch(dockerfile, /"--host", "0\.0\.0\.0"/, 'Container service must listen on its network interface.');
@@ -34,7 +35,8 @@ requireMatch(envExample, /^CODEX_DAY_RETENTION_DAYS=all$/m, 'Environment example
 
 const releaseWorkflow = read('.github/workflows/release.yml');
 requireMatch(releaseWorkflow, /packages: write/, 'Release workflow must be allowed to publish packages.');
-requireMatch(releaseWorkflow, /ghcr\.io\/adlinz\/codex-day/, 'Release workflow must publish the public GHCR image.');
+requireMatch(releaseWorkflow, /ghcr\.io\/adlinz\/dual-codex-day/, 'Release workflow must publish the renamed public GHCR image.');
+if (/ghcr\.io\/adlinz\/codex-day/.test(releaseWorkflow)) throw new Error('Release workflow must not publish the retired GHCR image name.');
 requireMatch(releaseWorkflow, /linux\/amd64,linux\/arm64/, 'Release workflow must publish amd64 and arm64 images.');
 requireMatch(releaseWorkflow, /pattern=v\{\{version\}\}/, 'Release workflow must publish the v-prefixed image tag.');
 requireMatch(releaseWorkflow, /docker logout ghcr\.io[\s\S]*imagetools inspect/, 'Release workflow must verify anonymous GHCR access before release.');

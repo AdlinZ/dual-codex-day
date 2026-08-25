@@ -5,12 +5,18 @@
   "open": "打开仪表盘",
   "restart": "重启服务",
   "logs": "打开日志目录",
+  "dailySummary": "显示今日摘要",
+  "dailySummaryNotifications": "每日摘要提醒",
+  "dailySummaryTime": "提醒时间",
   "startup": "开机自启",
   "exit": "退出并停止服务",
-  "startedTitle": "codex-day 已启动",
+  "startedTitle": "Dual Codex Day 已启动",
   "startedBody": "Token 仪表盘正在后台刷新。",
-  "failedTitle": "codex-day 启动失败",
+  "failedTitle": "Dual Codex Day 启动失败",
   "failedBody": "请查看本地服务日志。",
-  "recoveredTitle": "codex-day 已恢复",
-  "recoveredBody": "本地服务已重新连接。"
+  "recoveredTitle": "Dual Codex Day 已恢复",
+  "recoveredBody": "本地服务已重新连接。",
+  "summaryTitle": "Dual Codex Day 今日摘要",
+  "summaryBody": "{0} tokens · {1} 次调用 · {2} 个任务",
+  "summaryEmptyBody": "今天还没有 Codex Token 记录。"
 }

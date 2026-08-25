@@ -10,12 +10,16 @@ $serviceScript = Join-Path $PSScriptRoot 'codex-day.mjs'
 $servicePidPath = Join-Path $stateDirectory 'service.pid'
 $stdoutPath = Join-Path $stateDirectory 'service-out.log'
 $stderrPath = Join-Path $stateDirectory 'service-error.log'
+$summaryDatePath = Join-Path $stateDirectory 'daily-summary-date.txt'
 $labelsPath = Join-Path $repoRoot 'config\tray.zh-CN.json'
 $iconPath = Join-Path $repoRoot 'assets\codex-day.ico'
 $dashboardUrl = 'http://127.0.0.1:8765/?live=1'
-$healthUrl = 'http://127.0.0.1:8765/healthz'
+$healthUrl = 'http://127.0.0.1:8765/api/status'
+$summaryUrl = 'http://127.0.0.1:8765/api/summary'
 $startupRegistryPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 $startupRegistryName = 'CodexDay'
+$summaryRegistryName = 'CodexDayDailySummary'
+$summaryHourRegistryName = 'CodexDayDailySummaryHour'
 $startupCommand = 'powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy RemoteSigned -File "{0}"' -f $PSCommandPath
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -114,6 +118,40 @@ function Set-StartupEnabled([bool]$Enabled) {
     }
 }
 
+function Test-DailySummaryEnabled {
+    try {
+        return [int](Get-ItemPropertyValue -Path $startupRegistryPath -Name $summaryRegistryName -ErrorAction Stop) -eq 1
+    }
+    catch {
+        return $false
+    }
+}
+
+function Set-DailySummaryEnabled([bool]$Enabled) {
+    New-Item -Path $startupRegistryPath -Force | Out-Null
+    if ($Enabled) {
+        Set-ItemProperty -Path $startupRegistryPath -Name $summaryRegistryName -Value 1 -Type DWord
+    }
+    else {
+        Remove-ItemProperty -Path $startupRegistryPath -Name $summaryRegistryName -ErrorAction SilentlyContinue
+    }
+}
+
+function Get-DailySummaryHour {
+    try {
+        $value = [int](Get-ItemPropertyValue -Path $startupRegistryPath -Name $summaryHourRegistryName -ErrorAction Stop)
+        if ($value -in @(17, 18, 20, 22)) { return $value }
+    }
+    catch {}
+    return 18
+}
+
+function Set-DailySummaryHour([int]$Hour) {
+    if ($Hour -notin @(17, 18, 20, 22)) { throw 'Unsupported daily summary hour.' }
+    New-Item -Path $startupRegistryPath -Force | Out-Null
+    Set-ItemProperty -Path $startupRegistryPath -Name $summaryHourRegistryName -Value $Hour -Type DWord
+}
+
 $trayIcon = [System.Drawing.SystemIcons]::Information
 $ownsTrayIcon = $false
 if (Test-Path -LiteralPath $iconPath) {
@@ -123,7 +161,7 @@ if (Test-Path -LiteralPath $iconPath) {
 
 $notifyIcon = New-Object System.Windows.Forms.NotifyIcon
 $notifyIcon.Icon = $trayIcon
-$notifyIcon.Text = 'codex-day'
+$notifyIcon.Text = 'Dual Codex Day'
 $notifyIcon.Visible = $true
 
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
@@ -133,6 +171,23 @@ $menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator)) | Out-Null
 $openItem = $menu.Items.Add($labels.open)
 $restartItem = $menu.Items.Add($labels.restart)
 $logsItem = $menu.Items.Add($labels.logs)
+$summaryItem = $menu.Items.Add($labels.dailySummary)
+$summaryNotificationsItem = New-Object System.Windows.Forms.ToolStripMenuItem -ArgumentList ([string]$labels.dailySummaryNotifications)
+$summaryNotificationsItem.Checked = Test-DailySummaryEnabled
+$menu.Items.Add($summaryNotificationsItem) | Out-Null
+$summaryTimeItem = New-Object System.Windows.Forms.ToolStripMenuItem -ArgumentList ([string]$labels.dailySummaryTime)
+foreach ($summaryHour in @(17, 18, 20, 22)) {
+    $summaryHourItem = New-Object System.Windows.Forms.ToolStripMenuItem -ArgumentList ('{0:D2}:00' -f $summaryHour)
+    $summaryHourItem.Tag = $summaryHour
+    $summaryHourItem.Checked = (Get-DailySummaryHour) -eq $summaryHour
+    $summaryHourItem.Add_Click({
+        param($sender, $eventArgs)
+        Set-DailySummaryHour ([int]$sender.Tag)
+        foreach ($item in $summaryTimeItem.DropDownItems) { $item.Checked = [int]$item.Tag -eq (Get-DailySummaryHour) }
+    })
+    $summaryTimeItem.DropDownItems.Add($summaryHourItem) | Out-Null
+}
+$menu.Items.Add($summaryTimeItem) | Out-Null
 $startupItem = New-Object System.Windows.Forms.ToolStripMenuItem -ArgumentList ([string]$labels.startup)
 $startupItem.Checked = Test-StartupEnabled
 $menu.Items.Add($startupItem) | Out-Null
@@ -150,6 +205,35 @@ function Show-Notification([string]$Title, [string]$Message, [System.Windows.For
     $notifyIcon.ShowBalloonTip(3000)
 }
 
+function Show-DailySummary([bool]$MarkNotified) {
+    try {
+        $response = Invoke-RestMethod -Uri $summaryUrl -TimeoutSec 3
+        if (-not $response.ok) { return $false }
+        $summary = $response.summary
+        $message = if ([int]$summary.calls -gt 0) {
+            $labels.summaryBody -f ('{0:N0}' -f [double]$summary.tokens.total), [int]$summary.calls, [int]$summary.tasks
+        } else {
+            $labels.summaryEmptyBody
+        }
+        Show-Notification $labels.summaryTitle $message ([System.Windows.Forms.ToolTipIcon]::Info)
+        if ($MarkNotified) {
+            New-Item -ItemType Directory -Force -Path $stateDirectory | Out-Null
+            [IO.File]::WriteAllText($summaryDatePath, [DateTime]::Now.ToString('yyyy-MM-dd'))
+        }
+        return $true
+    }
+    catch {
+        return $false
+    }
+}
+
+function Update-DailySummaryNotification {
+    if (-not (Test-DailySummaryEnabled) -or [DateTime]::Now.Hour -lt (Get-DailySummaryHour)) { return }
+    $today = [DateTime]::Now.ToString('yyyy-MM-dd')
+    $lastDate = if (Test-Path -LiteralPath $summaryDatePath) { (Get-Content -LiteralPath $summaryDatePath -Raw).Trim() } else { '' }
+    if ($lastDate -ne $today) { Show-DailySummary $true | Out-Null }
+}
+
 function Update-TrayStatus {
     $status = Get-CodexDayStatus
     if (-not $status -and ([DateTime]::Now - $script:lastRestartAttempt).TotalSeconds -ge 15) {
@@ -158,17 +242,18 @@ function Update-TrayStatus {
     }
 
     if ($status) {
-        $statusItem.Text = $labels.online -f [int]$status.events, [int]$status.sessions
-        $notifyIcon.Text = 'codex-day - running'
+        $statusItem.Text = $labels.online -f [int]$status.diagnostics.counts.events, [int]$status.diagnostics.counts.sessions
+        $notifyIcon.Text = 'Dual Codex Day - running'
         $notifyIcon.Icon = $trayIcon
         if ($script:lastHealthy -eq $false) {
             Show-Notification $labels.recoveredTitle $labels.recoveredBody ([System.Windows.Forms.ToolTipIcon]::Info)
         }
         $script:lastHealthy = $true
+        Update-DailySummaryNotification
     }
     else {
         $statusItem.Text = $labels.offline
-        $notifyIcon.Text = 'codex-day - offline'
+        $notifyIcon.Text = 'Dual Codex Day - offline'
         $notifyIcon.Icon = [System.Drawing.SystemIcons]::Error
         if ($script:lastHealthy -eq $true) {
             Show-Notification $labels.failedTitle $labels.failedBody ([System.Windows.Forms.ToolTipIcon]::Error)
@@ -185,6 +270,13 @@ $notifyIcon.Add_DoubleClick($openAction)
 $logsItem.Add_Click({
     New-Item -ItemType Directory -Force -Path $stateDirectory | Out-Null
     Start-Process explorer.exe -ArgumentList ('"{0}"' -f $stateDirectory)
+})
+$summaryItem.Add_Click({ Show-DailySummary $false | Out-Null })
+$summaryNotificationsItem.Add_Click({
+    $enabled = -not (Test-DailySummaryEnabled)
+    Set-DailySummaryEnabled $enabled
+    $summaryNotificationsItem.Checked = Test-DailySummaryEnabled
+    if ($enabled) { Update-DailySummaryNotification }
 })
 $startupItem.Add_Click({
     $enabled = -not (Test-StartupEnabled)

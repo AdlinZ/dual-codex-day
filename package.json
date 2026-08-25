@@ -1,21 +1,26 @@
 {
-  "name": "codex-day",
-  "version": "0.7.0",
+  "name": "dual-codex-day",
+  "version": "0.9.0",
   "private": true,
-  "description": "A private, local-first dashboard for personal Codex token activity.",
+  "description": "A local-first Codex profile launcher and personal usage dashboard.",
   "license": "MIT",
   "scripts": {
     "start": "node ./scripts/codex-day.mjs --open",
     "index": "node ./scripts/codex-day.mjs --once",
+    "profiles": "node ./scripts/codex-profiles.mjs list",
+    "profiles:doctor": "node ./scripts/codex-profiles.mjs doctor",
+    "build:profiles": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-profiles-launcher.ps1",
     "build:css": "tailwindcss -i ./src/styles.css -o ./src/token-dashboard.css --minify",
     "build:demo": "node ./scripts/build-demo.mjs",
     "demo": "node ./scripts/build-demo.mjs --open",
     "build": "npm run build:demo && npm run build:css",
     "test:index": "node ./scripts/check-indexer.mjs",
     "test:service": "node ./scripts/check-service.mjs",
+    "test:pricing": "node ./scripts/check-pricing.mjs",
+    "test:profiles": "node ./scripts/check-profiles.mjs",
     "test:tray": "node ./scripts/check-tray.mjs",
     "test:container": "node ./scripts/check-container.mjs",
-    "test": "node ./scripts/check-dashboard.js && npm run test:index && npm run test:service && npm run test:tray && npm run test:container"
+    "test": "node ./scripts/check-dashboard.js && npm run test:index && npm run test:service && npm run test:pricing && npm run test:profiles && npm run test:tray && npm run test:container"
   },
   "engines": {
     "node": ">=22.5.0"

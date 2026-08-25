@@ -1,10 +1,10 @@
-name: codex-day
+name: dual-codex-day
 
 services:
   dashboard:
     build:
       context: .
-    image: codex-day:0.7.0
+    image: dual-codex-day:0.9.0
     restart: unless-stopped
     ports:
       - "127.0.0.1:${CODEX_DAY_PORT:-8765}:8765"

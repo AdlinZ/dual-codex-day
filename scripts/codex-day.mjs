@@ -5,7 +5,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { buildDashboard, getIndexDiagnostics, normalizeRetentionDays, openIndex, refreshIndex, scanLogFiles, SCHEMA_VERSION } from './lib/session-index.mjs';
+import { buildDashboard, getIndexDiagnostics, normalizeRetentionDays, openIndex, readDailySummary, refreshIndex, scanLogFiles, SCHEMA_VERSION } from './lib/session-index.mjs';
+import { auditPricing, diffPricing, loadPricing } from './lib/pricing-audit.mjs';
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.dirname(scriptDirectory);
@@ -16,6 +17,8 @@ function parseArgs(argv) {
     codexRoot: path.join(os.homedir(), '.codex'),
     databasePath: path.join(repoRoot, '.codex-day', 'codex-day.sqlite'),
     dashboardPath: path.join(repoRoot, 'dist', 'index.html'),
+    pricingPath: path.join(repoRoot, 'config', 'pricing.json'),
+    candidatePath: null,
     host: '127.0.0.1',
     port: 8765,
     intervalSeconds: 4,
@@ -25,15 +28,19 @@ function parseArgs(argv) {
     once: false,
     open: false,
     json: false,
-    verbose: false
+    verbose: false,
+    date: null
   };
   const valueOptions = new Map([
     ['--codex-root', 'codexRoot'], ['--database', 'databasePath'], ['--dashboard', 'dashboardPath'], ['--pid-file', 'pidFile'],
-    ['--host', 'host'], ['--port', 'port'], ['--interval', 'intervalSeconds'], ['--retention-days', 'retentionDays']
+    ['--pricing', 'pricingPath'], ['--candidate', 'candidatePath'],
+    ['--host', 'host'], ['--port', 'port'], ['--interval', 'intervalSeconds'], ['--retention-days', 'retentionDays'], ['--date', 'date']
   ]);
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === 'doctor' && index === 0) { options.command = 'doctor'; continue; }
+    if (arg === 'summary' && index === 0) { options.command = 'summary'; continue; }
+    if (arg === 'pricing' && index === 0) { options.command = 'pricing'; continue; }
     if (arg === '--once') { options.once = true; continue; }
     if (arg === '--open') { options.open = true; continue; }
     if (arg === '--json') { options.json = true; continue; }
@@ -43,16 +50,17 @@ function parseArgs(argv) {
     if (!key || argv[index + 1] == null) throw new Error(`Unknown or incomplete option: ${arg}`);
     const value = argv[++index];
     options[key] = ['port', 'intervalSeconds'].includes(key) ? Number(value)
-      : ['host', 'retentionDays'].includes(key) ? value : path.resolve(value);
+      : ['host', 'retentionDays', 'date'].includes(key) ? value : path.resolve(value);
   }
   if (!Number.isInteger(options.port) || options.port < 1 || options.port > 65535) throw new Error('Port must be an integer from 1 to 65535.');
   if (!Number.isFinite(options.intervalSeconds) || options.intervalSeconds < 2 || options.intervalSeconds > 60) throw new Error('Interval must be from 2 to 60 seconds.');
   options.retentionDays = normalizeRetentionDays(options.retentionDays);
+  if (options.date != null && !/^\d{4}-\d{2}-\d{2}$/.test(options.date)) throw new Error('Summary date must use YYYY-MM-DD.');
   return options;
 }
 
 function printHelp() {
-  console.log(`codex-day v${packageMetadata.version}\n\nUsage:\n  node scripts/codex-day.mjs [options]\n  node scripts/codex-day.mjs doctor [--json] [--verbose]\n\nOptions:\n  --once                 Build once and exit\n  --open                 Open the local dashboard\n  --codex-root <path>    Codex data directory\n  --database <path>      SQLite index path\n  --dashboard <path>     Generated HTML path\n  --pid-file <path>      Write the running service PID to a file\n  --host <host>          HTTP host (default 127.0.0.1)\n  --port <port>          HTTP port (default 8765)\n  --interval <seconds>   Poll interval from 2 to 60\n  --retention-days <n>   Keep all history or 1-36500 days (default all)\n  --json                 Print doctor output as JSON\n  --verbose              Include private local paths in doctor output\n`);
+  console.log(`Dual Codex Day v${packageMetadata.version}\n\nUsage:\n  node scripts/codex-day.mjs [options]\n  node scripts/codex-day.mjs doctor [--json] [--verbose]\n  node scripts/codex-day.mjs summary [--date YYYY-MM-DD] [--json]\n  node scripts/codex-day.mjs pricing [--candidate file] [--json]\n\nOptions:\n  --once                 Build once and exit\n  --open                 Open the local dashboard\n  --codex-root <path>    Codex data directory\n  --database <path>      SQLite index path\n  --dashboard <path>     Generated HTML path\n  --pricing <path>       Pricing snapshot path\n  --candidate <path>     Candidate snapshot to compare without writing\n  --pid-file <path>      Write the running service PID to a file\n  --host <host>          HTTP host (default 127.0.0.1)\n  --port <port>          HTTP port (default 8765)\n  --interval <seconds>   Poll interval from 2 to 60\n  --retention-days <n>   Keep all history or 1-36500 days (default all)\n  --date <YYYY-MM-DD>    Local date for the summary command\n  --json                 Print command output as JSON\n  --verbose              Include private local paths in doctor output\n`);
 }
 
 function doctorReport(options) {
@@ -81,7 +89,7 @@ function doctorReport(options) {
         database.counts = { files: Number(stats.files), sessions: Number(stats.sessions), events: Number(events.count) };
         issues.push({ level: 'warning', code: 'schema-upgrade-pending', message: 'The index will be upgraded on the next normal start.' });
       } else {
-        issues.push({ level: 'error', code: 'schema-newer', message: 'The index schema is newer than this codex-day version.' });
+        issues.push({ level: 'error', code: 'schema-newer', message: 'The index schema is newer than this Dual Codex Day version.' });
       }
     } catch {
       issues.push({ level: 'error', code: 'database-unreadable', message: 'The SQLite index could not be read.' });
@@ -115,7 +123,7 @@ function printDoctor(report, asJson) {
     console.log(JSON.stringify(report, null, 2));
     return;
   }
-  console.log(`codex-day doctor v${report.version}`);
+  console.log(`Dual Codex Day doctor v${report.version}`);
   console.log(`Status: ${report.status.toUpperCase()}`);
   console.log(`Runtime: ${report.runtime.node} · ${report.runtime.platform}/${report.runtime.arch}`);
   console.log(`Source: ${report.source.logFiles} JSONL files`);
@@ -123,6 +131,48 @@ function printDoctor(report, asJson) {
   console.log(`Retention: ${report.service.retentionDays === 'all' ? 'all history' : `${report.service.retentionDays} days`}`);
   report.issues.forEach(issue => console.log(`${issue.level.toUpperCase()}: ${issue.code} · ${issue.message}`));
   if (report.paths) Object.entries(report.paths).forEach(([name, value]) => console.log(`${name}: ${value}`));
+}
+
+function printSummary(summary, asJson) {
+  if (asJson) {
+    console.log(JSON.stringify(summary, null, 2));
+    return;
+  }
+  console.log(`Dual Codex Day summary · ${summary.date}`);
+  console.log(`Tokens: ${Math.round(summary.tokens.total).toLocaleString('en-US')}`);
+  console.log(`Calls: ${summary.calls.toLocaleString('en-US')} · Tasks: ${summary.tasks.toLocaleString('en-US')}`);
+  console.log(`Cache rate: ${(summary.cacheRate * 100).toFixed(1)}%`);
+  if (summary.topModel) console.log(`Top model: ${summary.topModel.name}`);
+}
+
+function pricingReport(options) {
+  const current = loadPricing(options.pricingPath);
+  const report = { audit: auditPricing(current) };
+  if (options.candidatePath) {
+    const candidate = loadPricing(options.candidatePath);
+    report.candidateAudit = auditPricing(candidate);
+    report.diff = diffPricing(current, candidate);
+  }
+  return report;
+}
+
+function printPricing(report, asJson) {
+  if (asJson) {
+    console.log(JSON.stringify(report, null, 2));
+    return;
+  }
+  const { audit } = report;
+  console.log(`Dual Codex Day pricing · ${audit.version || 'unversioned'}`);
+  console.log(`Status: ${audit.status.toUpperCase()} · ${audit.counts.models} models`);
+  console.log(`Verified: ${audit.counts.current} current · ${audit.counts.review} review · ${audit.counts.stale} stale · ${audit.counts.unverified} unverified`);
+  audit.issues.forEach(issue => console.log(`${issue.level.toUpperCase()}: ${issue.code} · ${issue.message}`));
+  if (!report.diff) return;
+  console.log(`Candidate: ${report.diff.changed ? 'changes found' : 'no changes'}`);
+  if (report.diff.addedModels.length) console.log(`Added models: ${report.diff.addedModels.join(', ')}`);
+  if (report.diff.removedModels.length) console.log(`Removed models: ${report.diff.removedModels.join(', ')}`);
+  report.diff.changedModels.forEach(item => console.log(`${item.model}: ${item.changes.map(change => `${change.field} ${change.from ?? 'null'} -> ${change.to ?? 'null'}`).join(', ')}`));
+  if (report.diff.verificationChanges.length) console.log(`Verification dates changed: ${report.diff.verificationChanges.length}`);
+  report.diff.configurationChanges.forEach(change => console.log(`${change.field}: ${JSON.stringify(change.from)} -> ${JSON.stringify(change.to)}`));
 }
 
 function processIsRunning(pid) {
@@ -135,7 +185,7 @@ function acquirePidFile(filePath) {
   mkdirSync(path.dirname(filePath), { recursive: true });
   if (existsSync(filePath)) {
     const existingPid = Number(readFileSync(filePath, 'utf8').trim());
-    if (processIsRunning(existingPid)) throw new Error(`codex-day is already running with PID ${existingPid}.`);
+    if (processIsRunning(existingPid)) throw new Error(`Dual Codex Day is already running with PID ${existingPid}.`);
     unlinkSync(filePath);
   }
   writeFileSync(filePath, `${process.pid}\n`, { encoding: 'utf8', flag: 'wx' });
@@ -190,13 +240,25 @@ if (options.command === 'doctor') {
   printDoctor(report, options.json);
   process.exit(report.status === 'error' ? 1 : 0);
 }
+if (options.command === 'summary') {
+  if (!existsSync(options.databasePath)) throw new Error('The SQLite index has not been created yet. Start Dual Codex Day first.');
+  const summaryDatabase = new DatabaseSync(options.databasePath, { readOnly: true, timeout: 3000 });
+  try { printSummary(readDailySummary(summaryDatabase, options.date || undefined), options.json); }
+  finally { summaryDatabase.close(); }
+  process.exit(0);
+}
+if (options.command === 'pricing') {
+  const report = pricingReport(options);
+  printPricing(report, options.json);
+  process.exit(report.audit.status === 'error' || report.candidateAudit?.status === 'error' ? 1 : 0);
+}
 const releasePidFile = acquirePidFile(options.pidFile);
 process.on('exit', releasePidFile);
 
 const paths = {
   templatePath: path.join(repoRoot, 'src', 'index.template.html'),
   stylesheetPath: path.join(repoRoot, 'src', 'token-dashboard.css'),
-  pricingPath: path.join(repoRoot, 'config', 'pricing.json'),
+  pricingPath: options.pricingPath,
   logoPath: path.join(repoRoot, 'assets', 'codex-day-mark.svg'),
   dashboardPath: options.dashboardPath,
   databasePath: options.databasePath
@@ -257,6 +319,20 @@ const server = createServer((request, response) => {
       diagnostics,
       lastError: latestError
     });
+    response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store' });
+    response.end(method === 'HEAD' ? undefined : body);
+    return;
+  }
+  if (url.pathname === '/api/summary') {
+    const requestedDate = url.searchParams.get('date');
+    if (requestedDate && !/^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) {
+      const body = JSON.stringify({ ok: false, error: 'date must use YYYY-MM-DD' });
+      response.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store' });
+      response.end(method === 'HEAD' ? undefined : body);
+      return;
+    }
+    const summary = readDailySummary(database, requestedDate || undefined);
+    const body = JSON.stringify({ ok: true, version: packageMetadata.version, summary });
     response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store' });
     response.end(method === 'HEAD' ? undefined : body);
     return;

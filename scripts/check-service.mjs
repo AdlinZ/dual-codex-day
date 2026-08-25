@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const root = path.dirname(scriptDirectory);
+const packageMetadata = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
 const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), 'codex-day-service-test-'));
 const codexRoot = path.join(temporaryRoot, '.codex');
 const sessionDirectory = path.join(codexRoot, 'sessions', '2026', '08', '24');
@@ -84,11 +85,21 @@ try {
   const port = await availablePort();
   first = startService(port);
   const firstStatus = await waitForHealth(port, first);
-  assert(firstStatus.ok && firstStatus.version === '0.7.0', 'service health should report liveness and version');
+  assert(firstStatus.ok && firstStatus.version === packageMetadata.version, 'service health should report liveness and package version');
   const statusResponse = await fetch(`http://127.0.0.1:${port}/api/status`);
   const status = await statusResponse.json();
   assert(status.ok && status.diagnostics.schemaVersion === 2 && status.diagnostics.counts.events === 1, 'status endpoint should expose schema v2 diagnostics');
   assert(!JSON.stringify(status).includes(temporaryRoot), 'status endpoint must not expose private local paths');
+  const summaryResponse = await fetch(`http://127.0.0.1:${port}/api/summary?date=2026-08-24`);
+  const summaryPayload = await summaryResponse.json();
+  assert(summaryPayload.ok && summaryPayload.summary.calls === 1 && summaryPayload.summary.tasks === 1, 'summary endpoint should aggregate calls and tasks for a local date');
+  assert(summaryPayload.summary.tokens.total === 120 && summaryPayload.summary.tokens.cachedInput === 50, 'summary endpoint should aggregate token components');
+  assert(!JSON.stringify(summaryPayload).includes(temporaryRoot) && !JSON.stringify(summaryPayload).includes('service-test'), 'summary endpoint must omit paths and session identifiers');
+  const invalidSummary = await fetch(`http://127.0.0.1:${port}/api/summary?date=not-a-date`);
+  assert(invalidSummary.status === 400, 'summary endpoint should reject invalid dates');
+  const summaryCommand = spawnSync(process.execPath, [path.join(root, 'scripts', 'codex-day.mjs'), 'summary', '--json', '--date', '2026-08-24', '--database', databasePath], { cwd: root, encoding: 'utf8' });
+  const commandSummary = JSON.parse(summaryCommand.stdout);
+  assert(summaryCommand.status === 0 && commandSummary.tokens.total === 120, 'summary command should return the same read-only daily aggregate');
   const doctor = spawnSync(process.execPath, [path.join(root, 'scripts', 'codex-day.mjs'), 'doctor', '--json', '--codex-root', codexRoot, '--database', databasePath, '--dashboard', dashboardPath], { cwd: root, encoding: 'utf8' });
   const doctorReport = JSON.parse(doctor.stdout);
   assert(doctor.status === 0 && doctorReport.status === 'ok', 'doctor should report a healthy fixture');
@@ -108,7 +119,7 @@ try {
   second = startService(port);
   await waitForHealth(port, second);
   assert(Number(readFileSync(pidPath, 'utf8').trim()) === second.pid, 'a stale PID file should be replaced on restart');
-  console.log('Service checks passed: health, diagnostics, doctor privacy, PID ownership, duplicate rejection, and stale PID recovery.');
+  console.log('Service checks passed: health, diagnostics, daily summary privacy, doctor, PID ownership, duplicate rejection, and stale PID recovery.');
 } finally {
   for (const child of children) child.kill();
   if (second) await waitForExit(second);

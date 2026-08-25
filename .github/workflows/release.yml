@@ -38,7 +38,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/adlinz/codex-day
+          images: ghcr.io/adlinz/dual-codex-day
           tags: |
             type=semver,pattern=v{{version}}
             type=semver,pattern={{version}}
@@ -55,7 +55,7 @@ jobs:
       - name: Verify anonymous image access
         run: |
           docker logout ghcr.io
-          docker buildx imagetools inspect "ghcr.io/adlinz/codex-day:${GITHUB_REF_NAME}"
+          docker buildx imagetools inspect "ghcr.io/adlinz/dual-codex-day:${GITHUB_REF_NAME}"
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -64,7 +64,7 @@ jobs:
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
             echo "Release ${GITHUB_REF_NAME} already exists."
           elif [ -f "$notes" ]; then
-            gh release create "${GITHUB_REF_NAME}" --verify-tag --latest --title "codex-day ${GITHUB_REF_NAME}" --notes-file "$notes"
+            gh release create "${GITHUB_REF_NAME}" --verify-tag --latest --title "Dual Codex Day ${GITHUB_REF_NAME}" --notes-file "$notes"
           else
-            gh release create "${GITHUB_REF_NAME}" --verify-tag --latest --title "codex-day ${GITHUB_REF_NAME}" --generate-notes
+            gh release create "${GITHUB_REF_NAME}" --verify-tag --latest --title "Dual Codex Day ${GITHUB_REF_NAME}" --generate-notes
           fi

@@ -1,5 +1,47 @@
 # Changelog
 
+Project name: **Dual Codex Day** (`dual-codex-day`). Historical entries may retain the original `codex-day` name.
+
+## [0.9.0] - Unreleased
+
+### Added
+
+- A local multi-account profile launcher with isolated Codex, VS Code and experimental desktop-app state.
+- A source-built native Windows GUI with a PowerShell fallback and no third-party launcher service.
+- Read-only pricing snapshot audit with freshness classification, official-source validation and optional candidate-file diff.
+- A 90-day dashboard range for longer-term personal usage review.
+- Configurable Windows daily-summary reminder time at 17:00, 18:00, 20:00 or 22:00.
+
+### Changed
+
+- Renamed the combined launcher and usage dashboard product to Dual Codex Day.
+- Refreshed the GPT-5.6 pricing snapshot against the official API pricing page on 2026-08-25.
+- Dashboard generation consistently respects a custom `--pricing` snapshot path.
+
+### Privacy
+
+- Profile credentials stay inside each isolated `CODEX_HOME`; the launcher does not read or copy `auth.json` and strips inherited API credential variables.
+- Pricing audit never fetches, overwrites or publishes a pricing snapshot; candidate comparison remains an explicit local read-only action.
+- Longer dashboard ranges continue to use the same local aggregate and anonymization boundaries.
+
+## [0.8.0] - 2026-08-25
+
+### Added
+
+- Versioned browser-local settings export and validated import with preview-before-save behavior.
+- Per-model pricing verification dates and snapshot-age notices without background network access.
+- Read-only daily summary command and `/api/summary` endpoint with aggregate-only output.
+- Optional Windows tray daily-summary notifications and an on-demand summary action.
+
+### Changed
+
+- The tray now reads detailed counts from `/api/status` while `/healthz` remains a minimal liveness endpoint.
+
+### Privacy
+
+- Settings bundles contain preferences, budgets and project aliases, but no Token events, paths or session identifiers.
+- Daily summaries expose aggregate usage and the top model only; they omit project names, paths and session identifiers.
+
 ## [0.7.0] - 2026-08-24
 
 ### Added

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>codex.day</title>
+  <title>Dual Codex Day</title>
   <link rel="icon" type="image/svg+xml" href="codex-day-mark.svg">
   <link rel="stylesheet" href="token-dashboard.css">
 </head>
@@ -13,7 +13,7 @@
       <div class="min-w-0">
         <div class="flex items-center gap-2">
           <img class="h-6 w-6 shrink-0" src="codex-day-mark.svg" alt="">
-          <h1 class="truncate text-base font-semibold">codex.day</h1>
+          <h1 class="truncate text-base font-semibold">Dual Codex Day</h1>
         </div>
         <p id="generated-meta" class="mt-1 truncate text-[11px] text-[rgb(var(--muted))]">正在读取本地数据</p>
       </div>
@@ -31,7 +31,7 @@
             <button id="mobile-export-csv" class="w-full rounded-sm px-3 py-2 text-left text-xs hover:bg-[rgb(var(--panel-subtle))]" type="button">导出 CSV</button>
           </div>
         </div>
-        <button id="settings-toggle" class="icon-control" type="button" aria-label="打开预计成本设置" title="预计成本设置">⚙</button>
+        <button id="settings-toggle" class="icon-control" type="button" aria-label="打开设置" title="设置">⚙</button>
         <button id="theme-toggle" class="icon-control" type="button" aria-label="切换深浅主题">◐</button>
       </div>
     </div>
@@ -43,6 +43,7 @@
           <button class="range-btn" type="button" data-range="today" data-active="true">今天</button>
           <button class="range-btn" type="button" data-range="week" data-active="false">本周</button>
           <button class="range-btn" type="button" data-range="30d" data-active="false">近 30 天</button>
+          <button class="range-btn" type="button" data-range="90d" data-active="false">近 90 天</button>
           <button class="range-btn" type="button" data-range="all" data-active="false">全部</button>
       </div>
       <div class="grid grid-cols-1 gap-2 min-[430px]:grid-cols-2 sm:flex sm:items-end">
@@ -160,8 +161,12 @@
           </div>
           <div id="cost-models" class="divide-y divide-[rgb(var(--line))]"></div>
         </div>
-        <div class="border-t border-[rgb(var(--line))] pt-5 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-          <div class="eyebrow">Estimate basis</div>
+        <div class="min-w-0 border-t border-[rgb(var(--line))] pt-5 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+          <div class="flex items-center justify-between gap-3">
+            <div class="eyebrow">Estimate basis</div>
+            <span id="pricing-status" class="chip">检查快照</span>
+          </div>
+          <p id="pricing-status-note" class="mt-2 text-xs leading-5 text-[rgb(var(--muted))]"></p>
           <p id="pricing-source" class="mt-2 text-xs leading-5 text-[rgb(var(--muted))]"></p>
           <p class="mt-2 text-xs leading-5 text-[rgb(var(--muted))]">仅按公开 API 标价折算；公司中转站的折扣、包量与结算规则不在此估算中。</p>
           <details class="mt-3 text-xs">
@@ -376,14 +381,14 @@
   </div>
 
   <div id="settings-shell" class="fixed inset-0 z-[60] hidden">
-    <button id="settings-backdrop" class="absolute inset-0 bg-black/40" type="button" aria-label="关闭预计成本设置"></button>
+    <button id="settings-backdrop" class="absolute inset-0 bg-black/40" type="button" aria-label="关闭设置"></button>
     <section class="thin-scrollbar absolute left-1/2 top-1/2 max-h-[min(760px,calc(100vh-32px))] w-[min(680px,calc(100%-32px))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-[rgb(var(--line))] bg-[rgb(var(--panel))] shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="settings-title">
       <header class="flex items-start justify-between gap-4 border-b border-[rgb(var(--line))] p-5">
         <div>
-          <p class="eyebrow">Local estimate profile</p>
-          <h2 id="settings-title" class="mt-1 text-lg font-semibold">预计成本设置</h2>
+          <p class="eyebrow">Local preferences</p>
+          <h2 id="settings-title" class="mt-1 text-lg font-semibold">设置</h2>
         </div>
-        <button id="settings-close" class="icon-control shrink-0" type="button" aria-label="关闭预计成本设置">×</button>
+        <button id="settings-close" class="icon-control shrink-0" type="button" aria-label="关闭设置">×</button>
       </header>
       <div class="p-5">
         <div class="grid gap-4 sm:grid-cols-2">
@@ -418,6 +423,21 @@
           </div>
           <div id="settings-project-aliases" class="mt-4 grid gap-3"></div>
         </div>
+
+        <div class="mt-7 border-t border-[rgb(var(--line))] pt-5">
+          <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div class="min-w-0">
+              <h3 class="section-title">设置迁移</h3>
+              <p class="mt-1 text-[11px] leading-5 text-[rgb(var(--muted))]">配置文件包含预算、倍率与项目别名；不包含 Token 记录、完整路径或 Session ID。</p>
+            </div>
+            <div class="flex shrink-0 gap-2">
+              <button id="settings-export" class="control" type="button">导出配置</button>
+              <button id="settings-import" class="control" type="button">导入配置</button>
+              <input id="settings-import-file" class="hidden" type="file" accept="application/json,.json">
+            </div>
+          </div>
+          <p id="settings-transfer-status" class="mt-3 hidden rounded-md border border-[rgb(var(--line))] bg-[rgb(var(--panel-subtle))] px-3 py-2 text-xs leading-5"></p>
+        </div>
       </div>
       <footer class="flex items-center justify-between gap-3 border-t border-[rgb(var(--line))] p-5">
         <button id="settings-reset" class="control" type="button">恢复默认</button>
@@ -435,6 +455,8 @@
     (() => {
       const payload = window.__TOKEN_DATA__ || { events: [] };
       const pricing = window.__PRICING_DATA__ || { models: {}, modes: {} };
+      const settingsStorageKey = 'codex-day-settings';
+      const settingsSchemaVersion = 1;
       const defaultSettings = { displayCurrency: 'USD', exchangeRate: 7.2, relayMultiplier: 1, dailyBudgetUsd: 0, monthlyBudgetUsd: 0, projectAliases: {} };
       function numericSetting(value, fallback, minimum = 0) {
         if (value === '' || value === null || typeof value === 'boolean') return fallback;
@@ -445,21 +467,25 @@
       function aliasSettings(value) {
         if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
         return Object.fromEntries(Object.entries(value)
-          .filter(([key, alias]) => key && typeof alias === 'string' && alias.trim())
-          .map(([key, alias]) => [key, alias.trim()]));
+          .filter(([key, alias]) => /^project-[a-f0-9]{12}$/.test(key) && typeof alias === 'string' && alias.trim())
+          .map(([key, alias]) => [key, alias.trim().slice(0, 120)]));
+      }
+
+      function normalizeSettings(value = {}) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) value = {};
+        return {
+          displayCurrency: value.displayCurrency === 'CNY' ? 'CNY' : 'USD',
+          exchangeRate: numericSetting(value.exchangeRate, defaultSettings.exchangeRate, 0.01),
+          relayMultiplier: numericSetting(value.relayMultiplier, defaultSettings.relayMultiplier),
+          dailyBudgetUsd: numericSetting(value.dailyBudgetUsd, defaultSettings.dailyBudgetUsd),
+          monthlyBudgetUsd: numericSetting(value.monthlyBudgetUsd, defaultSettings.monthlyBudgetUsd),
+          projectAliases: aliasSettings(value.projectAliases)
+        };
       }
 
       function loadSettings() {
         try {
-          const saved = JSON.parse(localStorage.getItem('codex-day-settings') || '{}');
-          return {
-            displayCurrency: saved.displayCurrency === 'CNY' ? 'CNY' : 'USD',
-            exchangeRate: numericSetting(saved.exchangeRate, defaultSettings.exchangeRate, 0.01),
-            relayMultiplier: numericSetting(saved.relayMultiplier, defaultSettings.relayMultiplier),
-            dailyBudgetUsd: numericSetting(saved.dailyBudgetUsd, defaultSettings.dailyBudgetUsd),
-            monthlyBudgetUsd: numericSetting(saved.monthlyBudgetUsd, defaultSettings.monthlyBudgetUsd),
-            projectAliases: aliasSettings(saved.projectAliases)
-          };
+          return normalizeSettings(JSON.parse(localStorage.getItem(settingsStorageKey) || '{}'));
         } catch {
           return { ...defaultSettings, projectAliases: {} };
         }
@@ -474,7 +500,7 @@
       const query = new URLSearchParams(location.search);
       const requestedRange = query.get('range');
       const savedRange = localStorage.getItem('codex-token-range');
-      const initialRange = [requestedRange, savedRange, 'today'].find(value => ['today', 'week', '30d', 'all'].includes(value));
+      const initialRange = [requestedRange, savedRange, 'today'].find(value => ['today', 'week', '30d', '90d', 'all'].includes(value));
       const savedCostMode = localStorage.getItem('codex-cost-mode');
       const requestedCostMode = query.get('mode');
       const initialCostMode = [requestedCostMode, savedCostMode, 'standard'].find(value => pricing.modes?.[value]) || 'standard';
@@ -613,8 +639,9 @@
           start.setDate(start.getDate() - ((start.getDay() || 7) - 1));
           previousStart = addDays(start, -7);
           previousEnd = new Date(previousStart.getTime() + (now - start));
-        } else if (state.range === '30d') {
-          start = addDays(startOfDay(now), -29);
+        } else if (state.range === '30d' || state.range === '90d') {
+          const days = state.range === '90d' ? 90 : 30;
+          start = addDays(startOfDay(now), -(days - 1));
           const span = now - start;
           previousEnd = new Date(start);
           previousStart = new Date(previousEnd.getTime() - span);
@@ -933,8 +960,30 @@
       function renderPricingTable() {
         const rates = Object.entries(pricing.models || {});
         const dash = value => value == null ? 'Input rate' : `$${Number(value).toFixed(value < 0.1 ? 3 : 2)}`;
+        const asOf = new Date(payload.generatedAt || Date.now());
+        const ageInDays = value => {
+          const captured = new Date(`${value}T00:00:00Z`);
+          return Number.isNaN(captured.getTime()) ? null : Math.max(0, Math.floor((asOf - captured) / 86400000));
+        };
+        const reviewAfter = Math.max(1, Number(pricing.verification?.reviewAfterDays || 45));
+        const staleAfter = Math.max(reviewAfter, Number(pricing.verification?.staleAfterDays || 120));
+        const modelAges = rates.map(([model]) => ageInDays(pricing.verification?.models?.[model])).filter(value => value != null);
+        const unverifiedCount = Math.max(0, rates.length - modelAges.length);
+        const oldestAge = modelAges.length ? Math.max(...modelAges) : null;
+        const snapshotState = oldestAge == null
+          ? { label: '待核验', classes: 'border-[rgb(var(--line-strong))] text-[rgb(var(--muted))]', note: '当前模型价格没有逐项核验日期。' }
+          : unverifiedCount > 0
+            ? { label: '部分待核验', classes: 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300', note: `${modelAges.length}/${rates.length} 个模型已单独核验，${unverifiedCount} 个仍使用快照来源日期。` }
+          : oldestAge > staleAfter
+            ? { label: '快照较旧', classes: 'border-orange-500/40 bg-orange-500/10 text-orange-600 dark:text-orange-300', note: `最早的模型价格已 ${oldestAge} 天未核验，建议更新快照。` }
+            : oldestAge > reviewAfter
+              ? { label: '建议复核', classes: 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300', note: `最早的模型价格已 ${oldestAge} 天未核验，可以安排一次复核。` }
+              : { label: '快照新鲜', classes: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300', note: `${modelAges.length}/${rates.length} 个模型有核验日期，最早为 ${oldestAge} 天前。` };
+        $('pricing-status').textContent = snapshotState.label;
+        $('pricing-status').className = `chip ${snapshotState.classes}`;
+        $('pricing-status-note').textContent = `${snapshotState.note} 状态仅按快照年龄判断，不代表已联网比价。`;
         $('pricing-source').textContent = `${pricing.source?.capturedAt || '日期未知'} 价格快照 · ${pricing.source?.officiallyVerified ? '已核验官方来源' : '用户提供，未实时核验'} · USD / 1M tokens`;
-        $('pricing-table').innerHTML = rates.length ? `<table class="min-w-[560px] w-full border-collapse"><thead><tr class="table-head"><th class="table-cell">Model</th><th class="table-cell">Input</th><th class="table-cell">Cache read</th><th class="table-cell">Cache write</th><th class="table-cell">Output</th></tr></thead><tbody>${rates.map(([model, rate]) => `<tr><td class="table-cell font-mono text-[11px]">${esc(model)}</td><td class="table-cell">$${Number(rate.input).toFixed(2)}</td><td class="table-cell">${dash(rate.cachedInput)}</td><td class="table-cell">${dash(rate.cacheWriteInput)}</td><td class="table-cell">$${Number(rate.output).toFixed(2)}</td></tr>`).join('')}</tbody></table>` : '<p class="text-[rgb(var(--muted))]">没有价格配置</p>';
+        $('pricing-table').innerHTML = rates.length ? `<table class="min-w-[680px] w-full border-collapse"><thead><tr class="table-head"><th class="table-cell">Model</th><th class="table-cell">Input</th><th class="table-cell">Cache read</th><th class="table-cell">Cache write</th><th class="table-cell">Output</th><th class="table-cell">Verified</th></tr></thead><tbody>${rates.map(([model, rate]) => `<tr><td class="table-cell font-mono text-[11px]">${esc(model)}</td><td class="table-cell">$${Number(rate.input).toFixed(2)}</td><td class="table-cell">${dash(rate.cachedInput)}</td><td class="table-cell">${dash(rate.cacheWriteInput)}</td><td class="table-cell">$${Number(rate.output).toFixed(2)}</td><td class="table-cell text-[11px] text-[rgb(var(--muted))]">${esc(pricing.verification?.models?.[model] || '未单独核验')}</td></tr>`).join('')}</tbody></table>` : '<p class="text-[rgb(var(--muted))]">没有价格配置</p>';
       }
 
       function bucketConfig(bounds) {
@@ -1186,7 +1235,7 @@
           { label: '最大任务', value: tasks[0] ? tasks[0].id.slice(-8) : '--', note: tasks[0] ? `${compactEn.format(tasks[0].total)} Token` : '暂无数据', color: 'bg-violet-500' }
         ];
         $('insights').innerHTML = rows.map(row => `<div class="flex items-center gap-3 py-4 first:pt-2 last:pb-1"><span class="h-8 w-1 rounded-full ${row.color}"></span><div class="min-w-0 flex-1"><div class="text-xs text-[rgb(var(--muted))]">${esc(row.label)}</div><div class="mt-1 truncate font-medium">${esc(row.value)}</div></div><div class="shrink-0 text-right text-xs text-[rgb(var(--muted))]">${esc(row.note)}</div></div>`).join('');
-        $('insight-period').textContent = { today: '今日', week: '本周', '30d': '近 30 天', all: '全部' }[state.range];
+        $('insight-period').textContent = { today: '今日', week: '本周', '30d': '近 30 天', '90d': '近 90 天', all: '全部' }[state.range];
       }
 
       function renderMatrix(items) {
@@ -1392,16 +1441,31 @@
         $('settings-exchange-rate').classList.toggle('opacity-50', currency !== 'CNY');
       }
 
-      function openSettings() {
-        const currency = settings.displayCurrency || 'USD';
+      function setSettingsTransferStatus(message = '', error = false) {
+        const node = $('settings-transfer-status');
+        node.textContent = message;
+        node.classList.toggle('hidden', !message);
+        node.classList.toggle('border-orange-500/40', error);
+        node.classList.toggle('text-orange-700', error);
+        node.classList.toggle('dark:text-orange-300', error);
+      }
+
+      function populateSettingsForm(profile) {
+        const normalized = normalizeSettings(profile);
+        const currency = normalized.displayCurrency;
         $('settings-currency').value = currency;
         $('settings-currency').dataset.previousCurrency = currency;
-        $('settings-exchange-rate').value = Number(settings.exchangeRate || 7.2).toFixed(2);
-        $('settings-relay-multiplier').value = Number(settings.relayMultiplier ?? 1).toFixed(2);
-        $('settings-daily-budget').value = budgetDisplayValue(settings.dailyBudgetUsd, currency, settings.exchangeRate);
-        $('settings-monthly-budget').value = budgetDisplayValue(settings.monthlyBudgetUsd, currency, settings.exchangeRate);
+        $('settings-exchange-rate').value = Number(normalized.exchangeRate).toFixed(2);
+        $('settings-relay-multiplier').value = Number(normalized.relayMultiplier).toFixed(2);
+        $('settings-daily-budget').value = budgetDisplayValue(normalized.dailyBudgetUsd, currency, normalized.exchangeRate);
+        $('settings-monthly-budget').value = budgetDisplayValue(normalized.monthlyBudgetUsd, currency, normalized.exchangeRate);
         updateSettingsCurrencyLabels(currency);
-        renderAliasFields();
+        renderAliasFields(normalized.projectAliases);
+      }
+
+      function openSettings() {
+        populateSettingsForm(settings);
+        setSettingsTransferStatus();
         $('settings-shell').classList.remove('hidden');
         syncBodyLock();
         requestAnimationFrame(() => $('settings-currency').focus());
@@ -1426,14 +1490,47 @@
       }
 
       function resetSettingsForm() {
-        $('settings-currency').value = defaultSettings.displayCurrency;
-        $('settings-currency').dataset.previousCurrency = defaultSettings.displayCurrency;
-        $('settings-exchange-rate').value = defaultSettings.exchangeRate.toFixed(2);
-        $('settings-relay-multiplier').value = defaultSettings.relayMultiplier.toFixed(2);
-        $('settings-daily-budget').value = '';
-        $('settings-monthly-budget').value = '';
-        updateSettingsCurrencyLabels(defaultSettings.displayCurrency);
-        renderAliasFields({});
+        populateSettingsForm(defaultSettings);
+        setSettingsTransferStatus('已载入默认值，点击“保存设置”后生效。');
+      }
+
+      function exportSettings() {
+        const bundle = {
+          app: 'dual-codex-day',
+          schemaVersion: settingsSchemaVersion,
+          exportedAt: new Date().toISOString(),
+          settings: normalizeSettings(settings)
+        };
+        const blob = new Blob([`${JSON.stringify(bundle, null, 2)}\n`], { type: 'application/json;charset=utf-8' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `dual-codex-day-settings-${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(link.href);
+        setSettingsTransferStatus('配置已导出。文件仅包含本地设置，不包含使用记录。');
+      }
+
+      async function importSettings(event) {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+        if (file.size > 262144) {
+          setSettingsTransferStatus('导入失败：配置文件不能超过 256 KB。', true);
+          return;
+        }
+        try {
+          const bundle = JSON.parse(await file.text());
+          if (!['dual-codex-day', 'codex-day'].includes(bundle?.app) || bundle?.schemaVersion !== settingsSchemaVersion || !bundle.settings) {
+            throw new Error('配置格式或版本不受支持');
+          }
+          const imported = normalizeSettings(bundle.settings);
+          populateSettingsForm(imported);
+          setSettingsTransferStatus(`已预览 ${file.name}：${Object.keys(imported.projectAliases).length} 个项目别名。确认无误后点击“保存设置”。`);
+        } catch (error) {
+          setSettingsTransferStatus(`导入失败：${error?.message || '无法读取配置文件'}`, true);
+        }
       }
 
       function saveSettings() {
@@ -1459,7 +1556,7 @@
           monthlyBudgetUsd: toUsd($('settings-monthly-budget').value),
           projectAliases
         };
-        localStorage.setItem('codex-day-settings', JSON.stringify(settings));
+        localStorage.setItem(settingsStorageKey, JSON.stringify(settings));
         events.forEach(item => { item.project = settings.projectAliases[item.projectId] || item.projectOriginal; });
         initializeFilters();
         closeSettings();
@@ -1504,7 +1601,7 @@
         const buckets = buildBuckets(current, bounds.start, config);
         const previousBuckets = bounds.previousStart ? buildBuckets(previous, bounds.previousStart, config) : [];
         const posterTimeline = compressedTimeline(buckets, previousBuckets);
-        const periodLabel = { today: '今天', week: '本周', '30d': '近 30 天', all: '全部记录' }[state.range];
+        const periodLabel = { today: '今天', week: '本周', '30d': '近 30 天', '90d': '近 90 天', all: '全部记录' }[state.range];
         const canvas = document.createElement('canvas');
         canvas.width = 1200;
         canvas.height = 1600;
@@ -1518,7 +1615,7 @@
         ctx.fillStyle = colors.blue;
         ctx.fillRect(72, 64, 22, 22);
         ctx.beginPath(); ctx.arc(98, 90, 11, 0, Math.PI * 2); ctx.fillStyle = colors.lime; ctx.fill();
-        ctx.fillStyle = colors.ink; ctx.font = `600 30px ${font}`; ctx.fillText('codex.day', 122, 91);
+        ctx.fillStyle = colors.ink; ctx.font = `600 30px ${font}`; ctx.fillText('Dual Codex Day', 122, 91);
         ctx.fillStyle = colors.muted; ctx.font = `400 18px ${font}`; ctx.fillText(`${periodLabel} · ${fullDtf.format(new Date(payload.generatedAt || Date.now()))}`, 72, 142);
 
         roundedRect(ctx, 72, 190, 150, 48, 24, colors.ink);
@@ -1615,7 +1712,7 @@
         });
 
         ctx.fillStyle = colors.muted; ctx.font = `400 15px ${font}`; ctx.fillText(`${payload.demo ? '虚构 Demo 数据' : '数据来自本地 Codex 日志'} · API 标价估算，非实际账单`, 72, 1550);
-        ctx.textAlign = 'right'; ctx.fillText('personal AI rhythm · codex.day', 1128, 1550); ctx.textAlign = 'left';
+        ctx.textAlign = 'right'; ctx.fillText('local profiles & usage · Dual Codex Day', 1128, 1550); ctx.textAlign = 'left';
         return canvas;
       }
 
@@ -1628,7 +1725,7 @@
         canvas.toBlob(blob => {
           const link = document.createElement('a');
           link.href = URL.createObjectURL(blob);
-          link.download = `codex-day-${state.range}-${new Date().toISOString().slice(0, 10)}.png`;
+          link.download = `dual-codex-day-${state.range}-${new Date().toISOString().slice(0, 10)}.png`;
           link.click();
           URL.revokeObjectURL(link.href);
           button.disabled = false;
@@ -1665,7 +1762,7 @@
         ctx.fillStyle = colors.blue;
         ctx.fillRect(72, 64, 22, 22);
         ctx.beginPath(); ctx.arc(98, 90, 11, 0, Math.PI * 2); ctx.fillStyle = colors.lime; ctx.fill();
-        ctx.fillStyle = colors.ink; ctx.font = `600 30px ${font}`; ctx.fillText('codex.day', 122, 91);
+        ctx.fillStyle = colors.ink; ctx.font = `600 30px ${font}`; ctx.fillText('Dual Codex Day', 122, 91);
         ctx.fillStyle = colors.muted; ctx.font = `400 18px ${font}`; ctx.fillText(`${reportDtf.format(report.bounds.start)} - ${reportDtf.format(report.bounds.end)} · ${fullDtf.format(new Date(payload.generatedAt || Date.now()))}`, 72, 142);
 
         roundedRect(ctx, 72, 190, 130, 48, 24, colors.ink);
@@ -1734,7 +1831,7 @@
         });
 
         ctx.fillStyle = colors.muted; ctx.font = `400 15px ${font}`; ctx.fillText(`${payload.demo ? '虚构 Demo 数据' : '数据来自本地 Codex 日志'} · API 标价估算，非实际账单`, 72, 1548);
-        ctx.textAlign = 'right'; ctx.fillText(`${periodLabel.toLowerCase()} · codex.day`, 1128, 1548); ctx.textAlign = 'left';
+        ctx.textAlign = 'right'; ctx.fillText(`${periodLabel.toLowerCase()} · Dual Codex Day`, 1128, 1548); ctx.textAlign = 'left';
         return canvas;
       }
 
@@ -1747,7 +1844,7 @@
         canvas.toBlob(blob => {
           const link = document.createElement('a');
           link.href = URL.createObjectURL(blob);
-          link.download = `codex-day-${state.reportPeriod}-report-${new Date().toISOString().slice(0, 10)}.png`;
+          link.download = `dual-codex-day-${state.reportPeriod}-report-${new Date().toISOString().slice(0, 10)}.png`;
           link.click();
           URL.revokeObjectURL(link.href);
           button.disabled = false;
@@ -1855,6 +1952,9 @@
       $('settings-backdrop').addEventListener('click', closeSettings);
       $('settings-reset').addEventListener('click', resetSettingsForm);
       $('settings-save').addEventListener('click', saveSettings);
+      $('settings-export').addEventListener('click', exportSettings);
+      $('settings-import').addEventListener('click', () => $('settings-import-file').click());
+      $('settings-import-file').addEventListener('change', importSettings);
       $('settings-currency').addEventListener('change', event => changeSettingsCurrency(event.target.value));
       document.addEventListener('click', () => setMobileActions(false));
       document.addEventListener('keydown', event => { if (event.key === 'Escape') { closeDrawer(); closeHealth(); closeSettings(); setMobileActions(false); } });

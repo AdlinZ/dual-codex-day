@@ -390,6 +390,46 @@ export function readIndexedEvents(database) {
     ORDER BY timestamp`).all();
 }
 
+export function readDailySummary(database, date = formatLocalIso().slice(0, 10)) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date))) throw new Error('Summary date must use YYYY-MM-DD.');
+  const totals = database.prepare(`WITH deduplicated AS (
+      SELECT MIN(rowid) AS row_id FROM usage_events WHERE date = ? GROUP BY event_key
+    )
+    SELECT COUNT(*) AS calls, COUNT(DISTINCT session_id) AS tasks,
+      SUM(input) AS input, SUM(cached_input) AS cached_input,
+      SUM(cache_write_input) AS cache_write_input, SUM(uncached_input) AS uncached_input,
+      SUM(output) AS output, SUM(reasoning_output) AS reasoning_output,
+      SUM(unclassified) AS unclassified, SUM(total) AS total
+    FROM usage_events JOIN deduplicated ON usage_events.rowid = deduplicated.row_id`).get(date);
+  const topModel = database.prepare(`WITH deduplicated AS (
+      SELECT MIN(rowid) AS row_id FROM usage_events WHERE date = ? GROUP BY event_key
+    )
+    SELECT model, SUM(total) AS total
+    FROM usage_events JOIN deduplicated ON usage_events.rowid = deduplicated.row_id
+    GROUP BY model ORDER BY total DESC, model LIMIT 1`).get(date);
+  const input = number(totals.input);
+  const cachedInput = number(totals.cached_input);
+  const total = number(totals.total);
+  return {
+    date: String(date),
+    calls: number(totals.calls),
+    tasks: number(totals.tasks),
+    tokens: {
+      input,
+      cachedInput,
+      cacheWriteInput: number(totals.cache_write_input),
+      uncachedInput: number(totals.uncached_input),
+      output: number(totals.output),
+      reasoningOutput: number(totals.reasoning_output),
+      unclassified: number(totals.unclassified),
+      total
+    },
+    cacheRate: input ? cachedInput / input : 0,
+    averageTokens: number(totals.calls) ? total / number(totals.calls) : 0,
+    topModel: topModel ? { name: topModel.model, tokens: number(topModel.total) } : null
+  };
+}
+
 export function getIndexDiagnostics(database, options = {}) {
   const aggregate = database.prepare(`SELECT
       COUNT(*) AS files,

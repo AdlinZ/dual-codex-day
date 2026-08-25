@@ -1,8 +1,8 @@
 FROM node:22-bookworm-slim
 
-LABEL org.opencontainers.image.title="codex-day" \
+LABEL org.opencontainers.image.title="dual-codex-day" \
       org.opencontainers.image.description="Local-first Codex token activity dashboard" \
-      org.opencontainers.image.source="https://github.com/AdlinZ/codex-day" \
+      org.opencontainers.image.source="https://github.com/AdlinZ/dual-codex-day" \
       org.opencontainers.image.licenses="MIT"
 
 WORKDIR /app
