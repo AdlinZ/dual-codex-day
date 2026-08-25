@@ -4,9 +4,18 @@ import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
 
 export const PROFILE_SCHEMA_VERSION = 1;
 export const PROFILE_TARGETS = Object.freeze(['cli', 'vscode', 'desktop']);
+export const PROFILE_PROVIDER_TYPES = Object.freeze(['official', 'custom']);
+export const PROFILE_PROVIDER_AUTH_MODES = Object.freeze(['environment', 'openai', 'none']);
+export const PROFILE_PROVIDER_ENV_KEY = 'DUAL_CODEX_DAY_PROVIDER_API_KEY';
+const PROFILE_REASONING_EFFORTS = new Set(['minimal', 'low', 'medium', 'high', 'xhigh']);
+const PROFILE_PERSONALITIES = new Set(['none', 'friendly', 'pragmatic']);
+const RESERVED_PROVIDER_IDS = new Set(['openai', 'ollama', 'lmstudio']);
+const LAUNCH_HISTORY_SCHEMA_VERSION = 1;
+const MAX_LAUNCH_HISTORY = 24;
 
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 const scriptsDirectory = path.dirname(moduleDirectory);
@@ -36,6 +45,147 @@ function registryPath(root) {
   return path.join(root, 'profiles.json');
 }
 
+function launchHistoryPath(root) {
+  return path.join(root, 'launches.json');
+}
+
+export function defaultProfileProvider() {
+  return { type: 'official', name: 'OpenAI 官方' };
+}
+
+function normalizeProviderText(value, label, maximumLength) {
+  if (typeof value !== 'string') throw new Error(`${label} must be text.`);
+  const normalized = value.trim();
+  if (!normalized || normalized.length > maximumLength) throw new Error(`${label} must contain 1 to ${maximumLength} characters.`);
+  if (/[\u0000-\u001f\u007f]/.test(normalized)) throw new Error(`${label} cannot contain control characters.`);
+  return normalized;
+}
+
+function normalizeOptionalProviderText(value, label, maximumLength) {
+  const normalized = String(value || '').trim();
+  if (normalized.length > maximumLength) throw new Error(`${label} must contain at most ${maximumLength} characters.`);
+  if (/[\x00-\x1f\x7f]/.test(normalized)) throw new Error(`${label} cannot contain control characters.`);
+  return normalized;
+}
+
+function normalizeProviderEnum(value, allowedValues, label) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized && !allowedValues.has(normalized)) throw new Error(`Unsupported ${label}: ${normalized}`);
+  return normalized;
+}
+
+export function normalizeProfileProvider(value) {
+  const type = String(value?.type || 'official').trim().toLowerCase();
+  if (!PROFILE_PROVIDER_TYPES.includes(type)) throw new Error(`Unsupported provider type: ${type}`);
+  if (type === 'official') return defaultProfileProvider();
+
+  const name = normalizeProviderText(value?.name, 'Provider name', 60);
+  const note = normalizeOptionalProviderText(value?.note, 'Provider note', 120);
+  const model = normalizeProviderText(value?.model, 'Model name', 100);
+  const providerId = normalizeProviderText(value?.providerId || 'custom', 'Provider id', 40).toLowerCase();
+  if (!/^[a-z0-9_-]+$/.test(providerId) || RESERVED_PROVIDER_IDS.has(providerId)) {
+    throw new Error('Provider id must use letters, numbers, underscores, or hyphens and cannot use a reserved id.');
+  }
+  const legacyAuthMode = value?.requiresOpenAIAuth === true ? 'openai' : 'environment';
+  const authMode = String(value?.authMode || legacyAuthMode).trim().toLowerCase();
+  if (!PROFILE_PROVIDER_AUTH_MODES.includes(authMode)) throw new Error(`Unsupported provider auth mode: ${authMode}`);
+  const reasoningEffort = normalizeProviderEnum(value?.reasoningEffort, PROFILE_REASONING_EFFORTS, 'reasoning effort');
+  const personality = normalizeProviderEnum(value?.personality, PROFILE_PERSONALITIES, 'personality');
+  const rawBaseUrl = normalizeProviderText(value?.baseUrl, 'Base URL', 500);
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(rawBaseUrl);
+  } catch {
+    throw new Error('Base URL must be a valid HTTP or HTTPS URL.');
+  }
+  if (!['http:', 'https:'].includes(parsedUrl.protocol) || parsedUrl.username || parsedUrl.password || parsedUrl.search || parsedUrl.hash) {
+    throw new Error('Base URL must be a valid HTTP or HTTPS URL without credentials, query parameters, or a fragment.');
+  }
+  const baseUrl = parsedUrl.toString().replace(/\/$/, '');
+  return {
+    type,
+    name,
+    note,
+    baseUrl,
+    model,
+    providerId,
+    authMode,
+    reasoningEffort,
+    personality,
+    disableResponseStorage: value?.disableResponseStorage === true,
+    wireApi: 'responses',
+    envKey: authMode === 'environment' ? PROFILE_PROVIDER_ENV_KEY : '',
+    requiresOpenAIAuth: authMode === 'openai'
+  };
+}
+
+function parseProfileConfig(configText) {
+  const source = String(configText || '').trim();
+  if (!source) return {};
+  try {
+    return parseToml(source);
+  } catch (error) {
+    throw new Error(`Existing config.toml is invalid: ${error.message}`);
+  }
+}
+
+function removePreviousProviderConfig(config, previousProvider) {
+  if (previousProvider?.type !== 'custom') return;
+  const previous = normalizeProfileProvider(previousProvider);
+  if (config.model_provider === previous.providerId) delete config.model_provider;
+  if (config.model === previous.model) delete config.model;
+  if (previous.reasoningEffort && config.model_reasoning_effort === previous.reasoningEffort) delete config.model_reasoning_effort;
+  if (previous.personality && config.personality === previous.personality) delete config.personality;
+  if (previous.disableResponseStorage && config.disable_response_storage === true) delete config.disable_response_storage;
+  if (config.model_providers && typeof config.model_providers === 'object') {
+    delete config.model_providers[previous.providerId];
+    if (!Object.keys(config.model_providers).length) delete config.model_providers;
+  }
+}
+
+function buildProviderConfig(value, configText = '', previousProvider = null) {
+  const provider = normalizeProfileProvider(value);
+  const config = parseProfileConfig(configText);
+  removePreviousProviderConfig(config, previousProvider);
+  config.cli_auth_credentials_store = 'file';
+  if (provider.type === 'custom') {
+    config.model = provider.model;
+    config.model_provider = provider.providerId;
+    if (provider.reasoningEffort) config.model_reasoning_effort = provider.reasoningEffort;
+    else delete config.model_reasoning_effort;
+    if (provider.personality) config.personality = provider.personality;
+    else delete config.personality;
+    if (provider.disableResponseStorage) config.disable_response_storage = true;
+    else delete config.disable_response_storage;
+    config.model_providers ||= {};
+    const providerConfig = {
+      name: provider.name,
+      base_url: provider.baseUrl,
+      wire_api: 'responses'
+    };
+    if (provider.authMode === 'environment') {
+      providerConfig.env_key = PROFILE_PROVIDER_ENV_KEY;
+      providerConfig.requires_openai_auth = false;
+    } else if (provider.authMode === 'openai') {
+      providerConfig.requires_openai_auth = true;
+    } else {
+      providerConfig.requires_openai_auth = false;
+    }
+    config.model_providers[provider.providerId] = providerConfig;
+  }
+  return config;
+}
+
+export function providerConfigPreview(value, configText = '', previousProvider = null) {
+  const config = buildProviderConfig(value, configText, previousProvider);
+  return [
+    '# Provider settings managed by Dual Codex Day.',
+    '# Existing Profile settings are preserved; CDC never writes API keys here.',
+    stringifyToml(config).trimEnd(),
+    ''
+  ].join('\n');
+}
+
 function validateRegistry(registry) {
   if (!registry || registry.schemaVersion !== PROFILE_SCHEMA_VERSION || !Array.isArray(registry.profiles)) {
     throw new Error(`Unsupported or invalid profile registry. Expected schema ${PROFILE_SCHEMA_VERSION}.`);
@@ -48,6 +198,7 @@ function validateRegistry(registry) {
     if (ids.has(profile.id)) throw new Error('Profile registry contains a duplicate profile id.');
     ids.add(profile.id);
     normalizeProfileName(profile.name);
+    if (profile.provider) normalizeProfileProvider(profile.provider);
   }
   return registry;
 }
@@ -73,6 +224,60 @@ function saveProfileRegistry(root, registry) {
   renameSync(temporary, target);
 }
 
+function writeJsonAtomically(target, value) {
+  mkdirSync(path.dirname(target), { recursive: true });
+  const temporary = `${target}.${process.pid}.${Date.now()}.tmp`;
+  writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+  renameSync(temporary, target);
+}
+
+function writeTextAtomically(target, value) {
+  mkdirSync(path.dirname(target), { recursive: true });
+  const temporary = `${target}.${process.pid}.${Date.now()}.tmp`;
+  writeFileSync(temporary, value, { encoding: 'utf8', mode: 0o600 });
+  renameSync(temporary, target);
+}
+
+function loadLaunchHistory(root) {
+  const target = launchHistoryPath(path.resolve(root));
+  if (!existsSync(target)) return { schemaVersion: LAUNCH_HISTORY_SCHEMA_VERSION, launches: [] };
+  try {
+    const history = JSON.parse(readFileSync(target, 'utf8'));
+    if (history?.schemaVersion !== LAUNCH_HISTORY_SCHEMA_VERSION || !Array.isArray(history.launches)) {
+      throw new Error(`expected schema ${LAUNCH_HISTORY_SCHEMA_VERSION}`);
+    }
+    return history;
+  } catch (error) {
+    throw new Error(`Cannot read launch history: ${error.message}`);
+  }
+}
+
+function rememberLaunch(root, launch) {
+  const history = loadLaunchHistory(root);
+  history.launches.unshift(launch);
+  history.launches = history.launches.slice(0, MAX_LAUNCH_HISTORY);
+  writeJsonAtomically(launchHistoryPath(path.resolve(root)), history);
+}
+
+export function isProcessAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code === 'EPERM';
+  }
+}
+
+export function listProfileLaunches(root = defaultProfilesRoot(), options = {}) {
+  const limit = Math.max(1, Math.min(Number(options.limit) || 8, MAX_LAUNCH_HISTORY));
+  const checkProcess = options.isProcessAlive || isProcessAlive;
+  return loadLaunchHistory(root).launches.slice(0, limit).map(launch => ({
+    ...launch,
+    active: checkProcess(launch.pid)
+  }));
+}
+
 export function normalizeProfileName(value) {
   if (typeof value !== 'string') throw new Error('Profile name must be text.');
   const name = value.trim();
@@ -93,22 +298,27 @@ export function profilePaths(root, profileId) {
   };
 }
 
-function ensureProfileDirectories(paths) {
+function ensureProfileDirectories(paths, provider = defaultProfileProvider()) {
   for (const directory of Object.values(paths)) mkdirSync(directory, { recursive: true });
   const configPath = path.join(paths.codexHome, 'config.toml');
   if (!existsSync(configPath)) {
-    const config = [
-      '# Created by Dual Codex Day profiles.',
-      '# Keep each profile credential inside this CODEX_HOME.',
-      'cli_auth_credentials_store = "file"',
-      ''
-    ].join('\n');
-    writeFileSync(configPath, config, { encoding: 'utf8', mode: 0o600 });
+    writeTextAtomically(configPath, providerConfigPreview(provider));
   }
 }
 
+function externalResourcePath(filePath) {
+  const marker = `${path.sep}app.asar${path.sep}`;
+  if (!filePath.includes(marker)) return filePath;
+  const unpacked = filePath.replace(marker, `${path.sep}app.asar.unpacked${path.sep}`);
+  return existsSync(unpacked) ? unpacked : filePath;
+}
+
 function enrichProfile(root, profile) {
-  return { ...profile, paths: profilePaths(root, profile.id) };
+  return {
+    ...profile,
+    provider: normalizeProfileProvider(profile.provider || defaultProfileProvider()),
+    paths: profilePaths(root, profile.id)
+  };
 }
 
 export function listProfiles(root = defaultProfilesRoot()) {
@@ -122,9 +332,15 @@ export function createProfile(root = defaultProfilesRoot(), requestedName) {
     throw new Error(`A profile named "${name}" already exists.`);
   }
   const timestamp = new Date().toISOString();
-  const profile = { id: randomUUID(), name, createdAt: timestamp, updatedAt: timestamp };
+  const profile = {
+    id: randomUUID(),
+    name,
+    provider: defaultProfileProvider(),
+    createdAt: timestamp,
+    updatedAt: timestamp
+  };
   const paths = profilePaths(root, profile.id);
-  ensureProfileDirectories(paths);
+  ensureProfileDirectories(paths, profile.provider);
   registry.profiles.push(profile);
   saveProfileRegistry(root, registry);
   return enrichProfile(root, profile);
@@ -139,6 +355,42 @@ export function findProfile(root = defaultProfilesRoot(), reference) {
   const byName = profiles.filter(profile => profile.name.localeCompare(query, undefined, { sensitivity: 'accent' }) === 0);
   if (byName.length === 1) return byName[0];
   throw new Error(`Profile not found: ${query}`);
+}
+
+export function updateProfileProvider(root = defaultProfilesRoot(), reference, requestedProvider) {
+  const registry = loadProfileRegistry(root);
+  const query = String(reference || '').trim();
+  const index = registry.profiles.findIndex(profile => profile.id === query
+    || profile.name.localeCompare(query, undefined, { sensitivity: 'accent' }) === 0);
+  if (index < 0) throw new Error(`Profile not found: ${query}`);
+  const provider = normalizeProfileProvider(requestedProvider);
+  const profile = registry.profiles[index];
+  const paths = profilePaths(root, profile.id);
+  const configPath = path.join(paths.codexHome, 'config.toml');
+  const existingConfig = existsSync(configPath) ? readFileSync(configPath, 'utf8') : '';
+  writeTextAtomically(configPath, providerConfigPreview(provider, existingConfig, profile.provider));
+  profile.provider = provider;
+  profile.updatedAt = new Date().toISOString();
+  saveProfileRegistry(root, registry);
+  return enrichProfile(root, profile);
+}
+
+export function importProfileConfig(root = defaultProfilesRoot(), reference, sourceText) {
+  const profile = findProfile(root, reference);
+  const imported = parseProfileConfig(sourceText);
+  const importedProviderId = typeof imported.model_provider === 'string' ? imported.model_provider : '';
+  delete imported.model;
+  delete imported.model_provider;
+  delete imported.model_reasoning_effort;
+  delete imported.personality;
+  delete imported.disable_response_storage;
+  if (importedProviderId && imported.model_providers && typeof imported.model_providers === 'object') {
+    delete imported.model_providers[importedProviderId];
+    if (!Object.keys(imported.model_providers).length) delete imported.model_providers;
+  }
+  const configPath = path.join(profile.paths.codexHome, 'config.toml');
+  writeTextAtomically(configPath, providerConfigPreview(profile.provider, stringifyToml(imported), null));
+  return findProfile(root, profile.id);
 }
 
 function executableFromPath(names, environment = process.env) {
@@ -199,7 +451,7 @@ export function detectProfileTargets(environment = process.env) {
   };
 }
 
-export function profileEnvironment(profile, baseEnvironment = process.env) {
+export function profileEnvironment(profile, baseEnvironment = process.env, options = {}) {
   const environment = { ...baseEnvironment };
   for (const variable of Object.keys(environment)) {
     if (inheritedCredentialVariableSet.has(variable.toUpperCase())) delete environment[variable];
@@ -208,6 +460,14 @@ export function profileEnvironment(profile, baseEnvironment = process.env) {
   environment.CODEX_SQLITE_HOME = profile.paths.sqliteHome;
   environment.CODEX_PROFILE_ID = profile.id;
   environment.CODEX_PROFILE_NAME = profile.name;
+  const provider = normalizeProfileProvider(profile.provider || defaultProfileProvider());
+  if (provider.type === 'custom' && provider.authMode === 'environment') {
+    const apiKey = String(options.providerApiKey || environment[PROFILE_PROVIDER_ENV_KEY] || '');
+    if (!apiKey) throw new Error('Custom provider API key is missing for this profile.');
+    environment[PROFILE_PROVIDER_ENV_KEY] = apiKey;
+  } else {
+    delete environment[PROFILE_PROVIDER_ENV_KEY];
+  }
   return environment;
 }
 
@@ -219,17 +479,17 @@ function validateWorkingDirectory(value) {
 
 export function buildLaunchPlan(profile, target, options = {}) {
   if (!PROFILE_TARGETS.includes(target)) throw new Error(`Unsupported target: ${target}`);
-  ensureProfileDirectories(profile.paths);
+  ensureProfileDirectories(profile.paths, profile.provider);
   const workingDirectory = validateWorkingDirectory(options.workingDirectory);
   const targets = options.targets || detectProfileTargets(options.environment || process.env);
   const detected = targets[target];
   if (!detected?.available || !detected.executable) throw new Error(`${target} is not installed or could not be located.`);
-  const environment = profileEnvironment(profile, options.environment || process.env);
+  const environment = profileEnvironment(profile, options.environment || process.env, { providerApiKey: options.providerApiKey });
 
   if (target === 'cli') {
     const powershell = executableFromPath(['powershell.exe', 'pwsh.exe'], options.environment || process.env);
     if (!powershell) throw new Error('PowerShell is required to open an interactive Codex terminal.');
-    const runner = path.join(scriptsDirectory, 'run-codex-profile.ps1');
+    const runner = externalResourcePath(path.join(scriptsDirectory, 'run-codex-profile.ps1'));
     return {
       target,
       command: powershell,
@@ -271,7 +531,8 @@ export function buildLaunchPlan(profile, target, options = {}) {
 export function launchProfile(root, reference, target, options = {}) {
   const profile = findProfile(root, reference);
   const plan = buildLaunchPlan(profile, target, options);
-  const child = spawn(plan.command, plan.args, {
+  const spawnProcess = options.spawnProcess || spawn;
+  const child = spawnProcess(plan.command, plan.args, {
     cwd: plan.cwd,
     env: plan.environment,
     detached: true,
@@ -279,10 +540,21 @@ export function launchProfile(root, reference, target, options = {}) {
     windowsHide: false
   });
   child.unref();
-  return {
+  const result = {
+    id: randomUUID(),
     profile: { id: profile.id, name: profile.name },
     target: plan.target,
     experimental: plan.experimental,
-    pid: child.pid
+    pid: child.pid,
+    launchedAt: new Date().toISOString()
   };
+  rememberLaunch(root, {
+    id: result.id,
+    profileId: result.profile.id,
+    profileName: result.profile.name,
+    target: result.target,
+    pid: result.pid,
+    launchedAt: result.launchedAt
+  });
+  return result;
 }

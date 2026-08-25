@@ -56,15 +56,21 @@ jobs:
         run: |
           docker logout ghcr.io
           docker buildx imagetools inspect "ghcr.io/adlinz/dual-codex-day:${GITHUB_REF_NAME}"
+      - name: Package Electron for Windows
+        run: |
+          npm run package:electron
+          cd dist/electron
+          zip -r ../dual-codex-day-windows-x64.zip dual-codex-day-win32-x64
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           notes="docs/releases/${GITHUB_REF_NAME}.md"
+          artifact="dist/dual-codex-day-windows-x64.zip"
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            echo "Release ${GITHUB_REF_NAME} already exists."
+            gh release upload "${GITHUB_REF_NAME}" "$artifact" --clobber
           elif [ -f "$notes" ]; then
-            gh release create "${GITHUB_REF_NAME}" --verify-tag --latest --title "Dual Codex Day ${GITHUB_REF_NAME}" --notes-file "$notes"
+            gh release create "${GITHUB_REF_NAME}" "$artifact" --verify-tag --latest --title "Dual Codex Day ${GITHUB_REF_NAME}" --notes-file "$notes"
           else
-            gh release create "${GITHUB_REF_NAME}" --verify-tag --latest --title "Dual Codex Day ${GITHUB_REF_NAME}" --generate-notes
+            gh release create "${GITHUB_REF_NAME}" "$artifact" --verify-tag --latest --title "Dual Codex Day ${GITHUB_REF_NAME}" --generate-notes
           fi

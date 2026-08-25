@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'none'">
+  <title>Dual Codex Day</title>
+  <link rel="stylesheet" href="./app.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="titlebar">
+      <div class="brand-lockup">
+        <img src="../../assets/codex-day-mark.svg" alt="" class="brand-mark">
+        <div>
+          <strong>Dual Codex Day</strong>
+          <span id="version-label">v0.10.0</span>
+        </div>
+      </div>
+      <div class="titlebar-status" id="titlebar-status">
+        <span class="status-dot"></span>
+        <span>本地就绪</span>
+      </div>
+      <div class="instance-count" id="active-instance-count">暂无运行实例</div>
+      <button class="icon-button titlebar-action" id="refresh-button" type="button" title="刷新" aria-label="刷新">
+        <i data-lucide="refresh-cw"></i>
+      </button>
+    </header>
+
+    <div class="workspace-shell">
+      <aside class="sidebar">
+        <div class="section-heading sidebar-heading">
+          <div>
+            <span class="eyebrow">Profiles</span>
+            <h2>账号配置</h2>
+          </div>
+          <button class="icon-button" id="add-profile-button" type="button" title="新建账号配置" aria-label="新建账号配置">
+            <i data-lucide="plus"></i>
+          </button>
+        </div>
+        <div class="profile-list" id="profile-list"></div>
+        <div class="sidebar-footer">
+          <i data-lucide="shield-check"></i>
+          <span>凭据由系统安全存储保护</span>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <section class="profile-stage" aria-labelledby="selected-profile-name">
+          <div class="profile-header">
+            <div class="profile-heading">
+              <span class="eyebrow">Launch center</span>
+              <div class="profile-title-row">
+                <h1 id="selected-profile-name">账号启动中心</h1>
+                <span class="runtime-status" id="selected-profile-runtime">未选择</span>
+              </div>
+              <p id="selected-profile-path">请选择一个账号配置</p>
+            </div>
+            <button class="secondary-button" id="open-profile-folder-button" type="button" disabled>
+              <i data-lucide="folder-open"></i>
+              <span>配置目录</span>
+            </button>
+          </div>
+
+          <div class="profile-settings">
+            <div class="workspace-picker">
+              <i data-lucide="folder-cog"></i>
+              <div class="workspace-value">
+                <span>启动目录</span>
+                <strong id="workspace-path">正在读取...</strong>
+              </div>
+              <button class="icon-button" id="choose-workspace-button" type="button" title="选择启动目录" aria-label="选择启动目录">
+                <i data-lucide="ellipsis"></i>
+              </button>
+            </div>
+
+            <div class="workspace-picker provider-picker">
+              <i data-lucide="server-cog"></i>
+              <div class="workspace-value">
+                <span>供应商</span>
+                <strong id="provider-name">OpenAI 官方</strong>
+                <small id="provider-detail">官方登录</small>
+              </div>
+              <span class="provider-state" id="provider-state">官方认证</span>
+              <button class="icon-button" id="edit-provider-button" type="button" title="供应商设置" aria-label="供应商设置">
+                <i data-lucide="settings-2"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="launch-actions" id="launch-actions">
+            <button class="launch-button" type="button" data-target="cli" disabled>
+              <i data-lucide="terminal-square"></i>
+              <span>打开 CLI</span>
+            </button>
+            <button class="launch-button" type="button" data-target="vscode" disabled>
+              <i data-lucide="panels-top-left"></i>
+              <span>打开 VS Code</span>
+            </button>
+            <button class="launch-button launch-primary" type="button" data-target="desktop" disabled>
+              <i data-lucide="monitor-up"></i>
+              <span>打开独立 Codex</span>
+              <small>多开</small>
+            </button>
+          </div>
+        </section>
+
+        <section class="usage-band" aria-labelledby="usage-heading">
+          <div class="section-heading usage-heading">
+            <div>
+              <span class="eyebrow">Today</span>
+              <h2 id="usage-heading">默认账号今日用量</h2>
+            </div>
+            <button class="secondary-button" id="open-dashboard-button" type="button">
+              <i data-lucide="chart-no-axes-combined"></i>
+              <span>详细仪表盘</span>
+            </button>
+          </div>
+          <div class="metric-grid">
+            <div class="metric">
+              <span>Token</span>
+              <strong id="metric-tokens">0</strong>
+              <small id="metric-model">暂无模型</small>
+            </div>
+            <div class="metric">
+              <span>调用</span>
+              <strong id="metric-calls">0</strong>
+              <small id="metric-average">平均 0</small>
+            </div>
+            <div class="metric">
+              <span>任务</span>
+              <strong id="metric-tasks">0</strong>
+              <small>今日会话</small>
+            </div>
+            <div class="metric">
+              <span>缓存率</span>
+              <strong id="metric-cache">0%</strong>
+              <small id="metric-updated">等待索引</small>
+            </div>
+          </div>
+        </section>
+
+        <div class="detail-grid">
+          <section class="detail-section" aria-labelledby="targets-heading">
+            <div class="section-heading compact-heading">
+              <div>
+                <span class="eyebrow">Availability</span>
+                <h2 id="targets-heading">本机入口</h2>
+              </div>
+            </div>
+            <div class="target-list" id="target-list"></div>
+          </section>
+
+          <section class="detail-section" aria-labelledby="recent-heading">
+            <div class="section-heading compact-heading">
+              <div>
+                <span class="eyebrow">Instances</span>
+                <h2 id="recent-heading">运行与最近启动</h2>
+              </div>
+            </div>
+            <div class="recent-list" id="recent-list"></div>
+          </section>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <dialog class="modal" id="create-profile-dialog">
+    <form method="dialog" id="create-profile-form">
+      <div class="modal-heading">
+        <div class="modal-icon"><i data-lucide="user-round-plus"></i></div>
+        <div>
+          <span class="eyebrow">New profile</span>
+          <h2>新建账号配置</h2>
+        </div>
+      </div>
+      <label class="field-label" for="profile-name-input">显示名称</label>
+      <input id="profile-name-input" name="profileName" maxlength="40" autocomplete="off" placeholder="例如：工作账号" required>
+      <div class="modal-actions">
+        <button class="secondary-button" id="cancel-profile-button" type="button">取消</button>
+        <button class="primary-button" id="confirm-profile-button" type="submit">
+          <i data-lucide="plus"></i>
+          <span>创建配置</span>
+        </button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="modal provider-modal" id="provider-dialog">
+    <form id="provider-form">
+      <div class="modal-heading">
+        <div class="modal-icon"><i data-lucide="server-cog"></i></div>
+        <div>
+          <span class="eyebrow">Provider</span>
+          <h2>供应商设置</h2>
+        </div>
+      </div>
+
+      <div class="segmented-control" role="radiogroup" aria-label="供应商类型">
+        <label class="segmented-option">
+          <input type="radio" name="providerType" value="official" checked>
+          <span>OpenAI 官方</span>
+        </label>
+        <label class="segmented-option">
+          <input type="radio" name="providerType" value="custom">
+          <span>自定义中转站</span>
+        </label>
+      </div>
+
+      <div class="provider-fields" id="custom-provider-fields" hidden>
+        <div class="provider-field">
+          <label class="field-label" for="provider-name-input">供应商名称</label>
+          <input id="provider-name-input" maxlength="60" autocomplete="off" placeholder="例如：HL-DEV">
+        </div>
+        <div class="provider-field">
+          <label class="field-label" for="provider-note-input">备注</label>
+          <input id="provider-note-input" maxlength="120" autocomplete="off" placeholder="例如：公司开发环境">
+        </div>
+        <div class="provider-field field-full">
+          <label class="field-label" for="provider-base-url-input">API 请求地址</label>
+          <input id="provider-base-url-input" type="url" maxlength="500" autocomplete="off" placeholder="http://127.0.0.1:8080/v1">
+        </div>
+        <div class="provider-field">
+          <label class="field-label" for="provider-model-input">默认模型</label>
+          <input id="provider-model-input" maxlength="100" autocomplete="off" placeholder="例如：gpt-5.6-sol">
+        </div>
+        <div class="provider-field">
+          <label class="field-label" for="provider-id-input">Provider ID</label>
+          <input id="provider-id-input" maxlength="40" autocomplete="off" value="custom" placeholder="custom">
+        </div>
+
+        <details class="provider-advanced field-full" id="provider-advanced">
+          <summary>
+            <span><i data-lucide="sliders-horizontal"></i>高级选项</span>
+            <span class="advanced-state" id="provider-advanced-state">Responses</span>
+          </summary>
+          <div class="advanced-content">
+            <fieldset class="provider-field field-full auth-fieldset">
+              <legend class="field-label">认证方式</legend>
+              <div class="auth-options" role="radiogroup" aria-label="认证方式">
+                <label class="auth-option">
+                  <input type="radio" name="providerAuthMode" value="environment" checked>
+                  <span><strong>CDC 安全密钥</strong><small>env_key</small></span>
+                </label>
+                <label class="auth-option">
+                  <input type="radio" name="providerAuthMode" value="openai">
+                  <span><strong>Codex 登录</strong><small>OpenAI auth</small></span>
+                </label>
+                <label class="auth-option">
+                  <input type="radio" name="providerAuthMode" value="none">
+                  <span><strong>无需认证</strong><small>Local</small></span>
+                </label>
+              </div>
+            </fieldset>
+
+            <div class="provider-field field-full" id="provider-api-key-field">
+              <div class="field-heading">
+                <label class="field-label" for="provider-api-key-input">API Key</label>
+                <span class="secure-label"><i data-lucide="key-round"></i>系统加密</span>
+              </div>
+              <div class="secret-input">
+                <input id="provider-api-key-input" type="password" maxlength="1000" autocomplete="new-password" placeholder="输入 API Key">
+                <button class="input-icon-button" id="toggle-provider-key-button" type="button" title="显示或隐藏 API Key" aria-label="显示或隐藏 API Key">
+                  <i data-lucide="eye"></i>
+                  <i data-lucide="eye-off" hidden></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="provider-field">
+              <label class="field-label" for="provider-reasoning-input">推理强度</label>
+              <select id="provider-reasoning-input">
+                <option value="">跟随模型默认</option>
+                <option value="minimal">Minimal</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="xhigh">XHigh</option>
+              </select>
+            </div>
+            <div class="provider-field">
+              <label class="field-label" for="provider-personality-input">交互个性</label>
+              <select id="provider-personality-input">
+                <option value="">跟随 Codex 默认</option>
+                <option value="none">None</option>
+                <option value="friendly">Friendly</option>
+                <option value="pragmatic">Pragmatic</option>
+              </select>
+            </div>
+            <label class="compatibility-toggle field-full">
+              <span>
+                <strong>禁用响应存储</strong>
+                <small>兼容旧版 disable_response_storage</small>
+              </span>
+              <input id="provider-disable-storage-input" type="checkbox">
+              <span class="toggle-track" aria-hidden="true"></span>
+            </label>
+          </div>
+        </details>
+      </div>
+
+      <div class="config-preview">
+        <div class="field-heading">
+          <span class="field-label">config.toml</span>
+          <div class="config-heading-actions">
+            <span class="protocol-label" id="provider-protocol-label">保留 Profile 通用配置</span>
+            <button class="compact-button" id="import-provider-config-button" type="button">
+              <i data-lucide="file-input"></i>
+              <span>导入配置</span>
+            </button>
+          </div>
+        </div>
+        <pre id="provider-config-preview">正在生成...</pre>
+      </div>
+
+      <div class="modal-actions">
+        <button class="secondary-button" id="cancel-provider-button" type="button">取消</button>
+        <button class="primary-button" id="save-provider-button" type="submit">
+          <i data-lucide="save-check"></i>
+          <span>保存供应商</span>
+        </button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

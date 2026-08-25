@@ -1,11 +1,18 @@
 {
   "name": "dual-codex-day",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "private": true,
   "description": "A local-first Codex profile launcher and personal usage dashboard.",
+  "author": "AdlinZ",
+  "repository": "https://github.com/AdlinZ/dual-codex-day",
   "license": "MIT",
+  "main": "electron/main.mjs",
   "scripts": {
     "start": "node ./scripts/codex-day.mjs --open",
+    "desktop": "electron .",
+    "desktop:screenshot": "node ./scripts/capture-electron.mjs",
+    "build:brand": "electron ./scripts/build-brand-assets.cjs",
+    "package:electron": "node ./scripts/package-electron.mjs --platform win32 --arch x64",
     "index": "node ./scripts/codex-day.mjs --once",
     "profiles": "node ./scripts/codex-profiles.mjs list",
     "profiles:doctor": "node ./scripts/codex-profiles.mjs doctor",
@@ -18,14 +25,21 @@
     "test:service": "node ./scripts/check-service.mjs",
     "test:pricing": "node ./scripts/check-pricing.mjs",
     "test:profiles": "node ./scripts/check-profiles.mjs",
+    "test:electron": "node ./scripts/check-electron.mjs",
     "test:tray": "node ./scripts/check-tray.mjs",
     "test:container": "node ./scripts/check-container.mjs",
-    "test": "node ./scripts/check-dashboard.js && npm run test:index && npm run test:service && npm run test:pricing && npm run test:profiles && npm run test:tray && npm run test:container"
+    "test": "node ./scripts/check-dashboard.js && npm run test:index && npm run test:service && npm run test:pricing && npm run test:profiles && npm run test:electron && npm run test:tray && npm run test:container"
   },
   "engines": {
     "node": ">=22.5.0"
   },
   "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^44.0.0",
     "tailwindcss": "^3.4.17"
+  },
+  "dependencies": {
+    "lucide": "^1.34.0",
+    "smol-toml": "^1.8.0"
   }
 }

@@ -17,8 +17,11 @@
 
 - 为每个账号创建独立的 `CODEX_HOME`、SQLite 和客户端数据目录
 - 一键打开 Codex CLI、独立 VS Code 窗口或实验性的桌面客户端实例
-- 使用官方登录流程，不读取、复制、导入或展示 `auth.json`
-- 启动时清除继承的 API Key 和 Access Token，避免账号串用
+- 持久记录启动实例并显示每个账号当前运行数量
+- Electron 桌面控制台统一展示账号、入口状态、今日用量与最近启动记录
+- 每个 Profile 可选择 OpenAI 官方登录或独立的 Responses API 中转站
+- 不读取、复制、导入或展示 `auth.json`；中转站 API Key 使用操作系统加密
+- 启动时清除继承的 API Key 和 Access Token，只向目标 Profile 注入其专用密钥
 - 原生 Windows 图形界面，编译器不可用时自动回退到 PowerShell 界面
 
 ### 本地用量分析
@@ -33,14 +36,27 @@
 
 ## Windows 快速开始
 
-推荐安装 Node.js 22.5 或更高版本。用量仪表盘在没有 Node.js 时仍可回退到 PowerShell 5.1 静态模式，多账号启动器需要 Node.js 核心。
+推荐安装 Node.js 22.5 或更高版本。Electron 桌面版与多账号启动核心需要 Node.js；用量仪表盘在没有 Node.js 时仍可回退到 PowerShell 5.1 静态模式。
 
 ```powershell
 git clone https://github.com/AdlinZ/dual-codex-day.git
 cd dual-codex-day
+npm install
 ```
 
-启动账号管理器：
+启动 Electron 桌面版：
+
+```powershell
+npm run desktop
+```
+
+构建 Windows x64 桌面应用：
+
+```powershell
+npm run package:electron
+```
+
+构建结果位于 `dist\electron\dual-codex-day-win32-x64`。原生 Windows 账号管理器继续作为轻量回退入口：
 
 ```powershell
 .\scripts\open-profiles.cmd
@@ -64,7 +80,26 @@ cd dual-codex-day
 - **VS Code**：独立 `CODEX_HOME` 和 `--user-data-dir`，会打开真正独立的 VS Code 实例。
 - **Codex 桌面客户端**：独立 `CODEX_HOME` 和 Electron `--user-data-dir`。该入口标记为实验性，因为官方没有承诺商店版客户端始终支持多实例。
 
-每个配置会写入 `cli_auth_credentials_store = "file"`，让官方 Codex 将凭据保存在该配置目录。不要上传或分享 `%LOCALAPPDATA%\dual-codex-day\profiles`。
+每个配置都会生成自己的 `config.toml`。官方模式写入 `cli_auth_credentials_store = "file"`；中转站模式还会写入 `model_provider`、`base_url`、认证方式和 `wire_api = "responses"` 等字段。不要上传或分享 `%LOCALAPPDATA%\dual-codex-day\profiles`。
+
+### Profile 供应商设置
+
+选中 Profile 后打开“供应商设置”，可以在以下模式间切换：
+
+- **OpenAI 官方**：使用该 Profile 自己的 ChatGPT 官方登录状态。
+- **自定义中转站**：分别设置供应商名称、备注、Provider ID、模型和 API 请求地址，并可配置推理强度、交互个性和旧版响应存储兼容项。
+
+中转站提供三种互斥认证方式：
+
+- **CDC 安全密钥**：API Key 使用 Electron `safeStorage` 调用操作系统加密，启动时通过独立 `env_key` 注入目标进程。
+- **Codex 登录**：生成 `requires_openai_auth = true`，使用该 Profile 自己的 ChatGPT 或 API Key 登录状态；CDC 不读取登录凭据。
+- **无需认证**：不生成密钥变量，适用于不要求认证的本地兼容服务。
+
+根据 [Codex Authentication](https://developers.openai.com/codex/auth)，`requires_openai_auth = true` 时 Codex 会忽略 `env_key`，因此 CDC 不会同时生成两套认证字段。使用 CDC 安全密钥时，渲染页面、`profiles.json`、`config.toml` 和启动历史都不会包含明文；留空保存会保留已有密钥，填写新值会替换，切换到其他认证方式会删除该 Profile 的 CDC 密钥。
+
+保存供应商时会解析现有 `config.toml` 并只替换当前供应商管理的字段，插件、MCP、桌面偏好、项目信任、通知和其他通用配置会保留。供应商编辑器中的“导入配置”可以选择另一个 `config.toml`：CDC 会移除来源文件的活动模型与供应商，再叠加目标 Profile 的当前供应商；`auth.json` 不会被读取或复制。TOML 会由序列化器重新排版，原注释和手工格式不会保留。
+
+自定义中转站必须兼容 Codex 的 Responses API。CDC 不会自动发起可能计费的连接测试。使用“CDC 安全密钥”时，Electron 控制台会自动解密并向目标进程注入密钥；直接使用 Node.js 命令启动该类 Profile 时，需要调用方自行提供 `DUAL_CODEX_DAY_PROVIDER_API_KEY`。
 
 命令行管理入口：
 
@@ -76,6 +111,17 @@ node .\scripts\codex-profiles.mjs launch "工作账号" --target vscode --worksp
 ```
 
 Windows 会用系统自带的 .NET Framework 编译器在本机构建 `dist\dual-codex-day.exe`。源码更新后自动重建，构建失败时回退到 PowerShell 图形界面。设计和安全边界见 [v1.0.0 规划](docs/plans/v1.0.0.md)。
+
+Electron `v0.10.0` 使用沙箱渲染进程和受限预加载桥接，账号与启动逻辑仍复用同一套 Node.js 核心。范围和验收标准见 [v0.10.0 规划](docs/plans/v0.10.0.md)。
+
+### 同时打开两个 Codex 桌面账号
+
+1. 在 Electron 控制台中创建两个账号配置。
+2. 选择第一个配置，点击“打开独立 Codex”，并在首次打开时完成官方登录。
+3. 回到控制台选择第二个配置，再次点击“打开独立 Codex”并登录另一个账号。
+4. 左侧账号列表和“运行与最近启动”会分别显示两个正在运行的实例。
+
+启动器会等待确认客户端主进程仍然存活，并让每个实例使用独立的 `CODEX_HOME`、SQLite 和 Electron `--user-data-dir`。在 Windows Store 版 `OpenAI.Codex 26.818.8289.0` 上已经完成双实例实测；由于官方尚未把多实例作为稳定接口承诺，后续客户端更新仍需重新验证。
 
 ## 用量仪表盘
 
@@ -204,6 +250,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\refresh-dashbo
 npm install
 npm run build
 npm test
+npm run desktop
 ```
 
 可单独执行：
@@ -213,6 +260,7 @@ npm run build:css
 npm run build:demo
 npm run test:service
 npm run test:profiles
+npm run test:electron
 npm run test:tray
 npm run test:container
 ```
@@ -237,6 +285,10 @@ dual-codex-day/
 ├─ demo/
 │  ├─ index.html              # 可直接浏览的虚构 Demo
 │  └─ sample-data.json        # 虚构数据源
+├─ electron/
+│  ├─ main.mjs                # Electron 主进程、IPC 与详细仪表盘窗口
+│  ├─ preload.cjs             # 受限渲染进程桥接
+│  └─ renderer/               # 桌面控制台 HTML、CSS 与交互
 ├─ scripts/
 │  ├─ build-demo.ps1          # 重建公开 Demo
 │  ├─ build-demo.mjs          # 跨平台重建公开 Demo
@@ -247,6 +299,9 @@ dual-codex-day/
 │  ├─ check-service.mjs       # 服务健康与 PID 生命周期测试
 │  ├─ check-pricing.mjs       # 价格快照与候选差异检查
 │  ├─ check-profiles.mjs      # 多账号目录与启动隔离检查
+│  ├─ check-electron.mjs      # Electron 安全边界与界面结构检查
+│  ├─ capture-electron.mjs    # 本地桌面视觉验收截图
+│  ├─ package-electron.mjs    # Electron 跨平台打包入口
 │  ├─ build-profiles-launcher.ps1 # 构建原生 Windows 启动器
 │  ├─ check-tray.mjs          # 托盘入口与脚本语法检查
 │  ├─ lib/
@@ -291,7 +346,7 @@ dual-codex-day/
 ## 当前限制
 
 - Node.js 增量模式和多账号启动核心要求 22.5 或更高版本；Windows 仪表盘在无 Node.js 时仍可回退到 PowerShell 静态模式。
-- Codex 桌面客户端多实例属于已验证但未获官方稳定性承诺的实验能力；CLI 与 VS Code 是优先支持入口。
+- Codex 桌面客户端多实例已在当前 Windows Store 版完成双实例验证，但仍未获官方稳定性承诺；客户端大版本更新后需要重新验证。
 - Docker 部署需要用户显式配置 `CODEX_DATA_DIR`，不会自动猜测或扩大宿主机挂载范围。
 - 项目名称取自工作目录的最后一级，重名目录会在界面中显示相同名称，但内部匿名标识仍不同。
 - 成本仅是公开 API 标价的等价估算，无法代表公司中转站的折扣、包量、倍率或实际账单。
@@ -302,7 +357,7 @@ dual-codex-day/
 - 价格候选快照的人工确认与显式更新流程
 - 跨版本数据 Schema 迁移与备份恢复
 
-v0.9.0 正在完成价格审计、提醒时段和 90 天回顾，设计范围与验收标准见 [v0.9.0 规划](docs/plans/v0.9.0.md)。设置迁移与每日摘要见 [v0.8.0 规划](docs/plans/v0.8.0.md)，数据健康设计见 [v0.7.0 规划](docs/plans/v0.7.0.md)。
+v0.10.0 正在整合 Electron 桌面控制中心，设计范围与验收标准见 [v0.10.0 规划](docs/plans/v0.10.0.md)。价格审计与 90 天回顾见 [v0.9.0 规划](docs/plans/v0.9.0.md)，设置迁移与每日摘要见 [v0.8.0 规划](docs/plans/v0.8.0.md)。
 
 ## License
 

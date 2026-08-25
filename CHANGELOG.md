@@ -2,7 +2,35 @@
 
 Project name: **Dual Codex Day** (`dual-codex-day`). Historical entries may retain the original `codex-day` name.
 
-## [0.9.0] - Unreleased
+## [0.10.0] - Unreleased
+
+### Added
+
+- A secure Electron desktop shell that combines profile launching and today's local usage summary.
+- A compact profile rail, workspace picker, target availability view and recent-launch activity.
+- Persistent launch history, per-profile running indicators and automatic active-instance refresh.
+- Per-profile OpenAI/custom-provider settings with generated TOML previews and Responses API configuration.
+- Operating-system encrypted custom-provider API keys with profile-scoped launch injection.
+- Three custom-provider authentication modes, advanced model preferences and user-selected common `config.toml` import.
+- An in-app detailed dashboard window backed by the existing local-only usage service.
+- A Windows x64 Electron packaging command and release artifact workflow.
+
+### Changed
+
+- Replaced the legacy activity dial with a geometric Dual C mark across the dashboard, desktop shell and Windows icon.
+- The default desktop experience now uses the Electron control center while retaining the native, PowerShell and CLI launchers.
+- The Codex desktop action is now the primary launcher and confirms that the detached client process remains alive before reporting success.
+- Inherited API credentials remain stripped; custom provider credentials are injected only into the selected profile process.
+- Provider updates now merge with existing TOML so plugin, MCP, desktop, notification and project settings remain intact.
+- Package metadata, documentation and automated checks now target version 0.10.0.
+
+### Privacy
+
+- Electron renderers are sandboxed with context isolation, no Node.js integration and a local-only content security policy.
+- The preload bridge exposes only profile, workspace and dashboard commands; it never reads or references credential files.
+- Provider secrets never appear in profile metadata, generated TOML, renderer snapshots or launch history.
+
+## [0.9.0] - 2026-08-25
 
 ### Added
 
