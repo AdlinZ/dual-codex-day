@@ -27,6 +27,7 @@ import ImageDown from '../../node_modules/lucide/dist/esm/icons/image-down.mjs';
 import Pencil from '../../node_modules/lucide/dist/esm/icons/pencil.mjs';
 import Trash2 from '../../node_modules/lucide/dist/esm/icons/trash-2.mjs';
 import LogIn from '../../node_modules/lucide/dist/esm/icons/log-in.mjs';
+import Square from '../../node_modules/lucide/dist/esm/icons/square.mjs';
 
 const iconNodes = {
   'refresh-cw': RefreshCw,
@@ -56,7 +57,8 @@ const iconNodes = {
   'image-down': ImageDown,
   pencil: Pencil,
   'trash-2': Trash2,
-  'log-in': LogIn
+  'log-in': LogIn,
+  square: Square
 };
 
 const targetMetadata = {
@@ -521,13 +523,14 @@ function renderRecent() {
   elements.recentList.innerHTML = recent.map(item => {
     const metadata = targetMetadata[item.target] || targetMetadata.cli;
     return `
-      <div class="recent-row">
+      <div class="recent-row${item.active ? ' has-action' : ''}">
         <span class="recent-icon"><i data-lucide="${metadata.icon}"></i></span>
         <span class="recent-copy">
           <strong>${escapeHtml(item.profileName)}</strong>
           <span>${metadata.label} · ${item.runtimeSource === 'default' ? '默认账号' : '独立账号'}</span>
         </span>
         <span class="launch-state${item.active ? ' is-active' : ''}">${item.active ? '运行中' : formatTime(item.launchedAt)}</span>
+        ${item.active ? `<button class="icon-button stop-instance-button" type="button" data-stop-launch="${escapeHtml(item.id)}" title="关闭实例" aria-label="关闭 ${escapeHtml(item.profileName)} 的 ${metadata.label}"><i data-lucide="square"></i></button>` : ''}
       </div>
     `;
   }).join('');
@@ -1490,6 +1493,27 @@ elements.launchActions.addEventListener('click', async event => {
   } finally {
     setBusy(false);
     renderSelectedProfile();
+  }
+});
+
+elements.recentList.addEventListener('click', async event => {
+  const button = event.target.closest('[data-stop-launch]');
+  if (!button || state.busy) return;
+  const launch = state.snapshot?.recentLaunches.find(item => item.id === button.dataset.stopLaunch);
+  if (!launch?.active) return;
+  setBusy(true);
+  button.disabled = true;
+  try {
+    const result = await window.dualCodexDay.stopProfileLaunch(launch.id);
+    if (result.canceled) return;
+    await refreshSnapshot(state.selectedProfileId, true);
+    const suffix = result.alreadyStopped ? '已经结束。' : result.forced ? '已强制关闭。' : '已关闭。';
+    showToast(`“${launch.profileName}”的 ${targetMetadata[launch.target]?.label || '客户端'}${suffix}`);
+  } catch (error) {
+    showToast(error.message || '无法关闭实例。', true);
+  } finally {
+    setBusy(false);
+    render();
   }
 });
 

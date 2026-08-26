@@ -19,6 +19,7 @@ import {
   readProfileLoginStatus,
   removeProfile,
   renameProfile,
+  stopProfileLaunch,
   updateProfileProvider,
   updateProfileRuntimeSource,
   updateProfileUsageSource
@@ -373,6 +374,42 @@ function registerIpc() {
       defaultSqliteHome: process.env.CODEX_SQLITE_HOME || defaultCodexRoot
     });
     return confirmLaunch(result);
+  });
+  ipcMain.handle('profiles:stop', async (_event, launchId) => {
+    const launch = listProfileLaunches(profilesRoot, { limit: 24 })
+      .find(candidate => candidate.id === String(launchId || ''));
+    if (!launch) throw new Error('找不到这条启动记录，请刷新后重试。');
+    if (!launch.active) return { ...launch, canceled: false, alreadyStopped: true };
+
+    const targetLabel = {
+      cli: 'Codex CLI',
+      vscode: 'VS Code',
+      desktop: 'Codex 桌面端'
+    }[launch.target] || 'Codex 客户端';
+    const defaultRuntimeWarning = launch.runtimeSource === 'default'
+      ? '\n\n这是系统默认运行环境。若客户端复用了已有窗口，关闭可能影响你在该窗口中的其他工作。'
+      : '';
+    const confirmation = await dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      buttons: ['取消', '关闭实例'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      title: '关闭实例',
+      message: `关闭“${launch.profileName}”的 ${targetLabel}？`,
+      detail: `DCD 会先请求正常关闭，客户端没有响应时再强制结束该实例。${defaultRuntimeWarning}`
+    });
+    if (confirmation.response !== 1) return { ...launch, canceled: true };
+
+    try {
+      return { ...await stopProfileLaunch(profilesRoot, launch.id), canceled: false };
+    } catch (error) {
+      if (/Cannot verify/.test(error.message)) {
+        throw new Error('无法确认这个进程仍属于该启动记录。为避免误关其他程序，DCD 已取消操作。');
+      }
+      if (/did not exit/.test(error.message)) throw new Error('客户端未能关闭，请在对应窗口中手动退出。');
+      throw error;
+    }
   });
   ipcMain.handle('profiles:open-folder', async (_event, profileId) => {
     const profile = findProfile(profilesRoot, String(profileId || ''));

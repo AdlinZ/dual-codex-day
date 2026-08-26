@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
@@ -18,6 +18,7 @@ const PROFILE_PERSONALITIES = new Set(['none', 'friendly', 'pragmatic']);
 const RESERVED_PROVIDER_IDS = new Set(['openai', 'ollama', 'lmstudio']);
 const LAUNCH_HISTORY_SCHEMA_VERSION = 1;
 const MAX_LAUNCH_HISTORY = 24;
+const PROCESS_IDENTITY_TOLERANCE_MS = 30_000;
 
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 const scriptsDirectory = path.dirname(moduleDirectory);
@@ -294,6 +295,102 @@ export function listProfileLaunches(root = defaultProfilesRoot(), options = {}) 
   }));
 }
 
+function processStartTime(pid, options = {}) {
+  const spawnSyncProcess = options.spawnSyncProcess || spawnSync;
+  if (process.platform === 'win32') {
+    const powershell = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    const command = `$item = Get-CimInstance Win32_Process -Filter 'ProcessId = ${pid}' -ErrorAction SilentlyContinue; if ($null -eq $item) { exit 3 }; ([DateTimeOffset]$item.CreationDate).ToUnixTimeMilliseconds()`;
+    const result = spawnSyncProcess(powershell, ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', command], {
+      encoding: 'utf8',
+      timeout: 5_000,
+      windowsHide: true
+    });
+    if (result.status !== 0) return null;
+    const startedAt = Number(String(result.stdout || '').trim());
+    return Number.isFinite(startedAt) ? startedAt : null;
+  }
+
+  const result = spawnSyncProcess('ps', ['-p', String(pid), '-o', 'lstart='], {
+    encoding: 'utf8',
+    timeout: 5_000,
+    windowsHide: true
+  });
+  if (result.status !== 0) return null;
+  const startedAt = Date.parse(String(result.stdout || '').trim());
+  return Number.isFinite(startedAt) ? startedAt : null;
+}
+
+export function verifyLaunchProcessIdentity(launch, options = {}) {
+  const launchedAt = Date.parse(String(launch?.launchedAt || ''));
+  if (!Number.isFinite(launchedAt)) return false;
+  const startedAt = processStartTime(launch.pid, options);
+  if (!Number.isFinite(startedAt)) return false;
+  return Math.abs(startedAt - launchedAt) <= PROCESS_IDENTITY_TOLERANCE_MS;
+}
+
+function terminateProcessTree(pid, force = false, options = {}) {
+  if (process.platform === 'win32') {
+    const spawnSyncProcess = options.spawnSyncProcess || spawnSync;
+    const taskkill = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'taskkill.exe');
+    const args = ['/PID', String(pid), '/T'];
+    if (force) args.push('/F');
+    const result = spawnSyncProcess(taskkill, args, {
+      encoding: 'utf8',
+      timeout: 5_000,
+      windowsHide: true
+    });
+    return result.status === 0;
+  }
+
+  const signal = force ? 'SIGKILL' : 'SIGTERM';
+  try {
+    process.kill(-pid, signal);
+  } catch (error) {
+    if (error?.code === 'ESRCH') return true;
+    process.kill(pid, signal);
+  }
+  return true;
+}
+
+async function waitForProcessExit(pid, checkProcess, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!checkProcess(pid)) return true;
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  return !checkProcess(pid);
+}
+
+export async function stopProfileLaunch(root = defaultProfilesRoot(), launchId, options = {}) {
+  const id = String(launchId || '').trim();
+  if (!id) throw new Error('Launch id is required.');
+  const launch = loadLaunchHistory(path.resolve(root)).launches.find(item => item.id === id);
+  if (!launch) throw new Error('Launch record was not found.');
+
+  const checkProcess = options.isProcessAlive || isProcessAlive;
+  if (!checkProcess(launch.pid)) {
+    return { ...launch, active: false, alreadyStopped: true, forced: false };
+  }
+
+  const verifyProcess = options.verifyProcessIdentity || verifyLaunchProcessIdentity;
+  if (!await verifyProcess(launch)) {
+    throw new Error('Cannot verify that the running process still belongs to this launch record.');
+  }
+
+  const terminate = options.terminateProcessTree || terminateProcessTree;
+  const waitForExit = options.waitForExit || waitForProcessExit;
+  const gracefulAccepted = await terminate(launch.pid, false);
+  if (!checkProcess(launch.pid) || (gracefulAccepted !== false && await waitForExit(launch.pid, checkProcess, 8_000))) {
+    return { ...launch, active: false, alreadyStopped: false, forced: false };
+  }
+
+  await terminate(launch.pid, true);
+  if (!await waitForExit(launch.pid, checkProcess, 3_000)) {
+    throw new Error('The client process did not exit after a forced stop.');
+  }
+  return { ...launch, active: false, alreadyStopped: false, forced: true };
+}
+
 export function normalizeProfileName(value) {
   if (typeof value !== 'string') throw new Error('Profile name must be text.');
   const name = value.trim();
@@ -476,8 +573,8 @@ function executableFromPath(names, environment = process.env) {
   const extensions = process.platform === 'win32'
     ? (environment.PATHEXT || '.EXE;.CMD;.BAT;.COM').split(';')
     : [''];
-  for (const directory of searchPath.split(path.delimiter).filter(Boolean)) {
-    for (const name of names) {
+  for (const name of names) {
+    for (const directory of searchPath.split(path.delimiter).filter(Boolean)) {
       const candidates = path.extname(name) ? [name] : extensions.map(extension => `${name}${extension.toLowerCase()}`);
       for (const candidate of candidates) {
         const filePath = path.join(directory.replace(/^"|"$/g, ''), candidate);
@@ -530,12 +627,32 @@ function detectUserCodexExecutable(environment = process.env) {
     .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0] || null;
 }
 
+function detectWindowsTerminal(environment = process.env) {
+  if (process.platform !== 'win32') return null;
+  const candidates = [
+    path.join(environment.LOCALAPPDATA || '', 'Microsoft', 'WindowsApps', 'wt.exe'),
+    executableFromPath(['wt.exe'], environment)
+  ];
+  const regularExecutable = candidates.find(candidate => candidate && existsSync(candidate));
+  if (regularExecutable) return regularExecutable;
+  const whereExecutable = path.join(environment.SystemRoot || environment.SYSTEMROOT || 'C:\\Windows', 'System32', 'where.exe');
+  const result = spawnSync(whereExecutable, ['wt.exe'], {
+    env: environment,
+    encoding: 'utf8',
+    windowsHide: true,
+    timeout: 5_000
+  });
+  if (result.status !== 0) return null;
+  return String(result.stdout || '').split(/\r?\n/).map(value => value.trim()).find(Boolean) || null;
+}
+
 export function detectProfileTargets(environment = process.env) {
   const codex = detectUserCodexExecutable(environment) || executableFromPath(['codex.exe', 'codex'], environment);
   const vscode = detectCodeExecutable(environment);
   const desktop = detectDesktopExecutable(environment);
+  const terminal = detectWindowsTerminal(environment);
   return {
-    cli: { available: Boolean(codex), executable: codex },
+    cli: { available: Boolean(codex) && (process.platform !== 'win32' || Boolean(terminal)), executable: codex, terminal },
     vscode: { available: Boolean(vscode), executable: vscode },
     desktop: { available: Boolean(desktop), executable: desktop, experimental: true }
   };
@@ -625,17 +742,32 @@ export function buildLaunchPlan(profile, target, options = {}) {
     const powershell = executableFromPath(['powershell.exe', 'pwsh.exe'], options.environment || process.env);
     if (!powershell) throw new Error('PowerShell is required to open an interactive Codex terminal.');
     const runner = externalResourcePath(path.join(scriptsDirectory, 'run-codex-profile.ps1'));
+    const runnerArgs = [
+      '-NoLogo', '-NoExit', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', runner,
+      '-CodexHome', codexHome,
+      '-SqliteHome', sqliteHome,
+      '-CodexExecutable', detected.executable,
+      '-WorkingDirectory', workingDirectory,
+      '-ProfileName', profile.name
+    ];
+    if (process.platform === 'win32' && detected.terminal) {
+      const runtimeDirectory = path.join(profile.paths.root, 'runtime');
+      mkdirSync(runtimeDirectory, { recursive: true });
+      const pidFile = path.join(runtimeDirectory, `cli-${randomUUID()}.pid`);
+      return {
+        target,
+        command: detected.terminal,
+        args: ['-w', 'new', 'nt', '--title', `Codex - ${profile.name}`, powershell, ...runnerArgs, '-PidFile', pidFile],
+        cwd: workingDirectory,
+        environment,
+        experimental: false,
+        pidFile
+      };
+    }
     return {
       target,
       command: powershell,
-      args: [
-        '-NoLogo', '-NoExit', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', runner,
-        '-CodexHome', codexHome,
-        '-SqliteHome', sqliteHome,
-        '-CodexExecutable', detected.executable,
-        '-WorkingDirectory', workingDirectory,
-        '-ProfileName', profile.name
-      ],
+      args: runnerArgs,
       cwd: workingDirectory,
       environment,
       experimental: false
@@ -665,6 +797,25 @@ export function buildLaunchPlan(profile, target, options = {}) {
   };
 }
 
+function waitForReportedPid(pidFile, timeoutMs = 5_000) {
+  const waitBuffer = new Int32Array(new SharedArrayBuffer(4));
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (existsSync(pidFile)) {
+      try {
+        const pid = Number(readFileSync(pidFile, 'utf8').trim());
+        if (Number.isInteger(pid) && pid > 0) {
+          unlinkSync(pidFile);
+          return pid;
+        }
+      } catch {}
+    }
+    Atomics.wait(waitBuffer, 0, 0, 50);
+  }
+  if (existsSync(pidFile)) unlinkSync(pidFile);
+  throw new Error('Interactive terminal did not report a valid process id.');
+}
+
 export function launchProfile(root, reference, target, options = {}) {
   const profile = findProfile(root, reference);
   const plan = buildLaunchPlan(profile, target, options);
@@ -677,13 +828,14 @@ export function launchProfile(root, reference, target, options = {}) {
     windowsHide: false
   });
   child.unref();
+  const launchedPid = plan.pidFile ? waitForReportedPid(plan.pidFile) : child.pid;
   const result = {
     id: randomUUID(),
     profile: { id: profile.id, name: profile.name },
     target: plan.target,
     runtimeSource: normalizeProfileRuntimeSource(profile.runtimeSource || profile.usageSource),
     experimental: plan.experimental,
-    pid: child.pid,
+    pid: launchedPid,
     launchedAt: new Date().toISOString()
   };
   rememberLaunch(root, {

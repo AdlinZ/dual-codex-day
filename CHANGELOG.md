@@ -2,7 +2,30 @@
 
 Project name: **Dual Codex Day** (`dual-codex-day`). Historical entries may retain the original `codex-day` name.
 
-## [0.10.0] - Unreleased
+## [0.10.1] - 2026-08-26
+
+### Added
+
+- Per-instance close controls for running Codex CLI, VS Code and Codex desktop launches.
+- Windows Terminal PID handshakes so CLI launch history tracks the real interactive PowerShell process.
+
+### Changed
+
+- Instance shutdown verifies the recorded process start time, requests a normal process-tree close first and uses a forced stop only when required.
+- Default-runtime instances show an additional shared-window warning before shutdown.
+- Windows CLI launches prefer system Windows PowerShell and use a dedicated Windows Terminal window.
+
+### Fixed
+
+- CLI launches no longer select Codex's bundled PowerShell runtime or exit because no interactive terminal is attached.
+- Packaged Electron builds now retain the stop-control icon and can use an alternate output directory while an older build is running.
+
+### Privacy
+
+- Shutdown accepts only a DCD launch-record ID and never scans or terminates unrelated account processes.
+- Process identity checks prevent a recycled historical PID from being treated as an owned instance.
+
+## [0.10.0] - 2026-08-25
 
 ### Added
 

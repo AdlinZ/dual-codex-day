@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -17,6 +17,7 @@ import {
   providerConfigPreview,
   removeProfile,
   renameProfile,
+  stopProfileLaunch,
   updateProfileProvider,
   updateProfileRuntimeSource,
   updateProfileUsageSource
@@ -28,6 +29,15 @@ function assert(condition, message) {
 
 function assertThrows(callback, pattern, message) {
   try { callback(); }
+  catch (error) {
+    assert(pattern.test(error.message), message);
+    return;
+  }
+  throw new Error(message);
+}
+
+async function assertRejects(callback, pattern, message) {
+  try { await callback(); }
   catch (error) {
     assert(pattern.test(error.message), message);
     return;
@@ -165,6 +175,59 @@ command = "figma-bridge"
   assert(desktopPlan.experimental === true && vscodePlan.experimental === false, 'only desktop multi-instance support should be marked experimental');
   assert(!vscodePlan.args.some(argument => argument.includes(first.name)), 'display names must not be used as filesystem arguments');
 
+  if (process.platform === 'win32') {
+    const bundledRuntimeDirectory = path.join(first.paths.root, 'bundled-runtime');
+    const systemRuntimeDirectory = path.join(first.paths.root, 'system-runtime');
+    mkdirSync(bundledRuntimeDirectory, { recursive: true });
+    mkdirSync(systemRuntimeDirectory, { recursive: true });
+    writeFileSync(path.join(bundledRuntimeDirectory, 'pwsh.exe'), '');
+    writeFileSync(path.join(systemRuntimeDirectory, 'powershell.exe'), '');
+    const preferredShellPlan = buildLaunchPlan(updatedFirst, 'cli', {
+      ...providerOptions,
+      environment: {
+        ...fakeEnvironment,
+        PATH: [bundledRuntimeDirectory, systemRuntimeDirectory].join(path.delimiter),
+        PATHEXT: '.EXE'
+      }
+    });
+    assert(preferredShellPlan.command === path.join(systemRuntimeDirectory, 'powershell.exe'), 'CLI launches must prefer system Windows PowerShell over an earlier bundled pwsh runtime');
+
+    const terminalPath = path.join(systemRuntimeDirectory, 'wt.exe');
+    writeFileSync(terminalPath, '');
+    const terminalTargets = {
+      ...fakeTargets,
+      cli: { ...fakeTargets.cli, terminal: terminalPath }
+    };
+    const terminalProfileRoot = path.join(temporaryRoot, 'terminal-profiles');
+    const terminalProfile = createProfile(terminalProfileRoot, 'Terminal test');
+    const terminalPlan = buildLaunchPlan(terminalProfile, 'cli', {
+      ...providerOptions,
+      targets: terminalTargets,
+      environment: {
+        ...fakeEnvironment,
+        PATH: systemRuntimeDirectory,
+        PATHEXT: '.EXE'
+      }
+    });
+    assert(terminalPlan.command === terminalPath && terminalPlan.args.includes('-PidFile'), 'Windows CLI launches must use Windows Terminal with a PID handshake');
+    const terminalPid = 43000;
+    const terminalLaunch = launchProfile(terminalProfileRoot, terminalProfile.id, 'cli', {
+      ...providerOptions,
+      targets: terminalTargets,
+      environment: {
+        ...fakeEnvironment,
+        PATH: systemRuntimeDirectory,
+        PATHEXT: '.EXE'
+      },
+      spawnProcess: (_command, args) => {
+        const pidFileIndex = args.indexOf('-PidFile');
+        writeFileSync(args[pidFileIndex + 1], String(terminalPid));
+        return { pid: 42000, unref() {} };
+      }
+    });
+    assert(terminalLaunch.pid === terminalPid, 'CLI launch history must track the reported interactive PowerShell PID instead of the transient terminal alias');
+  }
+
   const spawned = [];
   const spawnProcess = (command, args, options) => {
     const child = { pid: 41000 + spawned.length, unref() {} };
@@ -190,6 +253,48 @@ command = "figma-bridge"
   assert(new Set(launches.map(launch => launch.profileId)).size === 2, 'active instances must remain associated with distinct profiles');
   assert(spawned.every(item => item.options.detached === true && item.options.stdio === 'ignore'), 'profile clients must remain detached from the launcher');
 
+  const activePids = new Set(spawned.map(item => item.child.pid));
+  const terminationAttempts = [];
+  const stoppedLaunch = await stopProfileLaunch(profileRoot, firstLaunch.id, {
+    isProcessAlive: pid => activePids.has(pid),
+    verifyProcessIdentity: launch => launch.id === firstLaunch.id,
+    terminateProcessTree: (pid, force) => {
+      terminationAttempts.push({ pid, force });
+      activePids.delete(pid);
+    },
+    waitForExit: async (pid, checkProcess) => !checkProcess(pid)
+  });
+  assert(!stoppedLaunch.active && !stoppedLaunch.forced, 'a responsive instance must stop gracefully');
+  assert(terminationAttempts.length === 1 && terminationAttempts[0].pid === firstLaunch.pid && !terminationAttempts[0].force, 'shutdown must target only the selected launch PID');
+  assert(activePids.has(secondLaunch.pid), 'stopping one launch must not affect another Profile instance');
+
+  const forcedAttempts = [];
+  const forcedLaunch = await stopProfileLaunch(profileRoot, secondLaunch.id, {
+    isProcessAlive: pid => activePids.has(pid),
+    verifyProcessIdentity: () => true,
+    terminateProcessTree: (pid, force) => {
+      forcedAttempts.push({ pid, force });
+      if (force) activePids.delete(pid);
+    },
+    waitForExit: async (pid, checkProcess) => !checkProcess(pid)
+  });
+  assert(forcedLaunch.forced && forcedAttempts.length === 2, 'an unresponsive instance must fall back to a forced tree stop');
+  assert(!forcedAttempts[0].force && forcedAttempts[1].force, 'shutdown must attempt graceful close before force');
+
+  const guardedLaunch = launchProfile(profileRoot, first.id, 'desktop', {
+    targets: fakeTargets,
+    environment: fakeEnvironment,
+    workingDirectory: root,
+    providerApiKey: 'secret-provider-key',
+    spawnProcess
+  });
+  activePids.add(guardedLaunch.pid);
+  await assertRejects(() => stopProfileLaunch(profileRoot, guardedLaunch.id, {
+    isProcessAlive: pid => activePids.has(pid),
+    verifyProcessIdentity: () => false,
+    terminateProcessTree: () => { throw new Error('must not terminate'); }
+  }), /Cannot verify/, 'shutdown must reject a PID that no longer matches its launch record');
+
   const cli = spawnSync(process.execPath, ['scripts/codex-profiles.mjs', 'list', '--root', profileRoot, '--json'], { cwd: root, encoding: 'utf8' });
   assert(cli.status === 0, `profile CLI list failed: ${cli.stderr}`);
   const payload = JSON.parse(cli.stdout);
@@ -197,6 +302,7 @@ command = "figma-bridge"
 
   const uiPath = path.join(root, 'scripts', 'codex-profiles-ui.ps1');
   const ui = readFileSync(uiPath, 'utf8');
+  const cliRunner = readFileSync(path.join(root, 'scripts', 'run-codex-profile.ps1'), 'utf8');
   const launcher = readFileSync(path.join(root, 'scripts', 'open-profiles.cmd'), 'utf8');
   const nativeSource = readFileSync(path.join(root, 'windows', 'CodexProfilesLauncher.cs'), 'utf8');
   const nativeBuild = readFileSync(path.join(root, 'scripts', 'build-profiles-launcher.ps1'), 'utf8');
@@ -207,6 +313,7 @@ command = "figma-bridge"
   assert(/target:winexe/.test(nativeBuild) && /System\.Web\.Extensions/.test(nativeBuild), 'native launcher build must produce a windowed executable with JSON support');
   assert(!/Get-Content[^\n]*auth\.json/i.test(ui), 'Windows UI must never read auth.json');
   assert(!/auth\.json/i.test(nativeSource), 'native UI must never reference auth.json');
+  assert(/PidFile/.test(cliRunner) && /Set-Content/.test(cliRunner) && /RawUI\.WindowTitle/.test(cliRunner), 'CLI runner must report its interactive terminal PID before starting Codex');
 
   if (process.platform === 'win32') {
     const escapedPath = uiPath.replaceAll("'", "''");

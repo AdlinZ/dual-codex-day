@@ -974,6 +974,27 @@ button:disabled {
   grid-template-columns: 32px minmax(0, 1fr) auto;
 }
 
+.recent-row.has-action {
+  grid-template-columns: 32px minmax(0, 1fr) auto 34px;
+}
+
+.stop-instance-button {
+  width: 30px;
+  height: 30px;
+  color: var(--red);
+}
+
+.stop-instance-button:hover:not(:disabled) {
+  border-color: #e7b9b4;
+  background: #f9e9e7;
+}
+
+.stop-instance-button svg {
+  width: 13px;
+  height: 13px;
+  fill: currentColor;
+}
+
 .target-icon,
 .recent-icon {
   display: grid;

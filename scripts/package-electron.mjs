@@ -11,7 +11,7 @@ function option(name, fallback) {
 const root = path.resolve('.');
 const platform = option('--platform', process.platform);
 const arch = option('--arch', process.arch);
-const outputDirectory = path.join(root, 'dist', 'electron');
+const outputDirectory = path.resolve(option('--out', path.join(root, 'dist', 'electron')));
 const packageMetadata = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
 const electronVersion = String(packageMetadata.devDependencies.electron).replace(/^[^\d]*/, '');
 const electronArchive = `electron-v${electronVersion}-${platform}-${arch}.zip`;
@@ -72,7 +72,7 @@ const paths = await packager({
     /^\/node_modules\/lucide\/dist\/esm\/shared($|\/)/,
     /^\/node_modules\/lucide\/dist\/esm\/.*\.map$/,
     /^\/node_modules\/lucide\/dist\/esm\/(iconsAndAliases|lucide|replaceElement)\.mjs$/,
-    /^\/node_modules\/lucide\/dist\/esm\/icons\/(?!refresh-cw\.mjs$|plus\.mjs$|shield-check\.mjs$|folder-open\.mjs$|folder-cog\.mjs$|ellipsis\.mjs$|square-terminal\.mjs$|panels-top-left\.mjs$|monitor-up\.mjs$|chart-no-axes-combined\.mjs$|user-round-plus\.mjs$|chevron-right\.mjs$|server-cog\.mjs$|settings-2\.mjs$|key-round\.mjs$|save-check\.mjs$|sliders-horizontal\.mjs$|eye\.mjs$|eye-off\.mjs$|file-input\.mjs$|rocket\.mjs$|circle-alert\.mjs$|database\.mjs$|download\.mjs$|image-down\.mjs$|pencil\.mjs$|trash-2\.mjs$|log-in\.mjs$).+$/,
+    /^\/node_modules\/lucide\/dist\/esm\/icons\/(?!refresh-cw\.mjs$|plus\.mjs$|shield-check\.mjs$|folder-open\.mjs$|folder-cog\.mjs$|ellipsis\.mjs$|square\.mjs$|square-terminal\.mjs$|panels-top-left\.mjs$|monitor-up\.mjs$|chart-no-axes-combined\.mjs$|user-round-plus\.mjs$|chevron-right\.mjs$|server-cog\.mjs$|settings-2\.mjs$|key-round\.mjs$|save-check\.mjs$|sliders-horizontal\.mjs$|eye\.mjs$|eye-off\.mjs$|file-input\.mjs$|rocket\.mjs$|circle-alert\.mjs$|database\.mjs$|download\.mjs$|image-down\.mjs$|pencil\.mjs$|trash-2\.mjs$|log-in\.mjs$).+$/,
     /^\/scripts\/(check-|capture-|package-|build-(?:brand|demo|profiles))/,
     /^\/scripts\/codex-day-tray\.ps1$/,
     /^\/scripts\/codex-profiles-ui\.ps1$/,
@@ -102,7 +102,8 @@ const requiredPackagedFiles = [
   path.join('node_modules', 'lucide', 'dist', 'esm', 'icons', 'image-down.mjs'),
   path.join('node_modules', 'lucide', 'dist', 'esm', 'icons', 'pencil.mjs'),
   path.join('node_modules', 'lucide', 'dist', 'esm', 'icons', 'trash-2.mjs'),
-  path.join('node_modules', 'lucide', 'dist', 'esm', 'icons', 'log-in.mjs')
+  path.join('node_modules', 'lucide', 'dist', 'esm', 'icons', 'log-in.mjs'),
+  path.join('node_modules', 'lucide', 'dist', 'esm', 'icons', 'square.mjs')
 ];
 
 for (const packagedDirectory of paths) {

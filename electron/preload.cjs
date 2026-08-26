@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('dualCodexDay', Object.freeze({
   setProfileRuntimeSource: (profileId, source) => ipcRenderer.invoke('profiles:set-runtime-source', { profileId, source }),
   importProfileConfig: profileId => ipcRenderer.invoke('profiles:import-config', profileId),
   launchProfile: (profileId, target) => ipcRenderer.invoke('profiles:launch', { profileId, target }),
+  stopProfileLaunch: launchId => ipcRenderer.invoke('profiles:stop', launchId),
   openProfileFolder: profileId => ipcRenderer.invoke('profiles:open-folder', profileId),
   chooseWorkspace: () => ipcRenderer.invoke('workspace:choose'),
   getUsageData: sourceId => ipcRenderer.invoke('usage:get-data', sourceId)

@@ -115,7 +115,7 @@ node .\scripts\codex-profiles.mjs launch "工作账号" --target vscode --worksp
 
 Windows 会用系统自带的 .NET Framework 编译器在本机构建 `dist\dual-codex-day.exe`。源码更新后自动重建，构建失败时回退到 PowerShell 图形界面。设计和安全边界见 [v1.0.0 规划](docs/plans/v1.0.0.md)。
 
-Electron `v0.10.0` 使用沙箱渲染进程和受限预加载桥接，账号与启动逻辑仍复用同一套 Node.js 核心。范围和验收标准见 [v0.10.0 规划](docs/plans/v0.10.0.md)。
+Electron `v0.10.1` 使用沙箱渲染进程和受限预加载桥接，账号、启动与实例关闭逻辑仍复用同一套 Node.js 核心。范围和验收标准见 [v0.10.0 规划](docs/plans/v0.10.0.md)。Windows 上打开 Codex CLI 需要系统已安装 Windows Terminal，DCD 会用独立终端窗口承载交互界面。
 
 ### 同时打开两个 Codex 桌面账号
 
@@ -125,6 +125,8 @@ Electron `v0.10.0` 使用沙箱渲染进程和受限预加载桥接，账号与�
 4. 左侧账号列表和“运行与最近启动”会分别显示两个正在运行的实例。
 
 启动器会等待确认客户端主进程仍然存活；默认账号使用系统数据目录，第二个实例使用独立的 `CODEX_HOME`、SQLite 和 Electron `--user-data-dir`。在 Windows Store 版 `OpenAI.Codex 26.818.8289.0` 上已经完成“默认实例 + 独立实例”双开实测；由于官方尚未把多实例作为稳定接口承诺，后续客户端更新仍需重新验证。
+
+“运行与最近启动”中的运行实例会显示停止按钮。DCD 只关闭对应启动记录的进程树：先请求正常退出，未响应时再强制结束；系统默认运行环境会额外提示共享窗口风险。关闭操作会核对 PID 的进程创建时间，历史 PID 被系统复用时会拒绝执行。`v0.10.1` 已在 Codex CLI、独立 VS Code 和 `OpenAI.Codex 26.820.7780.0` 独立桌面实例上完成真实启动与关闭验证。
 
 ## 用量仪表盘
 
@@ -349,6 +351,7 @@ dual-codex-day/
 ## 当前限制
 
 - Node.js 增量模式和多账号启动核心要求 22.5 或更高版本；Windows 仪表盘在无 Node.js 时仍可回退到 PowerShell 静态模式。
+- Electron 中的 Codex CLI 独立终端依赖 Windows Terminal；未安装时 CLI 入口会显示为不可用。
 - Codex 桌面客户端多实例已在当前 Windows Store 版完成双实例验证，但仍未获官方稳定性承诺；客户端大版本更新后需要重新验证。
 - Docker 部署需要用户显式配置 `CODEX_DATA_DIR`，不会自动猜测或扩大宿主机挂载范围。
 - 项目名称取自工作目录的最后一级，重名目录会在界面中显示相同名称，但内部匿名标识仍不同。
@@ -360,7 +363,7 @@ dual-codex-day/
 - 价格候选快照的人工确认与显式更新流程
 - 跨版本数据 Schema 迁移与备份恢复
 
-v0.10.0 正在整合 Electron 桌面控制中心，设计范围与验收标准见 [v0.10.0 规划](docs/plans/v0.10.0.md)。价格审计与 90 天回顾见 [v0.9.0 规划](docs/plans/v0.9.0.md)，设置迁移与每日摘要见 [v0.8.0 规划](docs/plans/v0.8.0.md)。
+v0.10.1 已补齐实例关闭、PID 归属保护和交互式 CLI 终端；Electron 控制中心的设计范围与验收标准见 [v0.10.0 规划](docs/plans/v0.10.0.md)。价格审计与 90 天回顾见 [v0.9.0 规划](docs/plans/v0.9.0.md)，设置迁移与每日摘要见 [v0.8.0 规划](docs/plans/v0.8.0.md)。
 
 ## License
 

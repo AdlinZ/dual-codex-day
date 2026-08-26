@@ -14,7 +14,7 @@ const html = readFileSync(path.join(root, 'electron', 'renderer', 'index.html'),
 const renderer = readFileSync(path.join(root, 'electron', 'renderer', 'app.js'), 'utf8');
 const css = readFileSync(path.join(root, 'electron', 'renderer', 'app.css'), 'utf8');
 
-assert(packageMetadata.version === '0.10.0', 'Electron release must use package version 0.10.0');
+assert(packageMetadata.version === '0.10.1', 'Electron release must use package version 0.10.1');
 assert(packageMetadata.main === 'electron/main.mjs', 'Electron main entry must be declared in package metadata');
 assert(packageMetadata.scripts.desktop === 'electron .', 'desktop command must launch the Electron entry');
 assert(/contextIsolation:\s*true/.test(main), 'Electron windows must enable context isolation');
@@ -26,6 +26,8 @@ assert(/Content-Security-Policy/.test(html) && /connect-src 'none'/.test(html), 
 assert(!/frame-src|<iframe/i.test(html), 'native usage analysis must not embed the legacy web dashboard');
 assert(/lucide\/dist\/esm\/createElement\.mjs/.test(renderer) && /icons\/refresh-cw\.mjs/.test(renderer), 'renderer must use tree-scoped Lucide icon modules');
 assert(/profiles:create/.test(main) && /profiles:launch/.test(main), 'Electron main process must use profile IPC handlers');
+assert(/profiles:stop/.test(main) && /stopProfileLaunch/.test(main + preload + renderer), 'Electron must close a specific recorded instance through scoped IPC');
+assert(/showMessageBox/.test(main) && /默认运行环境/.test(main), 'instance shutdown must require confirmation and warn for the default runtime');
 assert(/profiles:save-provider/.test(main) && /profiles:provider-preview/.test(main), 'Electron main process must expose scoped provider configuration handlers');
 assert(/profiles:set-usage-source/.test(main) && /setProfileUsageSource/.test(preload), 'Electron must expose scoped Profile usage-source settings');
 assert(/profiles:set-runtime-source/.test(main) && /setProfileRuntimeSource/.test(preload), 'Electron must expose scoped Profile runtime-source settings');
@@ -62,6 +64,7 @@ assert(/provider-dialog/.test(html) && /provider-config-preview/.test(html), 'El
 assert(/providerAuthMode/.test(html) && /provider-reasoning-input/.test(html) && /provider-personality-input/.test(html), 'provider editor must expose authentication and advanced model controls');
 assert(/import-provider-config-button/.test(html) && /disable_response_storage/.test(html), 'provider editor must support common config import and the legacy storage compatibility option');
 assert(/setInterval/.test(renderer) && /activeLaunches/.test(renderer), 'renderer must refresh and display active profile instances');
+assert(/data-stop-launch/.test(renderer) && /stop-instance-button/.test(css), 'active launch rows must expose a stable close-instance control');
 assert(!/readProviderSecret|decryptString|getProviderSecret/.test(preload), 'preload bridge must not expose provider key reads');
 assert(/previewProvider:\s*\(profileId, provider\)/.test(preload) && /importProfileConfig/.test(preload), 'preload must scope provider previews and imports to a selected Profile');
 assert(!/linear-gradient|radial-gradient/.test(css), 'Electron interface must avoid decorative gradients');
