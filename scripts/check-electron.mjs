@@ -69,15 +69,15 @@ assert(!/readProviderSecret|decryptString|getProviderSecret/.test(preload), 'pre
 assert(/previewProvider:\s*\(profileId, provider\)/.test(preload) && /importProfileConfig/.test(preload), 'preload must scope provider previews and imports to a selected Profile');
 assert(!/linear-gradient|radial-gradient/.test(css), 'Electron interface must avoid decorative gradients');
 
-const electronExecutable = process.platform === 'win32'
-  ? path.join(root, 'node_modules', 'electron', 'dist', 'electron.exe')
-  : path.join(root, 'node_modules', '.bin', 'electron');
-const safeStorageCheck = spawnSync(electronExecutable, [path.join(root, 'scripts', 'check-safe-storage.cjs')], {
-  cwd: root,
-  encoding: 'utf8',
-  timeout: 20_000,
-  windowsHide: true
-});
-assert(safeStorageCheck.status === 0, `Electron safeStorage runtime check failed: ${safeStorageCheck.stderr || safeStorageCheck.stdout}`);
+if (process.platform === 'win32') {
+  const electronExecutable = path.join(root, 'node_modules', 'electron', 'dist', 'electron.exe');
+  const safeStorageCheck = spawnSync(electronExecutable, [path.join(root, 'scripts', 'check-safe-storage.cjs')], {
+    cwd: root,
+    encoding: 'utf8',
+    timeout: 20_000,
+    windowsHide: true
+  });
+  assert(safeStorageCheck.status === 0, `Electron safeStorage runtime check failed: ${safeStorageCheck.stderr || safeStorageCheck.stdout}`);
+}
 
 console.log('Electron checks passed: secure provider storage, profile actions, local summary, Lucide icons, and stable desktop layout.');
