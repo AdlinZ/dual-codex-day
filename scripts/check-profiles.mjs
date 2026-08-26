@@ -48,6 +48,9 @@ async function assertRejects(callback, pattern, message) {
 const root = path.resolve('.');
 const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), 'codex-day-profiles-test-'));
 const profileRoot = path.join(temporaryRoot, 'profiles');
+const fakeRuntimeDirectory = path.join(temporaryRoot, 'runtime');
+mkdirSync(fakeRuntimeDirectory, { recursive: true });
+writeFileSync(path.join(fakeRuntimeDirectory, 'pwsh.exe'), '');
 const fakeTargets = {
   cli: { available: true, executable: process.execPath },
   vscode: { available: true, executable: process.execPath },
@@ -55,7 +58,7 @@ const fakeTargets = {
 };
 const fakeEnvironment = {
   ...process.env,
-  PATH: process.env.PATH,
+  PATH: [fakeRuntimeDirectory, process.env.PATH].filter(Boolean).join(path.delimiter),
   CODEX_ACCESS_TOKEN: 'must-not-leak',
   CODEX_API_KEY: 'must-not-leak',
   OPENAI_API_KEY: 'must-not-leak'
