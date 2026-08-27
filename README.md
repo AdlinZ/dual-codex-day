@@ -4,10 +4,13 @@
 
 [![CI](https://github.com/AdlinZ/dual-codex-day/actions/workflows/ci.yml/badge.svg)](https://github.com/AdlinZ/dual-codex-day/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/AdlinZ/dual-codex-day)](https://github.com/AdlinZ/dual-codex-day/releases)
+[![Website](https://img.shields.io/badge/website-GitHub%20Pages-176c4b)](https://adlinz.github.io/dual-codex-day/)
 
 一个本地优先的 Codex 多账号启动与个人用量中心。在同一个项目里管理隔离账号，并查看今天、本周、模型、项目和任务维度的 Token 活动。
 
 > 非 OpenAI 官方项目，与 OpenAI 无隶属或背书关系。
+
+官网与公开 Demo：[adlinz.github.io/dual-codex-day](https://adlinz.github.io/dual-codex-day/)
 
 ![Dual Codex Day 虚构用量 Demo](assets/demo-preview.png)
 

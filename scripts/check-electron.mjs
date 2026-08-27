@@ -13,6 +13,7 @@ const preload = readFileSync(path.join(root, 'electron', 'preload.cjs'), 'utf8')
 const html = readFileSync(path.join(root, 'electron', 'renderer', 'index.html'), 'utf8');
 const renderer = readFileSync(path.join(root, 'electron', 'renderer', 'app.js'), 'utf8');
 const css = readFileSync(path.join(root, 'electron', 'renderer', 'app.css'), 'utf8');
+const capture = readFileSync(path.join(root, 'scripts', 'capture-electron.mjs'), 'utf8');
 
 assert(packageMetadata.version === '0.10.1', 'Electron release must use package version 0.10.1');
 assert(packageMetadata.main === 'electron/main.mjs', 'Electron main entry must be declared in package metadata');
@@ -68,6 +69,7 @@ assert(/data-stop-launch/.test(renderer) && /stop-instance-button/.test(css), 'a
 assert(!/readProviderSecret|decryptString|getProviderSecret/.test(preload), 'preload bridge must not expose provider key reads');
 assert(/previewProvider:\s*\(profileId, provider\)/.test(preload) && /importProfileConfig/.test(preload), 'preload must scope provider previews and imports to a selected Profile');
 assert(!/linear-gradient|radial-gradient/.test(css), 'Electron interface must avoid decorative gradients');
+assert(/DUAL_CODEX_DAY_SCREENSHOT_PATH_REPLACEMENTS/.test(main + capture), 'public Electron screenshots must replace local filesystem paths');
 
 if (process.platform === 'win32') {
   const electronExecutable = path.join(root, 'node_modules', 'electron', 'dist', 'electron.exe');

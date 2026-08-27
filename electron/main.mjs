@@ -601,6 +601,21 @@ async function captureRequestedScreenshot(window) {
     }
     await new Promise(resolve => setTimeout(resolve, 700));
   }
+  const pathReplacements = process.env.DUAL_CODEX_DAY_SCREENSHOT_PATH_REPLACEMENTS;
+  if (pathReplacements) {
+    const replacements = JSON.parse(pathReplacements);
+    await window.webContents.executeJavaScript(`(() => {
+      const replacements = ${JSON.stringify(replacements)};
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        let value = node.nodeValue;
+        for (const [source, replacement] of replacements) value = value.replaceAll(source, replacement);
+        node.nodeValue = value;
+      }
+    })()`);
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
   const image = await window.webContents.capturePage();
   writeFileSync(path.resolve(target), image.toPNG());
   app.quit();

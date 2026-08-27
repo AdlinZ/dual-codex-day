@@ -2,6 +2,13 @@
 
 Project name: **Dual Codex Day** (`dual-codex-day`). Historical entries may retain the original `codex-day` name.
 
+## Unreleased
+
+### Added
+
+- A responsive GitHub Pages product site with current Electron screenshots, release downloads and the existing fictional-data demo.
+- Automated Pages deployment and local site regression checks.
+
 ## [0.10.1] - 2026-08-26
 
 ### Added

@@ -69,7 +69,11 @@ try {
       CODEX_PROFILES_ROOT: temporaryRoot,
       CODEX_USAGE_ROOT: usageRoot,
       DUAL_CODEX_DAY_SCREENSHOT: outputPath,
-      DUAL_CODEX_DAY_SCREENSHOT_VIEW: screenshotView
+      DUAL_CODEX_DAY_SCREENSHOT_VIEW: screenshotView,
+      DUAL_CODEX_DAY_SCREENSHOT_PATH_REPLACEMENTS: JSON.stringify([
+        [temporaryRoot, 'C:\\DualCodexDay\\Profiles'],
+        [root, 'C:\\Projects\\dual-codex-day']
+      ])
     },
     encoding: 'utf8',
     timeout: 30_000,

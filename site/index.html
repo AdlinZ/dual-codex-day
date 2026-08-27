@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dual Codex Day | Codex 多账号与本地用量中心</title>
+  <meta name="description" content="在一台 Windows 电脑上管理隔离的 Codex Profile、自定义 Responses API 供应商，并按账号查看本地用量。">
+  <meta name="theme-color" content="#f4f7f5">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Dual Codex Day">
+  <meta property="og:description" content="Codex 多账号启动、自定义供应商与本地用量分析中心。">
+  <meta property="og:url" content="https://adlinz.github.io/dual-codex-day/">
+  <meta property="og:image" content="https://adlinz.github.io/dual-codex-day/assets/electron-launch-center.png">
+  <link rel="canonical" href="https://adlinz.github.io/dual-codex-day/">
+  <link rel="icon" type="image/svg+xml" href="./assets/codex-day-mark.svg">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到主要内容</a>
+
+  <header class="site-header">
+    <div class="shell header-inner">
+      <a class="brand" href="#top" aria-label="Dual Codex Day 首页">
+        <img src="./assets/codex-day-mark.svg" width="36" height="36" alt="">
+        <span>Dual Codex Day</span>
+      </a>
+      <nav class="nav-links" aria-label="主导航">
+        <a href="#profiles">多账号</a>
+        <a href="#usage">用量分析</a>
+        <a href="#privacy">安全边界</a>
+      </nav>
+      <div class="header-actions">
+        <a class="text-link repo-link" href="https://github.com/AdlinZ/dual-codex-day" target="_blank" rel="noreferrer">GitHub</a>
+        <a class="button button-small" href="https://github.com/AdlinZ/dual-codex-day/releases/latest/download/dual-codex-day-windows-x64.zip">下载</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" id="top" aria-labelledby="hero-title">
+      <div class="hero-wash" aria-hidden="true"></div>
+      <div class="shell hero-content">
+        <p class="eyebrow">Windows · v0.10.1 · MIT</p>
+        <h1 id="hero-title">Dual Codex Day</h1>
+        <p class="hero-lead">在同一个控制台里运行隔离的 Codex 账号，配置官方登录或自定义中转站，并查看每个 Profile 的本地 Token 活动。</p>
+        <div class="hero-actions">
+          <a class="button" href="https://github.com/AdlinZ/dual-codex-day/releases/latest/download/dual-codex-day-windows-x64.zip">下载 Windows x64</a>
+          <a class="button button-secondary" href="./demo/">打开公开 Demo</a>
+        </div>
+        <p class="hero-note">本地优先，不上传 Codex 日志。非 OpenAI 官方项目。</p>
+      </div>
+    </section>
+
+    <section class="facts-band" aria-label="项目概览">
+      <div class="shell facts-grid">
+        <div><strong>2+</strong><span>隔离 Profile</span></div>
+        <div><strong>3</strong><span>客户端入口</span></div>
+        <div><strong>本地</strong><span>用量索引与设置</span></div>
+        <div><strong>开源</strong><span>MIT License</span></div>
+      </div>
+    </section>
+
+    <section class="section section-light" id="profiles">
+      <div class="shell">
+        <div class="section-heading">
+          <p class="eyebrow">PROFILE CONTROL</p>
+          <h2>把账号、运行环境和用量来源放在同一处</h2>
+          <p>每个 Profile 都有明确的运行状态、登录来源和数据目录。CLI、VS Code 与 Codex 桌面端可以从同一界面启动。</p>
+        </div>
+
+        <button class="screenshot-button" type="button" data-image="./assets/electron-launch-center.png" data-caption="启动中心：独立 Profile、客户端入口、今日用量与运行实例">
+          <img src="./assets/electron-launch-center.png" width="2160" height="1440" alt="Dual Codex Day 启动中心，展示工作账号、个人账号、CLI、VS Code 和 Codex 桌面端入口" loading="eager">
+        </button>
+
+        <div class="feature-grid">
+          <article>
+            <span class="feature-index">01</span>
+            <h3>独立状态目录</h3>
+            <p>为每个账号分配独立的 CODEX_HOME、SQLite 和客户端用户数据目录。</p>
+          </article>
+          <article>
+            <span class="feature-index">02</span>
+            <h3>实例级管理</h3>
+            <p>持续记录实际启动进程，分别显示运行数量，并可关闭指定实例。</p>
+          </article>
+          <article>
+            <span class="feature-index">03</span>
+            <h3>默认账号兼容</h3>
+            <p>现有 Codex 工作账号可以继续使用系统目录，同时接入统一控制台。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-dark" id="usage">
+      <div class="shell showcase-grid">
+        <div class="showcase-copy">
+          <p class="eyebrow">LOCAL ANALYTICS</p>
+          <h2>按账号拆分用量，再汇总全局趋势</h2>
+          <p>今天、本周、30 天与全部记录均可按账号、模型和项目筛选。成本估算、缓存率、周期报告、CSV 与分享海报都保留在本地。</p>
+          <ul class="check-list">
+            <li>输入、缓存输入、输出与推理 Token</li>
+            <li>模型与项目分布、任务时间轴</li>
+            <li>周报、月报、预算与价格覆盖</li>
+          </ul>
+          <a class="inline-action" href="./demo/">查看虚构数据 Demo <span aria-hidden="true">→</span></a>
+        </div>
+        <button class="screenshot-button screenshot-dark" type="button" data-image="./assets/electron-usage-analysis.png" data-caption="用量分析：跨 Profile 汇总、成本构成、趋势和周期报告">
+          <img src="./assets/electron-usage-analysis.png" width="2160" height="1440" alt="Dual Codex Day 用量分析页面，展示 Token、成本、缓存率、趋势与最近任务" loading="lazy">
+        </button>
+      </div>
+    </section>
+
+    <section class="section section-light" id="providers">
+      <div class="shell provider-grid">
+        <button class="screenshot-button" type="button" data-image="./assets/electron-provider-settings.png" data-caption="供应商设置：官方登录、自定义 Responses API 与三种认证方式">
+          <img src="./assets/electron-provider-settings.png" width="2100" height="1440" alt="Dual Codex Day 供应商设置窗口，展示自定义中转站、认证方式和模型选项" loading="lazy">
+        </button>
+        <div class="showcase-copy showcase-copy-light">
+          <p class="eyebrow">PROVIDER SETTINGS</p>
+          <h2>官方登录与中转站配置各自归档</h2>
+          <p>每个 Profile 可以选择 OpenAI 官方登录，或配置兼容 Responses API 的自定义供应商。已有插件、MCP、桌面偏好和项目信任设置会被保留。</p>
+          <dl class="provider-facts">
+            <div><dt>认证方式</dt><dd>CDC 安全密钥、Codex 登录、无需认证</dd></div>
+            <div><dt>高级设置</dt><dd>模型、推理强度、交互个性、响应存储</dd></div>
+            <div><dt>密钥存储</dt><dd>Electron safeStorage 系统加密</dd></div>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <section class="section privacy-section" id="privacy">
+      <div class="shell privacy-layout">
+        <div class="section-heading privacy-heading">
+          <p class="eyebrow">LOCAL-FIRST</p>
+          <h2>数据边界保持清晰</h2>
+        </div>
+        <div class="privacy-list">
+          <article><h3>日志只读</h3><p>扫描本机 Codex Session 并建立增量索引，不修改原始记录。</p></article>
+          <article><h3>服务限于本机</h3><p>用量服务默认只监听 127.0.0.1，不依赖远程分析服务。</p></article>
+          <article><h3>认证文件隔离</h3><p>不读取、复制、导入或展示 auth.json，也不把 API Key 写入 config.toml。</p></article>
+          <article><h3>关闭范围受控</h3><p>仅处理自身记录且通过创建时间校验的进程，不按进程名批量结束。</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="final-cta">
+      <div class="shell final-cta-inner">
+        <div>
+          <p class="eyebrow">OPEN SOURCE</p>
+          <h2>在 Windows 上开始管理你的 Codex Profiles</h2>
+          <p>下载最新版桌面包，或从 GitHub 查看源码与完整配置说明。</p>
+        </div>
+        <div class="final-actions">
+          <a class="button" href="https://github.com/AdlinZ/dual-codex-day/releases/latest/download/dual-codex-day-windows-x64.zip">下载最新版</a>
+          <a class="button button-secondary" href="https://github.com/AdlinZ/dual-codex-day" target="_blank" rel="noreferrer">查看源码</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="shell footer-inner">
+      <div class="brand footer-brand">
+        <img src="./assets/codex-day-mark.svg" width="30" height="30" alt="">
+        <span>Dual Codex Day</span>
+      </div>
+      <p>MIT License · 非 OpenAI 官方项目，与 OpenAI 无隶属或背书关系。</p>
+    </div>
+  </footer>
+
+  <dialog class="image-dialog" id="image-dialog">
+    <button class="dialog-close" type="button" aria-label="关闭预览" title="关闭预览">×</button>
+    <img id="dialog-image" alt="">
+    <p id="dialog-caption"></p>
+  </dialog>
+
+  <script src="./app.js"></script>
+</body>
+</html>

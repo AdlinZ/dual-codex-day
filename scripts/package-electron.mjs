@@ -64,6 +64,7 @@ const paths = await packager({
     /^\/demo($|\/)/,
     /^\/dist($|\/)/,
     /^\/docs($|\/)/,
+    /^\/site($|\/)/,
     /^\/tailwind\.config\.js$/,
     /^\/windows($|\/)/,
     /^\/work($|\/)/,
@@ -80,6 +81,7 @@ const paths = await packager({
     /^\/scripts\/refresh-/,
     /^\/scripts\/watch-/,
     /^\/assets\/demo-preview\.png$/,
+    /^\/assets\/electron-.*\.png$/,
     /^\/config\/(profiles\.zh-CN|tray\.zh-CN)\.json$/,
     /^\/src\/styles\.css$/
   ]
