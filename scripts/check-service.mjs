@@ -73,15 +73,16 @@ let first;
 let second;
 try {
   mkdirSync(sessionDirectory, { recursive: true });
+  const fixtureId = '99999999-9999-4999-8999-999999999999';
   const fixture = [
-    JSON.stringify({ type: 'session_meta', payload: { id: 'service-test', cwd: path.join(temporaryRoot, 'project') } }),
+    JSON.stringify({ timestamp: '2026-08-24T00:00:00.000Z', type: 'session_meta', payload: { id: fixtureId, cwd: path.join(temporaryRoot, 'project') } }),
     JSON.stringify({ type: 'turn_context', payload: { model: 'gpt-5.6-sol', cwd: path.join(temporaryRoot, 'project') } }),
     JSON.stringify({
       timestamp: '2026-08-24T01:00:00.000Z', type: 'event_msg',
       payload: { type: 'token_count', info: { last_token_usage: { input_tokens: 100, cached_input_tokens: 50, output_tokens: 20, total_tokens: 120 } } }
     })
   ];
-  writeFileSync(path.join(sessionDirectory, 'fixture.jsonl'), `${fixture.join('\n')}\n`, 'utf8');
+  writeFileSync(path.join(sessionDirectory, `rollout-2026-08-24T09-00-00-${fixtureId}.jsonl`), `${fixture.join('\n')}\n`, 'utf8');
 
   const port = await availablePort();
   first = startService(port);
@@ -89,7 +90,7 @@ try {
   assert(firstStatus.ok && firstStatus.version === packageMetadata.version && firstStatus.sourceId === 'service-test', 'service health should report liveness, version, and the isolated source id');
   const statusResponse = await fetch(`http://127.0.0.1:${port}/api/status`);
   const status = await statusResponse.json();
-  assert(status.ok && status.diagnostics.schemaVersion === 3 && status.diagnostics.counts.events === 1, 'status endpoint should expose schema v3 diagnostics');
+  assert(status.ok && status.diagnostics.schemaVersion === 4 && status.diagnostics.counts.events === 1, 'status endpoint should expose schema v4 diagnostics');
   assert(!JSON.stringify(status).includes(temporaryRoot), 'status endpoint must not expose private local paths');
   const summaryResponse = await fetch(`http://127.0.0.1:${port}/api/summary?date=2026-08-24`);
   const summaryPayload = await summaryResponse.json();

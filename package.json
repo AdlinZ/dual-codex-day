@@ -1,6 +1,6 @@
 {
   "name": "dual-codex-day",
-  "version": "0.10.1",
+  "version": "0.16.0",
   "private": true,
   "description": "A local-first Codex profile launcher and personal usage dashboard.",
   "author": "AdlinZ",
@@ -24,6 +24,9 @@
     "site:preview": "node ./scripts/serve-site.mjs",
     "build": "npm run build:demo && npm run build:css",
     "test:index": "node ./scripts/check-indexer.mjs",
+    "test:cc-switch": "node ./scripts/check-cc-switch-audit.mjs",
+    "test:skills": "node ./scripts/check-skills.mjs",
+    "test:plugins": "node ./scripts/check-plugins.mjs",
     "test:service": "node ./scripts/check-service.mjs",
     "test:pricing": "node ./scripts/check-pricing.mjs",
     "test:profiles": "node ./scripts/check-profiles.mjs",
@@ -31,7 +34,7 @@
     "test:site": "node ./scripts/check-site.mjs",
     "test:tray": "node ./scripts/check-tray.mjs",
     "test:container": "node ./scripts/check-container.mjs",
-    "test": "node ./scripts/check-dashboard.js && npm run test:index && npm run test:service && npm run test:pricing && npm run test:profiles && npm run test:electron && npm run build:site && npm run test:site && npm run test:tray && npm run test:container"
+    "test": "node ./scripts/check-dashboard.js && npm run test:index && npm run test:cc-switch && npm run test:skills && npm run test:plugins && npm run test:service && npm run test:pricing && npm run test:profiles && npm run test:electron && npm run build:site && npm run test:site && npm run test:tray && npm run test:container"
   },
   "engines": {
     "node": ">=22.5.0"

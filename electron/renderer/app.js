@@ -78,10 +78,19 @@ const state = {
   selectedUsageSourceId: 'all',
   dashboardLoading: false,
   dashboardLoaded: false,
+  skillsData: null,
+  skillsLoading: false,
+  skillsMode: 'standalone',
+  activePlugin: null,
   usageData: null,
   usageRange: 'week',
+  usageCustomStart: '',
+  usageCustomEnd: '',
   usageModel: '',
   usageProject: '',
+  usageRefreshTimer: null,
+  ccSwitchAudit: null,
+  ccSwitchPath: '',
   usageSettings: { relayMultiplier: 1, monthlyBudget: 0, costMode: 'standard' },
   reportPeriod: 'week',
   posterCanvas: null,
@@ -97,6 +106,30 @@ const elements = {
   primaryTabs: document.querySelector('.primary-tabs'),
   launcherView: document.querySelector('#launcher-view'),
   dashboardView: document.querySelector('#dashboard-view'),
+  skillsView: document.querySelector('#skills-view'),
+  skillsMeta: document.querySelector('#skills-meta'),
+  skillsTable: document.querySelector('#skills-table'),
+  skillsWorkspace: document.querySelector('#skills-workspace-button'),
+  skillsRefresh: document.querySelector('#skills-refresh-button'),
+  skillsRestart: document.querySelector('#skills-restart-button'),
+  skillsMode: document.querySelector('#skills-mode'),
+  standaloneSkillCount: document.querySelector('#standalone-skill-count'),
+  pluginSkillCount: document.querySelector('#plugin-skill-count'),
+  availableSkillCount: document.querySelector('#available-skill-count'),
+  skillToggleDialog: document.querySelector('#skill-toggle-dialog'),
+  skillToggleForm: document.querySelector('#skill-toggle-form'),
+  skillToggleTitle: document.querySelector('#skill-toggle-title'),
+  skillToggleTarget: document.querySelector('#skill-toggle-target'),
+  skillToggleEnabled: document.querySelector('#skill-toggle-enabled'),
+  skillToggleCancel: document.querySelector('#skill-toggle-cancel'),
+  pluginManageDialog: document.querySelector('#plugin-manage-dialog'),
+  pluginManageForm: document.querySelector('#plugin-manage-form'),
+  pluginManageTitle: document.querySelector('#plugin-manage-title'),
+  pluginManageEnvironment: document.querySelector('#plugin-manage-environment'),
+  pluginManageSkills: document.querySelector('#plugin-manage-skills'),
+  pluginManageEnabled: document.querySelector('#plugin-manage-enabled'),
+  pluginManageCancel: document.querySelector('#plugin-manage-cancel'),
+  pluginRemove: document.querySelector('#plugin-remove-button'),
   dashboardLoading: document.querySelector('#dashboard-loading'),
   dashboardError: document.querySelector('#dashboard-error'),
   dashboardErrorMessage: document.querySelector('#dashboard-error-message'),
@@ -105,6 +138,10 @@ const elements = {
   usageSourceSelect: document.querySelector('#usage-source-select'),
   usageSourceMeta: document.querySelector('#usage-source-meta'),
   usageRange: document.querySelector('#usage-range'),
+  usageCustomRange: document.querySelector('#usage-custom-range'),
+  usageCustomStart: document.querySelector('#usage-custom-start'),
+  usageCustomEnd: document.querySelector('#usage-custom-end'),
+  usageCustomApply: document.querySelector('#usage-custom-apply'),
   usageModelFilter: document.querySelector('#usage-model-filter'),
   usageProjectFilter: document.querySelector('#usage-project-filter'),
   usageExport: document.querySelector('#usage-export-button'),
@@ -116,6 +153,7 @@ const elements = {
   usagePosterSave: document.querySelector('#usage-poster-save'),
   usageSettingsButton: document.querySelector('#usage-settings-button'),
   usageDiagnosticsButton: document.querySelector('#usage-diagnostics-button'),
+  usageReconcileButton: document.querySelector('#usage-reconcile-button'),
   usageSettingsDialog: document.querySelector('#usage-settings-dialog'),
   usageSettingsForm: document.querySelector('#usage-settings-form'),
   usageSettingsCancel: document.querySelector('#usage-settings-cancel'),
@@ -124,7 +162,14 @@ const elements = {
   usageCostMode: document.querySelector('#usage-cost-mode'),
   usageDiagnosticsDialog: document.querySelector('#usage-diagnostics-dialog'),
   usageDiagnosticsContent: document.querySelector('#usage-diagnostics-content'),
+  usageDiagnosticsScope: document.querySelector('#usage-diagnostics-scope'),
   usageDiagnosticsClose: document.querySelector('#usage-diagnostics-close'),
+  usageReconcileDialog: document.querySelector('#usage-reconcile-dialog'),
+  usageReconcileSource: document.querySelector('#usage-reconcile-source'),
+  usageReconcileSummary: document.querySelector('#usage-reconcile-summary'),
+  usageReconcileBreakdown: document.querySelector('#usage-reconcile-breakdown'),
+  usageReconcileChoose: document.querySelector('#usage-reconcile-choose'),
+  usageReconcileClose: document.querySelector('#usage-reconcile-close'),
   reportPeriod: document.querySelector('#report-period'),
   reportPosterButton: document.querySelector('#report-poster-button'),
   reportTitle: document.querySelector('#period-report-title'),
@@ -612,6 +657,7 @@ function loadUsageSettings() {
 function usageEvents() {
   const now = new Date();
   let start = new Date(0);
+  let end = null;
   if (state.usageRange === 'today') start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   if (state.usageRange === 'week') {
     start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -621,11 +667,100 @@ function usageEvents() {
     start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     start.setDate(start.getDate() - 29);
   }
+  if (state.usageRange === '90d') {
+    start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    start.setDate(start.getDate() - 89);
+  }
+  if (state.usageRange === 'custom' && state.usageCustomStart && state.usageCustomEnd) {
+    start = new Date(`${state.usageCustomStart}T00:00:00`);
+    end = new Date(`${state.usageCustomEnd}T00:00:00`);
+    end.setDate(end.getDate() + 1);
+  }
   return (state.usageData?.events || []).filter(event => {
     const time = new Date(event.timestamp);
-    return time >= start && (!state.usageModel || event.model === state.usageModel)
+    return time >= start && (!end || time < end) && (!state.usageModel || event.model === state.usageModel)
       && (!state.usageProject || event.projectId === state.usageProject);
   });
+}
+
+function usageRangeLabel() {
+  if (state.usageRange === 'custom' && state.usageCustomStart && state.usageCustomEnd) {
+    return `${state.usageCustomStart} 至 ${state.usageCustomEnd}`;
+  }
+  return { today: '今天', week: '本周', '30d': '近 30 天', '90d': '近 90 天', all: '全部记录' }[state.usageRange] || '当前范围';
+}
+
+function aggregateAuditRows(rows) {
+  return rows.reduce((result, row) => ({
+    calls: result.calls + Number(row.calls || 0),
+    input: result.input + Number(row.input || 0),
+    cachedInput: result.cachedInput + Number(row.cachedInput || 0),
+    output: result.output + Number(row.output || 0),
+    total: result.total + Number(row.total || 0)
+  }), { calls: 0, input: 0, cachedInput: 0, output: 0, total: 0 });
+}
+
+function auditDateRange() {
+  const events = usageEvents();
+  if (state.usageRange === 'all') return null;
+  if (state.usageRange === 'custom') return { start: state.usageCustomStart, end: state.usageCustomEnd };
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (state.usageRange === 'week') start.setDate(start.getDate() - ((start.getDay() || 7) - 1));
+  if (state.usageRange === '30d') start.setDate(start.getDate() - 29);
+  if (state.usageRange === '90d') start.setDate(start.getDate() - 89);
+  return { start: start.toLocaleDateString('en-CA'), end: now.toLocaleDateString('en-CA') };
+}
+
+function renderReconcile() {
+  const audit = state.ccSwitchAudit;
+  if (!audit) return;
+  const range = auditDateRange();
+  const ccRows = range ? audit.daily.filter(row => row.label >= range.start && row.label <= range.end) : audit.daily;
+  const cc = aggregateAuditRows(ccRows);
+  const dcd = usageAggregate(usageEvents());
+  const deltaTokens = cc.total - dcd.total;
+  const deltaCalls = cc.calls - dcd.calls;
+  const signed = value => `${value >= 0 ? '+' : ''}${formatTokens(value)}`;
+  elements.usageReconcileSource.textContent = `${audit.databaseName} · app_type=codex · 仅读取，不会修改原文件`;
+  elements.usageReconcileSummary.innerHTML = [
+    ['DCD Token', formatTokens(dcd.total), '当前筛选范围'],
+    ['CC Switch Token', formatTokens(cc.total), 'input + output'],
+    ['Token 差额', signed(deltaTokens), deltaTokens === 0 ? '一致' : 'CC Switch - DCD'],
+    ['调用差额', `${deltaCalls >= 0 ? '+' : ''}${deltaCalls.toLocaleString('zh-CN')}`, 'CC Switch - DCD']
+  ].map(([label, value, note]) => `<div><span>${label}</span><strong>${escapeHtml(value)}</strong><small>${note}</small></div>`).join('');
+  const dcdModels = new Map();
+  for (const event of usageEvents()) {
+    const current = dcdModels.get(event.model) || { label: event.model, calls: 0, total: 0 };
+    current.calls += 1; current.total += Number(event.total || 0); dcdModels.set(event.model, current);
+  }
+  const ccModelRows = range ? audit.dailyModels.filter(row => row.date >= range.start && row.date <= range.end) : audit.models;
+  const ccModels = new Map();
+  for (const row of ccModelRows) {
+    const current = ccModels.get(row.label) || { label: row.label, calls: 0, total: 0 };
+    current.calls += Number(row.calls || 0); current.total += Number(row.total || 0); ccModels.set(row.label, current);
+  }
+  const modelNames = [...new Set([...dcdModels.keys(), ...ccModels.keys()])].sort((left, right) => left.localeCompare(right)).slice(0, 8);
+  elements.usageReconcileBreakdown.innerHTML = `<div class="reconcile-note">${range ? `当前对账范围：${usageRangeLabel()}` : '当前对账范围：全部记录'}。缓存输入单独展示，不重复加到总 Token。</div><div class="reconcile-table"><div class="reconcile-row header"><span>模型</span><span>DCD</span><span>CC Switch</span><span>差额</span></div>${modelNames.map(name => {
+    const left = dcdModels.get(name)?.total || 0;
+    const value = ccModels.get(name)?.total || 0;
+    return `<div class="reconcile-row"><strong>${escapeHtml(name)}</strong><span>${formatTokens(left)}</span><span>${formatTokens(value)}</span><span>${signed(value - left)}</span></div>`;
+  }).join('')}</div>`;
+}
+
+async function openReconcile() {
+  if (!elements.usageReconcileDialog.open) elements.usageReconcileDialog.showModal();
+  elements.usageReconcileSummary.innerHTML = '<div class="reconcile-loading">正在读取 CC Switch 数据库...</div>';
+  elements.usageReconcileBreakdown.innerHTML = '';
+  try {
+    const savedPath = state.ccSwitchPath || localStorage.getItem('dual-codex-cc-switch-db') || '';
+    state.ccSwitchAudit = await window.dualCodexDay.getCcSwitchAudit(savedPath || null);
+    if (savedPath) state.ccSwitchPath = savedPath;
+    renderReconcile();
+  } catch (error) {
+    elements.usageReconcileSummary.innerHTML = `<div class="reconcile-loading">${escapeHtml(error.message || '无法读取 CC Switch 数据库。')}</div>`;
+    elements.usageReconcileBreakdown.innerHTML = '<div class="reconcile-note">请确认选择的是 CC Switch 的 SQLite 数据库文件。</div>';
+  }
 }
 
 function resolvePriceModel(model) {
@@ -861,7 +996,7 @@ function createUsagePoster() {
   const models = posterGroups(events, 'model');
   const tasks = posterGroups(events, 'sessionId');
   const timeline = posterTimeline(events);
-  const rangeLabel = { today: '今天', week: '本周', '30d': '近 30 天', all: '全部记录' }[state.usageRange];
+  const rangeLabel = usageRangeLabel();
   const sourceName = state.usageData?.source?.name || '全部账号';
   const canvas = document.createElement('canvas');
   canvas.width = 1200;
@@ -1235,8 +1370,7 @@ function renderTrend(events) {
 function renderNativeUsage() {
   const events = usageEvents();
   const aggregate = usageAggregate(events);
-  const labels = { today: '今日用量', week: '本周用量', '30d': '近 30 天用量', all: '全部用量' };
-  document.querySelector('#usage-title').textContent = labels[state.usageRange];
+  document.querySelector('#usage-title').textContent = `${usageRangeLabel()}用量`;
   document.querySelector('#usage-subtitle').textContent = `${state.usageData.source.name} · ${new Date(state.usageData.generatedAt).toLocaleString('zh-CN')}`;
   document.querySelector('#usage-kpi-total').textContent = formatTokens(aggregate.total);
   document.querySelector('#usage-kpi-total-note').textContent = `${aggregate.turns.toLocaleString('zh-CN')} 回合 · ${aggregate.calls.toLocaleString('zh-CN')} 次模型调用`;
@@ -1297,20 +1431,30 @@ async function loadDashboard(force = false) {
     initializeUsageFilters();
     state.dashboardLoading = false;
     state.dashboardLoaded = true;
-    elements.usageSourceMeta.textContent = `${state.usageData.source.name} · ${state.usageData.source.kind === 'all' ? '汇总索引' : '独立索引'}`;
+    const counts = state.usageData.diagnostics?.counts || {};
+    const scope = Number(counts.missingFiles || 0) > 0
+      ? `${Number(counts.presentFiles || 0)} 个当前日志 · ${Number(counts.missingFiles || 0)} 个历史日志`
+      : `${Number(counts.presentFiles || counts.files || 0)} 个当前日志`;
+    elements.usageSourceMeta.textContent = `${state.usageData.source.name} · ${state.usageData.source.kind === 'all' ? '汇总索引' : '独立索引'} · ${scope}`;
     renderDashboardState();
     renderNativeUsage();
+    if (!state.usageRefreshTimer) {
+      state.usageRefreshTimer = setInterval(() => {
+        if (state.activeView === 'dashboard' && !state.busy && !elements.usageReconcileDialog.open) loadDashboard(true);
+      }, 30_000);
+    }
   } catch (error) {
     state.dashboardLoading = false;
-    renderDashboardState(error.message || '本地用量服务未能启动。');
+    renderDashboardState(error?.message || String(error) || '本地用量服务未能启动。');
   }
 }
 
 function switchView(view) {
-  if (!['launcher', 'dashboard'].includes(view)) return;
+  if (!['launcher', 'dashboard', 'skills'].includes(view)) return;
   state.activeView = view;
   elements.launcherView.hidden = view !== 'launcher';
   elements.dashboardView.hidden = view !== 'dashboard';
+  elements.skillsView.hidden = view !== 'skills';
   elements.primaryTabs.querySelectorAll('[data-view]').forEach(button => {
     const selected = button.dataset.view === view;
     button.classList.toggle('is-active', selected);
@@ -1318,7 +1462,230 @@ function switchView(view) {
   });
   if (state.snapshot) renderUsage();
   if (view === 'dashboard') loadDashboard();
+  if (view === 'skills') loadSkills();
 }
+
+function renderSkills() {
+  if (state.skillsLoading) {
+    elements.skillsTable.innerHTML = '<div class="skills-loading">正在扫描 Skill 目录...</div>';
+    elements.skillsMeta.textContent = '正在读取共享、默认、Profile 与仓库目录';
+    return;
+  }
+  const data = state.skillsData;
+  if (!data) return;
+  const pluginData = data.pluginData || { plugins: [], availablePlugins: [], environments: [], failures: [] };
+  const pluginSkillTotal = pluginData.plugins.reduce((total, plugin) => total + plugin.skills.length, 0);
+  const availableSkillTotal = (pluginData.availablePlugins || []).reduce((total, plugin) => total + plugin.skills.length, 0);
+  const workspaceRoot = data.roots.find(root => root.scope === 'workspace');
+  const discoveredProjects = data.roots.filter(root => root.scope === 'workspace' && root.discovered);
+  const workspaceSkillTotal = data.skills.filter(skill => skill.locations.some(location => location.scope === 'workspace')).length;
+  elements.standaloneSkillCount.textContent = String(data.skills.length);
+  elements.pluginSkillCount.textContent = String(pluginSkillTotal);
+  elements.availableSkillCount.textContent = String(availableSkillTotal);
+  elements.skillsMode.querySelectorAll('[data-skills-mode]').forEach(button => {
+    const selected = button.dataset.skillsMode === state.skillsMode;
+    button.classList.toggle('is-active', selected);
+    button.setAttribute('aria-selected', String(selected));
+  });
+  elements.skillsMeta.textContent = `${data.skills.length} 个独立 Skill · 项目来源 ${workspaceSkillTotal} 个（自动发现 ${discoveredProjects.length} 个项目） · ${pluginData.plugins.length} 个已安装插件包含 ${pluginSkillTotal} 个 Skill · ${pluginData.availablePlugins.length} 个可安装插件包含 ${availableSkillTotal} 个 Skill${pluginData.failures.length ? ` · ${pluginData.failures.length} 个环境读取失败` : ''}${workspaceRoot ? ` · 当前项目 ${workspaceRoot.path}` : ''}`;
+  if (state.skillsMode === 'plugins') {
+    renderPluginSkills(pluginData);
+    return;
+  }
+  if (state.skillsMode === 'available') {
+    renderAvailablePluginSkills(pluginData);
+    return;
+  }
+  const columns = data.roots.filter(root => root.scope !== 'system');
+  elements.skillsTable.style.setProperty('--skill-column-count', String(columns.length));
+  elements.skillsTable.innerHTML = data.skills.length ? `
+    <div class="skills-matrix-header"><span>Skill</span>${columns.map(root => `<span title="${escapeHtml(root.path)}">${escapeHtml(root.label)}</span>`).join('')}<span>操作</span></div>
+    ${data.skills.map(skill => {
+      const source = skill.locations.find(item => !item.readOnly) || skill.locations[0];
+      const shared = skill.locations.find(item => item.scope === 'shared');
+      const onlySystem = skill.locations.every(item => item.readOnly);
+      return `<div class="skill-row ${skill.conflict ? 'has-conflict' : ''}" data-skill-name="${escapeHtml(skill.name)}">
+        <div class="skill-identity"><div><strong>${escapeHtml(skill.name)}</strong>${skill.conflict ? '<span class="skill-conflict">同名冲突</span>' : onlySystem ? '<span class="skill-readonly">系统只读</span>' : ''}</div><p>${escapeHtml(skill.description || '未提供描述')}</p><small>${escapeHtml(source.path)}</small></div>
+        ${columns.map(root => {
+          const present = skill.locations.some(item => item.path.toLowerCase() === `${root.path}\\${skill.name}`.toLowerCase());
+          const same = present && source.path.toLowerCase() === `${root.path}\\${skill.name}`.toLowerCase();
+          if (root.scope === 'workspace') return `<div class="skill-cell workspace-skill-cell ${present ? 'is-present' : ''}" title="${escapeHtml(root.path)}"><span>${present ? '项目来源' : '—'}</span></div>`;
+          return `<button class="skill-cell ${present ? 'is-present' : ''}" type="button" data-skill-sync="${escapeHtml(skill.name)}" data-source="${escapeHtml(source.path)}" data-target-root="${escapeHtml(root.path)}" data-overwrite="${present}" ${same || source.readOnly ? 'disabled' : ''} title="${present ? '覆盖此位置的同名 Skill' : `复制到 ${escapeHtml(root.label)}`}"><span>${present ? same ? '当前来源' : '覆盖同步' : '同步'}</span></button>`;
+        }).join('')}
+        <div class="skill-actions">
+          <button class="icon-button" type="button" data-skill-share="${escapeHtml(skill.name)}" data-source="${escapeHtml(source.path)}" ${shared || source.readOnly ? 'disabled' : ''} title="共享给所有 Codex" aria-label="共享给所有 Codex"><i data-lucide="folder-cog"></i></button>
+          <button class="icon-button" type="button" data-skill-toggle="${escapeHtml(skill.name)}" data-skill-path="${escapeHtml(source.path)}" title="启用或停用" aria-label="启用或停用"><i data-lucide="settings-2"></i></button>
+          <button class="icon-button danger-icon-button" type="button" data-skill-remove="${escapeHtml(source.path)}" ${!source.managed || source.readOnly ? 'disabled' : ''} title="移入回收站" aria-label="移入回收站"><i data-lucide="trash-2"></i></button>
+        </div>
+      </div>`;
+    }).join('')}` : '<div class="skills-loading">当前目录中没有可识别的 Skills。</div>';
+  refreshIcons();
+}
+
+function renderPluginSkills(data) {
+  const columns = data.environments || [];
+  elements.skillsTable.style.setProperty('--skill-column-count', String(columns.length));
+  elements.skillsTable.innerHTML = data.plugins.length ? `
+    <div class="skills-matrix-header"><span>插件及其 Skills</span>${columns.map(item => `<span title="${escapeHtml(item.codexHome)}">${escapeHtml(item.label)}</span>`).join('')}<span>来源</span></div>
+    ${data.plugins.map(plugin => `<div class="skill-row plugin-row">
+      <div class="skill-identity plugin-identity"><div><strong>${escapeHtml(plugin.name)}</strong><span class="plugin-badge">插件</span></div><p>${plugin.skills.map(skill => escapeHtml(skill.name)).join(' · ')}</p><small>${escapeHtml(plugin.pluginId)}${plugin.version ? ` · v${escapeHtml(plugin.version)}` : ''}</small></div>
+      ${columns.map(environment => {
+        const location = plugin.locations.find(item => item.environmentId === environment.id);
+        return location
+          ? `<button class="skill-cell plugin-cell is-present ${location.enabled ? 'is-enabled' : 'is-disabled'}" type="button" data-plugin-manage="${escapeHtml(plugin.pluginId)}" data-environment-id="${escapeHtml(environment.id)}"><span>${location.enabled ? '已启用' : '已停用'}</span><small>管理</small></button>`
+          : `<button class="skill-cell plugin-cell" type="button" data-plugin-install="${escapeHtml(plugin.pluginId)}" data-target-home="${escapeHtml(environment.codexHome)}" data-target-label="${escapeHtml(environment.label)}"><span>安装到 ${escapeHtml(environment.label)}</span></button>`;
+      }).join('')}
+      <div class="plugin-source"><strong>${escapeHtml(plugin.marketplaceName)}</strong><span>${plugin.skills.length} 个 Skill</span></div>
+    </div>`).join('')}` : '<div class="skills-loading">没有检测到包含 Skills 的已安装插件。</div>';
+  refreshIcons();
+}
+
+function renderAvailablePluginSkills(data) {
+  const columns = data.environments || [];
+  const plugins = data.availablePlugins || [];
+  elements.skillsTable.style.setProperty('--skill-column-count', String(columns.length));
+  elements.skillsTable.innerHTML = plugins.length ? `
+    <div class="skills-matrix-header"><span>Marketplace 插件及其 Skills</span>${columns.map(item => `<span title="${escapeHtml(item.codexHome)}">${escapeHtml(item.label)}</span>`).join('')}<span>来源</span></div>
+    ${plugins.map(plugin => `<div class="skill-row plugin-row available-plugin-row">
+      <div class="skill-identity plugin-identity"><div><strong>${escapeHtml(plugin.name)}</strong><span class="plugin-badge available-badge">可安装</span></div><p>${plugin.skills.map(skill => escapeHtml(skill.name)).join(' · ')}</p><small>${escapeHtml(plugin.pluginId)}${plugin.version ? ` · v${escapeHtml(plugin.version)}` : ''}</small></div>
+      ${columns.map(environment => `<button class="skill-cell plugin-cell" type="button" data-plugin-install="${escapeHtml(plugin.pluginId)}" data-target-home="${escapeHtml(environment.codexHome)}" data-target-label="${escapeHtml(environment.label)}"><span>安装</span><small>${escapeHtml(environment.label)}</small></button>`).join('')}
+      <div class="plugin-source"><strong>${escapeHtml(plugin.marketplaceName)}</strong><span>${plugin.skills.length} 个 Skill</span></div>
+    </div>`).join('')}` : '<div class="skills-loading">当前 Marketplace 中没有包含 Skills 的未安装插件。</div>';
+  refreshIcons();
+}
+
+async function loadSkills() {
+  if (state.skillsLoading) return;
+  state.skillsLoading = true;
+  renderSkills();
+  try {
+    state.skillsData = await window.dualCodexDay.getSkills();
+  } catch (error) {
+    showToast(error.message || '读取 Skills 失败。', true);
+  } finally {
+    state.skillsLoading = false;
+    renderSkills();
+  }
+}
+
+async function runSkillAction(action, success) {
+  if (state.busy) return;
+  setBusy(true);
+  try {
+    const result = await action();
+    state.skillsData = result.skills || result;
+    renderSkills();
+    showToast(`${success} 重启 Codex 后生效。`);
+  } catch (error) {
+    showToast(error.message || 'Skill 操作失败。', true);
+  } finally { setBusy(false); }
+}
+
+elements.skillsTable.addEventListener('click', async event => {
+  const pluginInstall = event.target.closest('[data-plugin-install]');
+  const pluginManage = event.target.closest('[data-plugin-manage]');
+  if (pluginInstall) {
+    const pluginId = pluginInstall.dataset.pluginInstall;
+    const targetLabel = pluginInstall.dataset.targetLabel;
+    if (!confirm(`把插件“${pluginId}”安装到“${targetLabel}”？\n该插件包含的全部 Skills 会一起安装。`)) return;
+    return runSkillAction(() => window.dualCodexDay.installPlugin(pluginId, pluginInstall.dataset.targetHome), `插件已安装到“${targetLabel}”。`);
+  }
+  if (pluginManage) {
+    const plugin = state.skillsData.pluginData.plugins.find(item => item.pluginId === pluginManage.dataset.pluginManage);
+    const environment = state.skillsData.pluginData.environments.find(item => item.id === pluginManage.dataset.environmentId);
+    const location = plugin?.locations.find(item => item.environmentId === environment?.id);
+    if (!plugin || !environment || !location) return;
+    state.activePlugin = { plugin, environment, location };
+    elements.pluginManageTitle.textContent = plugin.name;
+    elements.pluginManageEnvironment.textContent = `${environment.label} · ${plugin.marketplaceName}`;
+    elements.pluginManageSkills.textContent = `包含：${plugin.skills.map(skill => skill.name).join('、')}`;
+    elements.pluginManageEnabled.checked = location.enabled;
+    elements.pluginManageDialog.showModal();
+    return;
+  }
+  const share = event.target.closest('[data-skill-share]');
+  const sync = event.target.closest('[data-skill-sync]');
+  const remove = event.target.closest('[data-skill-remove]');
+  const toggle = event.target.closest('[data-skill-toggle]');
+  if (share) return runSkillAction(() => window.dualCodexDay.shareSkill(share.dataset.source, false), `“${share.dataset.skillShare}”已加入共享目录。`);
+  if (sync) {
+    const overwrite = sync.dataset.overwrite === 'true';
+    if (overwrite && !confirm(`目标位置已有同名 Skill。用当前版本覆盖它？\n${sync.dataset.targetRoot}`)) return;
+    return runSkillAction(() => window.dualCodexDay.syncSkill(sync.dataset.source, sync.dataset.targetRoot, overwrite), `“${sync.dataset.skillSync}”已同步。`);
+  }
+  if (remove) {
+    if (!confirm(`将这个 Skill 目录移入回收站？\n${remove.dataset.skillRemove}`)) return;
+    return runSkillAction(() => window.dualCodexDay.removeSkill(remove.dataset.skillRemove), 'Skill 已移入回收站。');
+  }
+  if (toggle) {
+    const name = toggle.dataset.skillToggle;
+    const targets = [{ name: '默认 Codex', codexHome: state.snapshot.profiles.find(item => item.runtimeSource === 'default')?.runtimeRoot || '' }, ...state.snapshot.profiles.filter(item => item.runtimeSource !== 'default').map(item => ({ name: item.name, codexHome: item.codexHome }))].filter(item => item.codexHome);
+    elements.skillToggleTitle.textContent = `设置“${name}”`;
+    elements.skillToggleTarget.innerHTML = targets.map(item => `<option value="${escapeHtml(item.codexHome)}">${escapeHtml(item.name)}</option>`).join('');
+    elements.skillToggleEnabled.checked = true;
+    elements.skillToggleForm.dataset.skillName = name;
+    elements.skillToggleForm.dataset.skillPath = toggle.dataset.skillPath;
+    elements.skillToggleDialog.showModal();
+  }
+});
+
+elements.skillsMode.addEventListener('click', event => {
+  const button = event.target.closest('[data-skills-mode]');
+  if (!button) return;
+  state.skillsMode = button.dataset.skillsMode;
+  renderSkills();
+});
+
+elements.pluginManageCancel.addEventListener('click', () => elements.pluginManageDialog.close());
+elements.pluginManageForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  const active = state.activePlugin;
+  if (!active) return;
+  elements.pluginManageDialog.close();
+  const enabled = elements.pluginManageEnabled.checked;
+  return runSkillAction(() => window.dualCodexDay.setPluginEnabled(active.plugin.pluginId, active.environment.codexHome, enabled), `“${active.plugin.name}”已在“${active.environment.label}”中${enabled ? '启用' : '停用'}。`);
+});
+
+elements.pluginRemove.addEventListener('click', async () => {
+  const active = state.activePlugin;
+  if (!active) return;
+  if (!confirm(`从“${active.environment.label}”卸载插件“${active.plugin.name}”？\n插件包含的全部 Skills 会一起移除。`)) return;
+  elements.pluginManageDialog.close();
+  return runSkillAction(() => window.dualCodexDay.removePlugin(active.plugin.pluginId, active.environment.codexHome), `“${active.plugin.name}”已从“${active.environment.label}”卸载。`);
+});
+
+elements.skillToggleCancel.addEventListener('click', () => elements.skillToggleDialog.close());
+elements.skillToggleForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  const name = elements.skillToggleForm.dataset.skillName;
+  const skillPath = elements.skillToggleForm.dataset.skillPath;
+  const codexHome = elements.skillToggleTarget.value;
+  const targetName = elements.skillToggleTarget.selectedOptions[0]?.textContent || 'Codex';
+  const enabled = elements.skillToggleEnabled.checked;
+  elements.skillToggleDialog.close();
+  return runSkillAction(() => window.dualCodexDay.setSkillEnabled(codexHome, skillPath, enabled), `“${name}”已在“${targetName}”中${enabled ? '启用' : '停用'}。`);
+});
+
+elements.skillsRefresh.addEventListener('click', loadSkills);
+elements.skillsWorkspace.addEventListener('click', async () => {
+  if (state.busy) return;
+  setBusy(true);
+  try {
+    const workspace = await window.dualCodexDay.chooseWorkspace();
+    state.snapshot.workspace = workspace;
+    state.skillsData = null;
+  } catch (error) {
+    showToast(error.message || '无法选择项目目录。', true);
+  } finally {
+    setBusy(false);
+  }
+  await loadSkills();
+});
+elements.skillsRestart.addEventListener('click', () => {
+  const profile = selectedProfile();
+  if (!profile) return showToast('请先在启动中心选择一个账号。', true);
+  window.dualCodexDay.launchProfile(profile.id, 'desktop').then(() => showToast(`已用“${profile.name}”启动 Codex。`)).catch(error => showToast(error.message || '启动失败。', true));
+});
 
 elements.profileList.addEventListener('click', event => {
   const button = event.target.closest('[data-profile-id]');
@@ -1587,6 +1954,21 @@ elements.usageRange.addEventListener('click', event => {
   if (!button) return;
   state.usageRange = button.dataset.range;
   elements.usageRange.querySelectorAll('[data-range]').forEach(item => item.classList.toggle('is-active', item === button));
+  elements.usageCustomRange.open = false;
+  renderNativeUsage();
+});
+elements.usageCustomApply.addEventListener('click', () => {
+  const start = elements.usageCustomStart.value;
+  const end = elements.usageCustomEnd.value;
+  if (!start || !end || start > end) {
+    showToast('自定义日期必须包含有效的开始和结束日期。', true);
+    return;
+  }
+  state.usageCustomStart = start;
+  state.usageCustomEnd = end;
+  state.usageRange = 'custom';
+  elements.usageRange.querySelectorAll('[data-range]').forEach(item => item.classList.remove('is-active'));
+  elements.usageCustomRange.open = false;
   renderNativeUsage();
 });
 elements.usageModelFilter.addEventListener('change', () => { state.usageModel = elements.usageModelFilter.value; renderNativeUsage(); });
@@ -1612,11 +1994,31 @@ elements.usageSettingsForm.addEventListener('submit', event => {
 elements.usageDiagnosticsButton.addEventListener('click', () => {
   const d = state.usageData?.diagnostics || {};
   const counts = d.counts || {};
-  const items = [['状态', d.status || 'unknown'], ['日志文件', counts.files || 0], ['有效事件', counts.events || 0], ['任务', counts.sessions || 0], ['JSON 错误', counts.invalidJson || 0], ['重复记录', counts.duplicateEvents || 0]];
+  const refresh = d.refresh || {};
+  const items = [
+    ['状态', d.status || 'unknown'],
+    ['当前日志', counts.presentFiles || 0],
+    ['已保留历史', counts.missingFiles || 0],
+    ['延后处理', counts.deferredFiles || 0],
+    ['有效事件', counts.events || 0],
+    ['根任务', counts.sessions || 0],
+    ['重复快照', counts.duplicateEvents || 0],
+    ['旧版历史清理', refresh.droppedLegacyFiles || 0]
+  ];
   elements.usageDiagnosticsContent.innerHTML = items.map(([label, value]) => `<div><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`).join('');
+  elements.usageDiagnosticsScope.textContent = '统计包含当前可读取的 Codex 日志，以及从 v0.11.0 起已进入本地台账但随后消失的日志。无法按新口径验证的旧版缺失记录不会保留。';
   elements.usageDiagnosticsDialog.showModal();
 });
 elements.usageDiagnosticsClose.addEventListener('click', () => elements.usageDiagnosticsDialog.close());
+elements.usageReconcileButton.addEventListener('click', openReconcile);
+elements.usageReconcileClose.addEventListener('click', () => elements.usageReconcileDialog.close());
+elements.usageReconcileChoose.addEventListener('click', async () => {
+  const selected = await window.dualCodexDay.chooseCcSwitchDatabase();
+  if (!selected) return;
+  state.ccSwitchPath = selected;
+  localStorage.setItem('dual-codex-cc-switch-db', selected);
+  await openReconcile();
+});
 elements.usagePosterButton.addEventListener('click', openUsagePoster);
 elements.reportPosterButton.addEventListener('click', openReportPoster);
 elements.reportPeriod.addEventListener('click', event => {

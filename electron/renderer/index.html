@@ -14,7 +14,7 @@
         <img src="../../assets/codex-day-mark.svg" alt="" class="brand-mark">
         <div>
           <strong>Dual Codex Day</strong>
-          <span id="version-label">v0.10.1</span>
+          <span id="version-label">v0.16.0</span>
         </div>
       </div>
       <nav class="primary-tabs" aria-label="主要功能">
@@ -25,6 +25,10 @@
         <button class="primary-tab" type="button" data-view="dashboard" aria-selected="false">
           <i data-lucide="chart-no-axes-combined"></i>
           <span>用量分析</span>
+        </button>
+        <button class="primary-tab" type="button" data-view="skills" aria-selected="false">
+          <i data-lucide="folder-cog"></i>
+          <span>Skills</span>
         </button>
       </nav>
       <div class="titlebar-status" id="titlebar-status">
@@ -199,12 +203,22 @@
           <button type="button" data-range="today">今天</button>
           <button type="button" data-range="week" class="is-active">本周</button>
           <button type="button" data-range="30d">30 天</button>
+          <button type="button" data-range="90d">90 天</button>
           <button type="button" data-range="all">全部</button>
         </div>
+        <details class="usage-custom-range" id="usage-custom-range">
+          <summary>自定义</summary>
+          <div class="usage-custom-range-panel">
+            <label><span>开始</span><input id="usage-custom-start" type="date"></label>
+            <label><span>结束</span><input id="usage-custom-end" type="date"></label>
+            <button class="compact-button" id="usage-custom-apply" type="button">应用</button>
+          </div>
+        </details>
         <label class="usage-select-control compact"><span>模型</span><select id="usage-model-filter"><option value="">全部</option></select></label>
         <label class="usage-select-control compact"><span>项目</span><select id="usage-project-filter"><option value="">全部</option></select></label>
         <span class="usage-toolbar-spacer"></span>
         <button class="icon-button" id="usage-diagnostics-button" type="button" title="数据诊断" aria-label="数据诊断"><i data-lucide="database"></i></button>
+        <button class="secondary-button" id="usage-reconcile-button" type="button"><i data-lucide="database"></i><span>CC Switch 对账</span></button>
         <button class="icon-button" id="usage-settings-button" type="button" title="用量设置" aria-label="用量设置"><i data-lucide="settings-2"></i></button>
         <button class="secondary-button" id="usage-poster-button" type="button"><i data-lucide="image-down"></i><span>导出海报</span></button>
         <button class="secondary-button" id="usage-export-button" type="button"><i data-lucide="download"></i><span>导出 CSV</span></button>
@@ -270,7 +284,40 @@
         </div>
       </div>
     </section>
+
+    <section class="skills-view" id="skills-view" data-app-view="skills" aria-label="Skills 管理" hidden>
+      <div class="skills-toolbar">
+        <div><span class="eyebrow">Skills management</span><h1>Skills 管理</h1><p id="skills-meta">正在读取本机 Skill 目录</p></div>
+        <div class="skills-toolbar-actions"><button class="secondary-button" id="skills-workspace-button" type="button"><i data-lucide="folder-open"></i><span>选择项目</span></button><button class="secondary-button" id="skills-refresh-button" type="button"><i data-lucide="refresh-cw"></i><span>刷新</span></button><button class="primary-button" id="skills-restart-button" type="button"><i data-lucide="rocket"></i><span>重启 Codex</span></button></div>
+      </div>
+      <div class="skills-notice"><i data-lucide="circle-alert"></i><span>目录或配置变更后，已运行的 Codex 需要重启才会加载最新 Skills。</span></div>
+      <div class="skills-mode" id="skills-mode" role="tablist" aria-label="Skill 来源">
+        <button type="button" class="is-active" data-skills-mode="standalone" aria-selected="true">独立 Skills <span id="standalone-skill-count">0</span></button>
+        <button type="button" data-skills-mode="plugins" aria-selected="false">插件 Skills <span id="plugin-skill-count">0</span></button>
+        <button type="button" data-skills-mode="available" aria-selected="false">可安装 <span id="available-skill-count">0</span></button>
+      </div>
+      <div class="skills-table" id="skills-table"><div class="skills-loading">正在扫描 Skill 目录...</div></div>
+    </section>
   </div>
+
+  <dialog class="modal skill-toggle-modal" id="skill-toggle-dialog">
+    <form id="skill-toggle-form">
+      <div class="modal-heading"><div class="modal-icon"><i data-lucide="settings-2"></i></div><div><span class="eyebrow">Skill availability</span><h2 id="skill-toggle-title">启用 Skill</h2></div></div>
+      <label class="field-label" for="skill-toggle-target">Codex 环境</label>
+      <select id="skill-toggle-target"></select>
+      <label class="compatibility-toggle skill-enabled-toggle"><span><strong>启用</strong><small>写入该环境的 config.toml</small></span><input id="skill-toggle-enabled" type="checkbox" checked><span class="toggle-track"></span></label>
+      <div class="modal-actions"><button class="secondary-button" id="skill-toggle-cancel" type="button">取消</button><button class="primary-button" type="submit">保存</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="modal plugin-manage-modal" id="plugin-manage-dialog">
+    <form id="plugin-manage-form">
+      <div class="modal-heading"><div class="modal-icon"><i data-lucide="folder-cog"></i></div><div><span class="eyebrow">Plugin management</span><h2 id="plugin-manage-title">管理插件</h2></div></div>
+      <div class="plugin-manage-summary"><span id="plugin-manage-environment"></span><p id="plugin-manage-skills"></p></div>
+      <label class="compatibility-toggle skill-enabled-toggle"><span><strong>启用插件</strong><small>新会话将加载该插件包含的 Skills</small></span><input id="plugin-manage-enabled" type="checkbox"><span class="toggle-track"></span></label>
+      <div class="modal-actions plugin-manage-actions"><button class="danger-button" id="plugin-remove-button" type="button">卸载插件</button><span></span><button class="secondary-button" id="plugin-manage-cancel" type="button">取消</button><button class="primary-button" type="submit">保存</button></div>
+    </form>
+  </dialog>
 
   <dialog class="modal" id="create-profile-dialog">
     <form method="dialog" id="create-profile-form">
@@ -495,7 +542,16 @@
   <dialog class="modal diagnostics-modal" id="usage-diagnostics-dialog">
     <div class="modal-heading"><div class="modal-icon"><i data-lucide="database"></i></div><div><span class="eyebrow">Data health</span><h2>数据诊断</h2></div></div>
     <div class="diagnostics-grid" id="usage-diagnostics-content"></div>
+    <p class="diagnostics-scope" id="usage-diagnostics-scope"></p>
     <div class="modal-actions"><button class="primary-button" id="usage-diagnostics-close" type="button">关闭</button></div>
+  </dialog>
+
+  <dialog class="modal diagnostics-modal reconcile-modal" id="usage-reconcile-dialog">
+    <div class="modal-heading"><div class="modal-icon"><i data-lucide="database"></i></div><div><span class="eyebrow">Read-only audit</span><h2>CC Switch 对账</h2></div></div>
+    <p class="diagnostics-scope" id="usage-reconcile-source">仅读取本机 CC Switch 数据库，不会修改原文件。</p>
+    <div class="reconcile-summary" id="usage-reconcile-summary"></div>
+    <div class="reconcile-breakdown" id="usage-reconcile-breakdown"></div>
+    <div class="modal-actions"><button class="secondary-button" id="usage-reconcile-choose" type="button">选择数据库</button><button class="primary-button" id="usage-reconcile-close" type="button">关闭</button></div>
   </dialog>
 
   <dialog class="modal poster-modal" id="usage-poster-dialog">

@@ -6,7 +6,7 @@
 [![Release](https://img.shields.io/github/v/release/AdlinZ/dual-codex-day)](https://github.com/AdlinZ/dual-codex-day/releases)
 [![Website](https://img.shields.io/badge/website-GitHub%20Pages-176c4b)](https://adlinz.github.io/dual-codex-day/)
 
-一个本地优先的 Codex 多账号启动与个人用量中心。在同一个项目里管理隔离账号，并查看今天、本周、模型、项目和任务维度的 Token 活动。
+一个本地优先的 Codex 多账号启动、Skills 管理与个人用量中心。在同一个项目里管理隔离账号，统一分发 Skills，并查看今天、本周、模型、项目和任务维度的 Token 活动。
 
 > 非 OpenAI 官方项目，与 OpenAI 无隶属或背书关系。
 
@@ -29,13 +29,27 @@
 
 ### 本地用量分析
 
-- 今日、本周、近 30 天、近 90 天与全部记录汇总
+- 今日、本周、近 30 天、近 90 天、自定义日期与全部记录汇总
 - 输入、缓存输入、非缓存输入、输出和推理 Token
 - 按模型公开 API 标价估算成本，支持缓存写入、长上下文与处理模式
 - 今日成本、本月累计、月底预测、预算进度与价格覆盖提示
-- 周报/月报、同期对比、近 12 周活跃日历、CSV 与分享海报
+- 周报/月报、同期对比、近 12 周活跃日历、CSV、分享海报与 CC Switch 只读对账
 - SQLite 增量索引、本地项目别名、任务详情和完整 24 小时时间轴
 - 仅监听 `127.0.0.1`，不上传日志，不依赖远程服务
+
+### Skills 管理
+
+- 扫描 `~/.agents/skills`、默认 `CODEX_HOME/skills`、独立 Profile 和当前仓库 Skills
+- 可在 Skills 页直接选择项目并立即扫描其 `.agents/skills`，项目来源保持只读
+- 自动发现“文档”目录下项目中的 `.agents/skills`，无需逐个选择项目
+- 用矩阵查看共享、默认账号及各 Profile 的安装状态和同名冲突
+- 显式共享或同步 Skill，不自动迁移现有目录
+- 通过 `[[skills.config]]` 管理启用状态，删除时移入系统回收站
+- 系统内置 `.system` Skills 只读，所有写操作限制在已识别的受管目录
+- 单独展示插件提供的 Skills，并按插件包归组，避免把缓存残留误判为已安装
+- 通过 Codex 插件命令把整个插件安装到目标 Profile；自定义 Marketplace 会随安装来源注册
+- 支持按环境启停或卸载插件，插件包含的所有 Skills 共同生效
+- 单独列出 Marketplace 中可安装的插件 Skills，并可选择安装到默认 Codex 或指定 Profile
 
 ## Windows 快速开始
 
@@ -365,6 +379,7 @@ dual-codex-day/
 - 可选的周目标和月目标回顾
 - 价格候选快照的人工确认与显式更新流程
 - 跨版本数据 Schema 迁移与备份恢复
+- 任务详情钻取与多账号并列对比
 
 v0.10.1 已补齐实例关闭、PID 归属保护和交互式 CLI 终端；Electron 控制中心的设计范围与验收标准见 [v0.10.0 规划](docs/plans/v0.10.0.md)。价格审计与 90 天回顾见 [v0.9.0 规划](docs/plans/v0.9.0.md)，设置迁移与每日摘要见 [v0.8.0 规划](docs/plans/v0.8.0.md)。
 

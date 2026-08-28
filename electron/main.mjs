@@ -25,6 +25,9 @@ import {
   updateProfileUsageSource
 } from '../scripts/lib/profile-store.mjs';
 import { getIndexDiagnostics, openIndex, readDailySummary, readIndexedEvents, refreshIndex } from '../scripts/lib/session-index.mjs';
+import { readCcSwitchAudit } from '../scripts/lib/cc-switch-audit.mjs';
+import { discoverProjectSkillRoots, removeManagedSkill, scanSkills, setSkillEnabled, shareSkill, skillRoots, syncSkill } from '../scripts/lib/skill-store.mjs';
+import { installPlugin, listPluginMarketplaces, removePlugin, scanPluginSkills, setPluginEnabled } from '../scripts/lib/plugin-store.mjs';
 
 const electronDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.dirname(electronDirectory);
@@ -37,11 +40,15 @@ const externalRepoRoot = repoRoot.endsWith(asarMarker)
 const packageMetadata = JSON.parse(readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
 const usageDataRoot = app.isPackaged ? path.join(app.getPath('userData'), 'usage') : path.join(repoRoot, '.codex-day');
 const defaultCodexRoot = path.resolve(process.env.CODEX_USAGE_ROOT || process.env.CODEX_HOME || path.join(os.homedir(), '.codex'));
+const defaultCcSwitchDatabase = path.resolve(process.env.CC_SWITCH_DATABASE || path.join(os.homedir(), '.cc-switch', 'cc-switch.db'));
 const profilesRoot = defaultProfilesRoot();
 
 let mainWindow = null;
-let currentWorkspace = app.isPackaged ? os.homedir() : repoRoot;
+let currentWorkspace = process.env.DUAL_CODEX_DAY_SCREENSHOT_WORKSPACE
+  ? path.resolve(process.env.DUAL_CODEX_DAY_SCREENSHOT_WORKSPACE)
+  : app.isPackaged ? os.homedir() : repoRoot;
 let targetCache = null;
+let projectSkillRootsCache = null;
 const loginStatusCache = new Map();
 
 function serializableTargets(targets) {
@@ -260,6 +267,61 @@ function getSnapshot(profileId) {
   };
 }
 
+function discoveredProjectSkillRoots(refresh = false) {
+  if (!refresh && projectSkillRootsCache) return projectSkillRootsCache;
+  projectSkillRootsCache = discoverProjectSkillRoots([app.getPath('documents')]);
+  return projectSkillRootsCache;
+}
+
+function skillContext({ refreshProjects = false } = {}) {
+  const profiles = listProfiles(profilesRoot).map(profile => ({
+    id: profile.id,
+    name: profile.name,
+    codexHome: profile.runtimeSource === 'default' ? defaultCodexRoot : profile.paths.codexHome,
+    runtimeSource: profile.runtimeSource
+  }));
+  return { profiles, workspace: currentWorkspace, projectSkillRoots: discoveredProjectSkillRoots(refreshProjects), defaultCodexHome: defaultCodexRoot };
+}
+
+function skillInventory({ refreshProjects = false } = {}) {
+  const context = skillContext({ refreshProjects });
+  const environments = [
+    { id: 'default', label: '默认 Codex', codexHome: defaultCodexRoot },
+    ...context.profiles.map(profile => ({ id: `profile:${profile.id}`, label: profile.name, codexHome: profile.codexHome }))
+  ];
+  const codexExecutable = detectedTargets().cli?.executable || 'codex';
+  return { ...scanSkills(context), pluginData: scanPluginSkills({ environments, codexExecutable }) };
+}
+
+function knownSkill(skillPath, { writable = false } = {}) {
+  const target = path.resolve(String(skillPath || ''));
+  const entry = skillInventory().skills.flatMap(skill => skill.locations).find(item => path.resolve(item.path).toLowerCase() === target.toLowerCase());
+  if (!entry || (writable && (!entry.managed || entry.readOnly))) throw new Error('该 Skill 不在可管理范围内。');
+  return entry;
+}
+
+function knownSkillRoot(rootPath) {
+  const target = path.resolve(String(rootPath || ''));
+  const root = skillRoots(skillContext()).find(item => path.resolve(item.path).toLowerCase() === target.toLowerCase() && item.managed && !item.readOnly);
+  if (!root) throw new Error('目标 Skill 目录不在可管理范围内。');
+  return root;
+}
+
+function knownCodexHome(codexHome) {
+  const target = path.resolve(String(codexHome || ''));
+  const allowed = [defaultCodexRoot, ...listProfiles(profilesRoot).filter(profile => profile.runtimeSource !== 'default').map(profile => profile.paths.codexHome)];
+  if (!allowed.some(item => path.resolve(item).toLowerCase() === target.toLowerCase())) throw new Error('该 Codex 配置目录不在可管理范围内。');
+  return target;
+}
+
+function knownPlugin(pluginId, codexHome = null) {
+  const pluginData = skillInventory().pluginData;
+  const plugin = [...pluginData.plugins, ...(pluginData.availablePlugins || [])].find(item => item.pluginId === String(pluginId || ''));
+  if (!plugin) throw new Error('该插件不在已安装或可安装清单中。');
+  if (codexHome && !(plugin.locations || []).some(item => path.resolve(item.codexHome).toLowerCase() === path.resolve(codexHome).toLowerCase())) throw new Error('该环境没有安装此插件。');
+  return plugin;
+}
+
 function readUsageData(sourceId) {
   const source = usageSource(sourceId);
   const { databasePath } = usageStoragePaths(source.id);
@@ -429,6 +491,61 @@ function registerIpc() {
     return currentWorkspace;
   });
   ipcMain.handle('usage:get-data', (_event, sourceId) => readUsageData(sourceId));
+  ipcMain.handle('usage:cc-switch-audit', (_event, databasePath) => readCcSwitchAudit(databasePath || defaultCcSwitchDatabase));
+  ipcMain.handle('usage:choose-cc-switch-db', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: '选择 CC Switch 数据库',
+      defaultPath: existsSync(defaultCcSwitchDatabase) ? defaultCcSwitchDatabase : os.homedir(),
+      properties: ['openFile'],
+      filters: [{ name: 'SQLite 数据库', extensions: ['db', 'sqlite', 'sqlite3'] }]
+    });
+    if (result.canceled || !result.filePaths[0]) return null;
+    return path.resolve(result.filePaths[0]);
+  });
+  ipcMain.handle('skills:get', () => skillInventory({ refreshProjects: true }));
+  ipcMain.handle('skills:share', (_event, payload) => {
+    const source = knownSkill(payload?.source).path;
+    return { path: shareSkill(source, { overwrite: payload?.overwrite === true }), skills: skillInventory() };
+  });
+  ipcMain.handle('skills:sync', (_event, payload) => {
+    const source = knownSkill(payload?.source).path;
+    const targetRoot = knownSkillRoot(payload?.targetRoot).path;
+    return { path: syncSkill(source, targetRoot, { overwrite: payload?.overwrite === true }), skills: skillInventory() };
+  });
+  ipcMain.handle('skills:set-enabled', (_event, payload) => {
+    const codexHome = knownCodexHome(payload?.codexHome);
+    const skillPath = path.join(knownSkill(payload?.skillPath).path, 'SKILL.md');
+    return { ...setSkillEnabled(codexHome, skillPath, payload?.enabled === true), skills: skillInventory() };
+  });
+  ipcMain.handle('skills:remove', async (_event, payload) => {
+    const roots = skillRoots(skillContext()).filter(root => root.managed && !root.readOnly).map(root => root.path);
+    const target = knownSkill(payload?.path, { writable: true }).path;
+    await removeManagedSkill(target, roots, item => shell.trashItem(item));
+    return skillInventory();
+  });
+  ipcMain.handle('plugins:install', (_event, payload) => {
+    const plugin = knownPlugin(payload?.pluginId);
+    const targetCodexHome = knownCodexHome(payload?.targetCodexHome);
+    const source = plugin.locations?.[0] || plugin.sources?.[0];
+    if (!source) throw new Error('找不到该插件的 Marketplace 来源。');
+    const codexExecutable = detectedTargets().cli?.executable || 'codex';
+    const marketplaces = listPluginMarketplaces(targetCodexHome, codexExecutable);
+    installPlugin({ codexExecutable, targetCodexHome, pluginId: plugin.pluginId, marketplaceRoot: source.marketplaceRoot, marketplacePresent: marketplaces.some(item => item.name === plugin.marketplaceName) });
+    return skillInventory();
+  });
+  ipcMain.handle('plugins:set-enabled', (_event, payload) => {
+    const codexHome = knownCodexHome(payload?.codexHome);
+    const plugin = knownPlugin(payload?.pluginId, codexHome);
+    setPluginEnabled(codexHome, plugin.pluginId, payload?.enabled === true);
+    return skillInventory();
+  });
+  ipcMain.handle('plugins:remove', (_event, payload) => {
+    const codexHome = knownCodexHome(payload?.codexHome);
+    const plugin = knownPlugin(payload?.pluginId, codexHome);
+    const codexExecutable = detectedTargets().cli?.executable || 'codex';
+    removePlugin({ codexExecutable, codexHome, pluginId: plugin.pluginId });
+    return skillInventory();
+  });
 }
 
 async function captureRequestedScreenshot(window) {
@@ -497,6 +614,45 @@ async function captureRequestedScreenshot(window) {
     })()`);
     if (!usageSourceOpened) throw new Error('Profile usage-source dialog did not open for the screenshot check.');
     await new Promise(resolve => setTimeout(resolve, 350));
+  } else if (screenshotView.startsWith('skills')) {
+    window.setSize(screenshotView.includes('min') ? 980 : 1440, screenshotView.includes('min') ? 680 : 900);
+    const skillsLoaded = await window.webContents.executeJavaScript(`(async () => {
+      document.querySelector('[data-view="skills"]')?.click();
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        if (document.querySelectorAll('.skill-row').length >= 2) {
+          return true;
+        }
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      return false;
+    })()`);
+    if (!skillsLoaded) throw new Error('Skills matrix did not render for the screenshot check.');
+    if (screenshotView.includes('available')) {
+      await new Promise(resolve => setTimeout(resolve, 250));
+      const availableLoaded = await window.webContents.executeJavaScript(`(async () => {
+        document.querySelector('[data-skills-mode="available"]')?.click();
+        await new Promise(resolve => setTimeout(resolve, 100));
+        return document.querySelector('[data-skills-mode="available"]')?.classList.contains('is-active')
+          && document.querySelectorAll('.available-plugin-row').length > 0;
+      })()`);
+      if (!availableLoaded) throw new Error('Available plugin Skills matrix did not render for the screenshot check.');
+    } else if (screenshotView.includes('plugins')) {
+      await new Promise(resolve => setTimeout(resolve, 250));
+      const pluginsLoaded = await window.webContents.executeJavaScript(`(async () => {
+        document.querySelector('[data-skills-mode="plugins"]')?.click();
+        await new Promise(resolve => setTimeout(resolve, 100));
+        return document.querySelector('[data-skills-mode="plugins"]')?.classList.contains('is-active')
+          && document.querySelectorAll('.plugin-row').length > 0;
+      })()`);
+      if (!pluginsLoaded) throw new Error('Plugin Skills matrix did not render for the screenshot check.');
+      if (screenshotView.includes('manage')) {
+        const managerOpened = await window.webContents.executeJavaScript(`(() => {
+          document.querySelector('[data-plugin-manage]')?.click();
+          return document.querySelector('#plugin-manage-dialog')?.open === true;
+        })()`);
+        if (!managerOpened) throw new Error('Plugin manager did not open for the screenshot check.');
+      }
+    }
   } else if (screenshotView.startsWith('launcher')) {
     window.setSize(1440, 960);
     const launcherProfileIndex = screenshotView === 'launcher-empty' ? 1 : 0;
@@ -530,12 +686,18 @@ async function captureRequestedScreenshot(window) {
       tab?.click();
       for (let attempt = 0; attempt < 160; attempt += 1) {
         const content = document.querySelector('#native-usage-content');
-        if (content && !content.hidden && document.querySelector('#usage-kpi-total')?.textContent !== '0') return true;
+        if (content && !content.hidden && document.querySelector('#usage-kpi-total')?.textContent !== '0') return { ready: true };
         await new Promise(resolve => setTimeout(resolve, 50));
       }
-      return false;
+      return {
+        ready: false,
+        hidden: document.querySelector('#native-usage-content')?.hidden ?? null,
+        loading: document.querySelector('#dashboard-loading')?.hidden ?? null,
+        error: document.querySelector('#dashboard-error-message')?.textContent || '',
+        total: document.querySelector('#usage-kpi-total')?.textContent || ''
+      };
     })()`);
-    if (!dashboardLoaded) throw new Error('Embedded dashboard did not load for the screenshot check.');
+    if (!dashboardLoaded?.ready) throw new Error(`Embedded dashboard did not load for the screenshot check: ${JSON.stringify(dashboardLoaded)}`);
     if (screenshotView === 'dashboard-profile') {
       const profileLoaded = await window.webContents.executeJavaScript(`(async () => {
         const select = document.querySelector('#usage-source-select');

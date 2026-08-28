@@ -15,7 +15,7 @@ const renderer = readFileSync(path.join(root, 'electron', 'renderer', 'app.js'),
 const css = readFileSync(path.join(root, 'electron', 'renderer', 'app.css'), 'utf8');
 const capture = readFileSync(path.join(root, 'scripts', 'capture-electron.mjs'), 'utf8');
 
-assert(packageMetadata.version === '0.10.1', 'Electron release must use package version 0.10.1');
+assert(packageMetadata.version === '0.16.0', 'Electron release must use package version 0.16.0');
 assert(packageMetadata.main === 'electron/main.mjs', 'Electron main entry must be declared in package metadata');
 assert(packageMetadata.scripts.desktop === 'electron .', 'desktop command must launch the Electron entry');
 assert(/contextIsolation:\s*true/.test(main), 'Electron windows must enable context isolation');
@@ -50,9 +50,24 @@ assert(/usage:get-data/.test(main) && /getUsageData/.test(preload), 'Electron mu
 assert(!/dashboardWindow|dashboard:open|openDashboardWindow/.test(main + preload + renderer), 'Electron must not create a second dashboard window');
 assert(/id="native-usage-content"/.test(html) && /data-view="dashboard"/.test(html), 'Electron interface must include a native usage-analysis view');
 assert(/id="usage-source-select"/.test(html) && /usageSources/.test(main + renderer), 'usage analysis must expose default, combined, and Profile data sources');
+assert(/usage-diagnostics-scope/.test(html + renderer + css) && /counts\.missingFiles/.test(renderer) && /droppedLegacyFiles/.test(renderer), 'usage diagnostics must explain current, retained, deferred, and discarded legacy sources');
 assert(/codex-day-\$\{slug\}\.sqlite/.test(main) && /refreshIndex\(database, source\.roots\)/.test(main), 'each usage source must use an isolated index and explicit CODEX_HOME roots');
 assert(/getUsageData:\s*sourceId/.test(preload) && /selectedUsageSourceId/.test(renderer), 'renderer must pass only the selected usage source id to the main process');
 assert(/usage-trend-chart/.test(html) && /estimateUsageEvent/.test(renderer) && /usage-export-button/.test(html), 'native usage analysis must provide trends, cost estimates, and CSV export');
+assert(/data-range="90d"/.test(html) && /state\.usageRange = 'custom'/.test(renderer) && /usage-custom-start/.test(html), 'native usage analysis must provide 90 day and custom date ranges');
+assert(/usage:cc-switch-audit/.test(main) && /getCcSwitchAudit/.test(preload) && /usage-reconcile-dialog/.test(html + renderer), 'Electron must expose a read-only CC Switch reconciliation flow');
+assert(/skills:get/.test(main) && /getSkills/.test(preload) && /data-view="skills"/.test(html), 'Electron must expose the Skills management view through scoped IPC');
+assert(/knownSkillRoot/.test(main) && /knownCodexHome/.test(main) && /removeManagedSkill/.test(main), 'Skills mutations must validate managed roots and Codex homes');
+assert(/skills:set-enabled/.test(main) && /skills\.config/.test(readFileSync(path.join(root, 'scripts', 'lib', 'skill-store.mjs'), 'utf8')), 'Skills management must support config-based enable and disable');
+assert(/skill-conflict/.test(html + renderer + css) && /shell\.trashItem/.test(main), 'Skills management must show conflicts and use recoverable deletion');
+assert(/skill-toggle-dialog/.test(html + renderer) && /data-overwrite/.test(renderer), 'Skills management must provide explicit enable and overwrite controls');
+assert(/plugins:install/.test(main) && /installPlugin/.test(preload) && /plugin-manage-dialog/.test(html), 'Electron must manage plugin-provided Skills through scoped plugin IPC');
+assert(/\['plugin', 'list', '--available', '--json'\]/.test(readFileSync(path.join(root, 'scripts', 'lib', 'plugin-store.mjs'), 'utf8')) && /data-skills-mode="plugins"/.test(html), 'plugin Skills must come from the authoritative Codex plugin list');
+assert(/安装到/.test(renderer) && /plugin-row/.test(renderer + css), 'plugin Skills matrix must expose explicit target installation states');
+assert(/skills-workspace-button/.test(html + renderer) && /data-skills-mode="available"/.test(html + renderer), 'Skills management must expose project selection and a separate installable catalog');
+assert(/discoverProjectSkillRoots/.test(main) && /自动发现/.test(renderer), 'Skills management must automatically discover repository Skills in bounded project roots');
+assert(!/cpSync.*plugins.cache/s.test(readFileSync(path.join(root, 'scripts', 'lib', 'plugin-store.mjs'), 'utf8')), 'plugin synchronization must not copy plugin cache directories');
+assert(/setInterval\(\(\) =>/.test(renderer) && /loadDashboard\(true\)/.test(renderer), 'native usage analysis must refresh automatically while visible');
 assert(/usage-poster-button/.test(html) && /createUsagePoster/.test(renderer) && /canvas\.width = 1200/.test(renderer) && /canvas\.height = 1600/.test(renderer), 'native usage analysis must export a filtered 1200 by 1600 poster');
 assert(/data-report-period="week"/.test(html) && /data-report-period="month"/.test(html) && /createPeriodReportPoster/.test(renderer), 'native usage analysis must provide weekly and monthly reports with a dedicated poster');
 assert(/turnId/.test(renderer) && /交互回合/.test(html + renderer) && /模型调用/.test(html + renderer), 'usage metrics must distinguish interaction turns from model calls');

@@ -5,9 +5,10 @@ import path from 'node:path';
 import { createProfile, launchProfile } from './lib/profile-store.mjs';
 
 const root = path.resolve('.');
-const outputPath = path.resolve(process.argv[2] || path.join(root, 'dist', 'electron-v0.10.1.png'));
+const outputPath = path.resolve(process.argv[2] || path.join(root, 'dist', 'electron-v0.16.0.png'));
 const packagedExecutable = process.argv[3] && !process.argv[3].startsWith('--') ? path.resolve(process.argv[3]) : null;
 const screenshotView = process.argv.find(argument => argument.startsWith('--view='))?.slice('--view='.length) || '';
+const liveData = process.argv.includes('--live');
 const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), 'dual-codex-day-electron-'));
 mkdirSync(path.dirname(outputPath), { recursive: true });
 
@@ -47,17 +48,32 @@ function createUsageFixture(codexRoot, fixtureId = 'default', scale = 1) {
   writeFileSync(path.join(sessionDirectory, 'synthetic.jsonl'), `${events.join('\n')}\n`, 'utf8');
 }
 
+function createSkillFixture(skillsRoot, name, description) {
+  const directory = path.join(skillsRoot, name);
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(path.join(directory, 'SKILL.md'), `---\nname: ${name}\ndescription: ${description}\n---\n`, 'utf8');
+}
+
 try {
   const usageRoot = path.join(temporaryRoot, '.codex');
-  createUsageFixture(usageRoot);
-  const workProfile = createProfile(temporaryRoot, '工作账号');
-  createUsageFixture(workProfile.paths.codexHome, 'work', 0.35);
-  createProfile(temporaryRoot, '个人账号');
-  launchProfile(temporaryRoot, workProfile.id, 'desktop', {
-    targets: { desktop: { available: true, executable: process.execPath, experimental: true } },
-    workingDirectory: root,
-    spawnProcess: () => ({ pid: process.pid, unref() {} })
-  });
+  const screenshotWorkspace = path.join(temporaryRoot, 'fictional-workspace');
+  if (!liveData) {
+    createUsageFixture(usageRoot);
+    const workProfile = createProfile(temporaryRoot, '工作账号');
+    createUsageFixture(workProfile.paths.codexHome, 'work', 0.35);
+    createProfile(temporaryRoot, '个人账号');
+    createSkillFixture(path.join(usageRoot, 'skills'), 'issue-drafter', '整理产品问题并生成可提交的 Issue 草稿。');
+    createSkillFixture(path.join(workProfile.paths.codexHome, 'skills'), 'issue-drafter', '工作账号中的同名版本。');
+    createSkillFixture(path.join(workProfile.paths.codexHome, 'skills'), 'daily-report', '根据当天事实材料生成结构化日报。');
+    createSkillFixture(path.join(usageRoot, 'skills', '.system'), 'skill-installer', '安装和管理 Codex Skills。');
+    createSkillFixture(path.join(screenshotWorkspace, '.agents', 'skills'), 'product-review', '检查当前项目的产品需求和交付边界。');
+    createSkillFixture(path.join(screenshotWorkspace, '.agents', 'skills'), 'release-check', '核对当前项目的发布清单。');
+    launchProfile(temporaryRoot, workProfile.id, 'desktop', {
+      targets: { desktop: { available: true, executable: process.execPath, experimental: true } },
+      workingDirectory: root,
+      spawnProcess: () => ({ pid: process.pid, unref() {} })
+    });
+  }
   const electronExecutable = packagedExecutable || (process.platform === 'win32'
     ? path.join(root, 'node_modules', 'electron', 'dist', 'electron.exe')
     : path.join(root, 'node_modules', '.bin', 'electron'));
@@ -66,11 +82,11 @@ try {
     cwd: root,
     env: {
       ...process.env,
-      CODEX_PROFILES_ROOT: temporaryRoot,
-      CODEX_USAGE_ROOT: usageRoot,
+      ...(liveData ? {} : { CODEX_PROFILES_ROOT: temporaryRoot, CODEX_USAGE_ROOT: usageRoot }),
       DUAL_CODEX_DAY_SCREENSHOT: outputPath,
       DUAL_CODEX_DAY_SCREENSHOT_VIEW: screenshotView,
-      DUAL_CODEX_DAY_SCREENSHOT_PATH_REPLACEMENTS: JSON.stringify([
+      DUAL_CODEX_DAY_SCREENSHOT_WORKSPACE: liveData ? '' : screenshotWorkspace,
+      DUAL_CODEX_DAY_SCREENSHOT_PATH_REPLACEMENTS: liveData ? '' : JSON.stringify([
         [temporaryRoot, 'C:\\DualCodexDay\\Profiles'],
         [root, 'C:\\Projects\\dual-codex-day']
       ])

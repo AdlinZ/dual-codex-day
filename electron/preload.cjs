@@ -14,5 +14,15 @@ contextBridge.exposeInMainWorld('dualCodexDay', Object.freeze({
   stopProfileLaunch: launchId => ipcRenderer.invoke('profiles:stop', launchId),
   openProfileFolder: profileId => ipcRenderer.invoke('profiles:open-folder', profileId),
   chooseWorkspace: () => ipcRenderer.invoke('workspace:choose'),
-  getUsageData: sourceId => ipcRenderer.invoke('usage:get-data', sourceId)
+  getUsageData: sourceId => ipcRenderer.invoke('usage:get-data', sourceId),
+  getCcSwitchAudit: databasePath => ipcRenderer.invoke('usage:cc-switch-audit', databasePath),
+  chooseCcSwitchDatabase: () => ipcRenderer.invoke('usage:choose-cc-switch-db'),
+  getSkills: () => ipcRenderer.invoke('skills:get'),
+  shareSkill: (source, overwrite) => ipcRenderer.invoke('skills:share', { source, overwrite }),
+  syncSkill: (source, targetRoot, overwrite) => ipcRenderer.invoke('skills:sync', { source, targetRoot, overwrite }),
+  setSkillEnabled: (codexHome, skillPath, enabled) => ipcRenderer.invoke('skills:set-enabled', { codexHome, skillPath, enabled }),
+  removeSkill: path => ipcRenderer.invoke('skills:remove', { path }),
+  installPlugin: (pluginId, targetCodexHome) => ipcRenderer.invoke('plugins:install', { pluginId, targetCodexHome }),
+  setPluginEnabled: (pluginId, codexHome, enabled) => ipcRenderer.invoke('plugins:set-enabled', { pluginId, codexHome, enabled }),
+  removePlugin: (pluginId, codexHome) => ipcRenderer.invoke('plugins:remove', { pluginId, codexHome })
 }));
