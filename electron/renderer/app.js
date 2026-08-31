@@ -90,6 +90,7 @@ const state = {
   usageCustomEnd: '',
   usageModel: '',
   usageProject: '',
+  usageDetailTab: 'accounts',
   usageRefreshTimer: null,
   ccSwitchAudit: null,
   ccSwitchPath: '',
@@ -148,6 +149,12 @@ const elements = {
   usageCustomApply: document.querySelector('#usage-custom-apply'),
   usageModelFilter: document.querySelector('#usage-model-filter'),
   usageProjectFilter: document.querySelector('#usage-project-filter'),
+  usageFilterMenu: document.querySelector('#usage-filter-menu'),
+  usageFilterCount: document.querySelector('#usage-filter-count'),
+  usageFilterClear: document.querySelector('#usage-filter-clear'),
+  usageActionsMenu: document.querySelector('#usage-actions-menu'),
+  usageDetailTabs: document.querySelector('#usage-detail-tabs'),
+  usageDetailPanels: document.querySelectorAll('[data-usage-detail-panel]'),
   usageExport: document.querySelector('#usage-export-button'),
   usagePosterButton: document.querySelector('#usage-poster-button'),
   usagePosterDialog: document.querySelector('#usage-poster-dialog'),
@@ -1476,7 +1483,7 @@ function renderUsageComparison() {
     const settings = readUsageSettings(dataset.source.id);
     const aggregate = aggregateUsage(events, event => estimateUsageEvent(event, dataset, settings));
     const topModel = topUsageLabel(events, 'model');
-    return `<button class="comparison-row" type="button" data-comparison-source="${escapeHtml(dataset.source.id)}">
+    return `<button class="comparison-row${dataset.source.id === state.selectedUsageSourceId ? ' is-selected' : ''}" type="button" data-comparison-source="${escapeHtml(dataset.source.id)}">
       <div class="comparison-account"><strong>${escapeHtml(dataset.source.name)}</strong><small>${escapeHtml(dataset.source.detail)}</small></div>
       <span><strong>${formatTokens(aggregate.total)}</strong><small>Token</small></span>
       <span><strong>${aggregate.tasks.toLocaleString('zh-CN')}</strong><small>任务</small></span>
@@ -1513,7 +1520,7 @@ function renderNativeUsage() {
   const events = usageEvents();
   const aggregate = usageAggregate(events);
   document.querySelector('#usage-title').textContent = `${usageRangeLabel()}用量`;
-  document.querySelector('#usage-subtitle').textContent = `${state.usageData.source.name} · ${new Date(state.usageData.generatedAt).toLocaleString('zh-CN')}`;
+  document.querySelector('#usage-subtitle').textContent = `最后更新 ${new Date(state.usageData.generatedAt).toLocaleString('zh-CN')}`;
   document.querySelector('#usage-kpi-total').textContent = formatTokens(aggregate.total);
   document.querySelector('#usage-kpi-total-note').textContent = `${aggregate.turns.toLocaleString('zh-CN')} 回合 · ${aggregate.calls.toLocaleString('zh-CN')} 次模型调用`;
   document.querySelector('#usage-kpi-cost').textContent = formatUsd(aggregate.cost);
@@ -1529,6 +1536,9 @@ function renderNativeUsage() {
   const budget = state.usageSettings.monthlyBudget;
   document.querySelector('#usage-budget-label').textContent = budget ? `${formatUsd(aggregate.cost)} / ${formatUsd(budget)}` : '未设置';
   document.querySelector('#usage-budget-bar').value = budget ? Math.min(100, aggregate.cost / budget * 100) : 0;
+  const filterCount = Number(Boolean(state.usageModel)) + Number(Boolean(state.usageProject));
+  elements.usageFilterCount.textContent = String(filterCount);
+  elements.usageFilterCount.hidden = filterCount === 0;
   renderUsageComparison();
   renderTrend(events);
 
@@ -1542,17 +1552,29 @@ function renderNativeUsage() {
 
   const tasks = groupUsageTasks(events);
   const taskRows = tasks.slice(0, 7);
-  document.querySelector('#usage-task-count').textContent = `${tasks.length} 个任务`;
+  document.querySelector('#usage-task-count').textContent = tasks.length.toLocaleString('zh-CN');
   document.querySelector('#usage-task-list').innerHTML = taskRows.length ? taskRows.map(task => `<button class="usage-task-row" type="button" data-task-id="${escapeHtml(task.id)}"><div><strong>${escapeHtml(task.project)}</strong><span>${escapeHtml([...task.models].join(' / '))} · ${new Date(task.timestamp).toLocaleString('zh-CN')}</span></div><div class="usage-task-metric"><strong>${formatTokens(task.total)}</strong><span>${task.turns.size} 回合 · ${task.calls} 次模型调用</span></div></button>`).join('') : '<div class="usage-empty">当前范围暂无任务</div>';
   renderPeriodReport();
+}
+
+function selectUsageDetail(tab) {
+  const button = elements.usageDetailTabs.querySelector(`[data-usage-detail="${tab}"]`);
+  if (!button) return;
+  state.usageDetailTab = tab;
+  elements.usageDetailTabs.querySelectorAll('[data-usage-detail]').forEach(item => {
+    item.setAttribute('aria-selected', String(item === button));
+  });
+  elements.usageDetailPanels.forEach(panel => {
+    panel.hidden = panel.dataset.usageDetailPanel !== tab;
+  });
 }
 
 function initializeUsageFilters() {
   const events = state.usageData?.events || [];
   const models = [...new Set(events.map(event => event.model))].sort();
   const projects = [...new Map(events.map(event => [event.projectId, event.project])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
-  elements.usageModelFilter.innerHTML = '<option value="">全部</option>' + models.map(model => `<option value="${escapeHtml(model)}">${escapeHtml(model)}</option>`).join('');
-  elements.usageProjectFilter.innerHTML = '<option value="">全部</option>' + projects.map(([id, name]) => `<option value="${escapeHtml(id)}">${escapeHtml(name)}</option>`).join('');
+  elements.usageModelFilter.innerHTML = '<option value="">全部模型</option>' + models.map(model => `<option value="${escapeHtml(model)}">${escapeHtml(model)}</option>`).join('');
+  elements.usageProjectFilter.innerHTML = '<option value="">全部项目</option>' + projects.map(([id, name]) => `<option value="${escapeHtml(id)}">${escapeHtml(name)}</option>`).join('');
   if (!models.includes(state.usageModel)) state.usageModel = '';
   if (!projects.some(([id]) => id === state.usageProject)) state.usageProject = '';
   elements.usageModelFilter.value = state.usageModel;
@@ -1575,7 +1597,7 @@ async function loadDashboard(force = false) {
     const scope = Number(counts.missingFiles || 0) > 0
       ? `${Number(counts.presentFiles || 0)} 个当前日志 · ${Number(counts.missingFiles || 0)} 个历史日志`
       : `${Number(counts.presentFiles || counts.files || 0)} 个当前日志`;
-    elements.usageSourceMeta.textContent = `${state.usageData.source.name} · ${state.usageData.source.kind === 'all' ? '汇总索引' : '独立索引'} · ${scope}`;
+    elements.usageSourceMeta.textContent = `${state.usageData.source.kind === 'all' ? '汇总索引' : '独立索引'} · ${scope}`;
     renderDashboardState();
     renderNativeUsage();
     if (!state.usageRefreshTimer) {
@@ -2189,6 +2211,10 @@ elements.usageComparison.addEventListener('click', event => {
   renderUsageSources();
   loadDashboard(true);
 });
+elements.usageDetailTabs.addEventListener('click', event => {
+  const button = event.target.closest('[data-usage-detail]');
+  if (button) selectUsageDetail(button.dataset.usageDetail);
+});
 document.querySelector('#usage-task-list').addEventListener('click', event => {
   const row = event.target.closest('[data-task-id]');
   if (row) openTaskDetail(row.dataset.taskId);
@@ -2218,6 +2244,22 @@ elements.usageCustomApply.addEventListener('click', () => {
 });
 elements.usageModelFilter.addEventListener('change', () => { state.usageModel = elements.usageModelFilter.value; renderNativeUsage(); });
 elements.usageProjectFilter.addEventListener('change', () => { state.usageProject = elements.usageProjectFilter.value; renderNativeUsage(); });
+elements.usageFilterClear.addEventListener('click', () => {
+  state.usageModel = '';
+  state.usageProject = '';
+  elements.usageModelFilter.value = '';
+  elements.usageProjectFilter.value = '';
+  elements.usageFilterMenu.open = false;
+  renderNativeUsage();
+});
+elements.usageActionsMenu.addEventListener('click', event => {
+  if (event.target.closest('button')) elements.usageActionsMenu.open = false;
+});
+document.addEventListener('click', event => {
+  [elements.usageFilterMenu, elements.usageActionsMenu, elements.usageCustomRange].forEach(menu => {
+    if (menu.open && !menu.contains(event.target)) menu.open = false;
+  });
+});
 elements.usageSettingsButton.addEventListener('click', () => {
   elements.usageRelayMultiplier.value = state.usageSettings.relayMultiplier;
   elements.usageMonthlyBudget.value = state.usageSettings.monthlyBudget || '';

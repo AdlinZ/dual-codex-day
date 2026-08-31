@@ -1018,6 +1018,12 @@ async function captureRequestedScreenshot(window) {
       };
     })()`);
     if (!dashboardLoaded?.ready) throw new Error(`Embedded dashboard did not load for the screenshot check: ${JSON.stringify(dashboardLoaded)}`);
+    if (screenshotView === 'dashboard-filter') {
+      await window.webContents.executeJavaScript(`document.querySelector('#usage-filter-menu').open = true`);
+    }
+    if (screenshotView === 'dashboard-actions') {
+      await window.webContents.executeJavaScript(`document.querySelector('#usage-actions-menu').open = true`);
+    }
     if (screenshotView === 'dashboard-profile') {
       const profileLoaded = await window.webContents.executeJavaScript(`(async () => {
         const select = document.querySelector('#usage-source-select');
@@ -1044,9 +1050,10 @@ async function captureRequestedScreenshot(window) {
     }
     if (screenshotView === 'dashboard-report') {
       const reportVisible = await window.webContents.executeJavaScript(`(() => {
+        document.querySelector('[data-usage-detail="report"]')?.click();
         const report = document.querySelector('.period-report');
         report?.scrollIntoView({ block: 'center' });
-        return Boolean(report && document.querySelector('#report-metrics')?.children.length === 4);
+        return Boolean(report && !report.hidden && document.querySelector('#report-metrics')?.children.length === 4);
       })()`);
       if (!reportVisible) throw new Error('Periodic report did not render for the screenshot check.');
     }
@@ -1119,11 +1126,11 @@ function createMainWindow() {
     minHeight: 680,
     show: false,
     title: 'Dual Codex Day',
-    backgroundColor: '#f5f6f3',
+    backgroundColor: '#ffffff',
     icon: path.join(externalRepoRoot, 'assets', 'codex-day.ico'),
     titleBarStyle: 'hidden',
     titleBarOverlay: {
-      color: '#f5f6f3',
+      color: '#ffffff',
       symbolColor: '#1d2420',
       height: 48
     },

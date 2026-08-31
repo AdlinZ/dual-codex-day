@@ -14,7 +14,7 @@
         <img src="../../assets/codex-day-mark.svg" alt="" class="brand-mark">
         <div>
           <strong>Dual Codex Day</strong>
-          <span id="version-label">v0.19.0</span>
+          <span id="version-label">v0.20.0</span>
         </div>
       </div>
       <nav class="primary-tabs" aria-label="主要功能">
@@ -200,93 +200,118 @@
     </div>
 
     <section class="dashboard-view" id="dashboard-view" data-app-view="dashboard" aria-label="用量分析" hidden>
-      <div class="usage-toolbar">
-        <label class="usage-select-control"><span>账号</span><select id="usage-source-select"></select></label>
-        <div class="usage-range" id="usage-range" role="group" aria-label="时间范围">
-          <button type="button" data-range="today">今天</button>
-          <button type="button" data-range="week" class="is-active">本周</button>
-          <button type="button" data-range="30d">30 天</button>
-          <button type="button" data-range="90d">90 天</button>
-          <button type="button" data-range="all">全部</button>
-        </div>
-        <details class="usage-custom-range" id="usage-custom-range">
-          <summary>自定义</summary>
-          <div class="usage-custom-range-panel">
-            <label><span>开始</span><input id="usage-custom-start" type="date"></label>
-            <label><span>结束</span><input id="usage-custom-end" type="date"></label>
-            <button class="compact-button" id="usage-custom-apply" type="button">应用</button>
-          </div>
-        </details>
-        <label class="usage-select-control compact"><span>模型</span><select id="usage-model-filter"><option value="">全部</option></select></label>
-        <label class="usage-select-control compact"><span>项目</span><select id="usage-project-filter"><option value="">全部</option></select></label>
-        <span class="usage-toolbar-spacer"></span>
-        <button class="icon-button" id="usage-diagnostics-button" type="button" title="数据诊断" aria-label="数据诊断"><i data-lucide="database"></i></button>
-        <button class="secondary-button" id="usage-reconcile-button" type="button"><i data-lucide="database"></i><span>CC Switch 对账</span></button>
-        <button class="icon-button" id="usage-settings-button" type="button" title="用量设置" aria-label="用量设置"><i data-lucide="settings-2"></i></button>
-        <button class="secondary-button" id="usage-poster-button" type="button"><i data-lucide="image-down"></i><span>导出海报</span></button>
-        <button class="secondary-button" id="usage-export-button" type="button"><i data-lucide="download"></i><span>导出 CSV</span></button>
-      </div>
-
       <div class="native-usage-scroll">
         <div class="dashboard-state" id="dashboard-loading"><span class="dashboard-spinner"></span><strong>正在建立本地索引</strong></div>
         <div class="dashboard-state dashboard-error" id="dashboard-error" hidden><i data-lucide="circle-alert"></i><strong>读取失败</strong><p id="dashboard-error-message"></p><button class="secondary-button" id="dashboard-retry-button" type="button">重试</button></div>
         <div class="native-usage" id="native-usage-content" hidden>
           <header class="usage-heading-row">
-            <div><span class="eyebrow">Usage overview</span><h1 id="usage-title">本周用量</h1><p id="usage-subtitle"></p></div>
-            <div class="usage-source-badge"><span class="status-dot"></span><span id="usage-source-meta">独立本地索引</span></div>
+            <div class="usage-heading-copy">
+              <h1 id="usage-title">本周用量</h1>
+              <div class="usage-heading-meta"><p id="usage-subtitle"></p><div class="usage-source-badge"><span class="status-dot"></span><span id="usage-source-meta">独立本地索引</span></div></div>
+            </div>
+            <div class="usage-toolbar">
+              <label class="usage-account-select">
+                <i data-lucide="users"></i>
+                <select id="usage-source-select" aria-label="用量账号"></select>
+              </label>
+              <div class="usage-range" id="usage-range" role="group" aria-label="时间范围">
+                <button type="button" data-range="today">今天</button>
+                <button type="button" data-range="week" class="is-active">本周</button>
+                <button type="button" data-range="30d">30 天</button>
+                <button type="button" data-range="90d">90 天</button>
+                <button type="button" data-range="all">全部</button>
+              </div>
+              <details class="usage-custom-range" id="usage-custom-range">
+                <summary title="自定义日期" aria-label="自定义日期"><i data-lucide="calendar-days"></i></summary>
+                <div class="usage-custom-range-panel">
+                  <label><span>开始</span><input id="usage-custom-start" type="date"></label>
+                  <label><span>结束</span><input id="usage-custom-end" type="date"></label>
+                  <button class="compact-button" id="usage-custom-apply" type="button">应用</button>
+                </div>
+              </details>
+              <details class="usage-popover" id="usage-filter-menu">
+                <summary class="usage-toolbar-button"><i data-lucide="list-filter"></i><span>筛选</span><em id="usage-filter-count" hidden>0</em></summary>
+                <div class="usage-popover-panel usage-filter-panel">
+                  <div class="usage-popover-heading"><strong>筛选数据</strong><button class="text-button" id="usage-filter-clear" type="button">清除</button></div>
+                  <label class="usage-select-control"><span>模型</span><select id="usage-model-filter"><option value="">全部模型</option></select></label>
+                  <label class="usage-select-control"><span>项目</span><select id="usage-project-filter"><option value="">全部项目</option></select></label>
+                </div>
+              </details>
+              <details class="usage-popover usage-actions" id="usage-actions-menu">
+                <summary class="usage-toolbar-icon" title="更多操作" aria-label="更多操作"><i data-lucide="ellipsis"></i></summary>
+                <div class="usage-popover-panel usage-actions-panel">
+                  <button id="usage-diagnostics-button" type="button"><i data-lucide="database"></i><span>数据诊断</span></button>
+                  <button id="usage-reconcile-button" type="button"><i data-lucide="scale"></i><span>CC Switch 对账</span></button>
+                  <button id="usage-settings-button" type="button"><i data-lucide="settings-2"></i><span>用量设置</span></button>
+                  <span class="usage-menu-divider"></span>
+                  <button id="usage-poster-button" type="button"><i data-lucide="image-down"></i><span>导出海报</span></button>
+                  <button id="usage-export-button" type="button"><i data-lucide="download"></i><span>导出 CSV</span></button>
+                </div>
+              </details>
+            </div>
           </header>
 
           <section class="usage-kpis" aria-label="用量指标">
-            <article><span>总 Token</span><strong id="usage-kpi-total">0</strong><small id="usage-kpi-total-note">0 回合 · 0 次模型调用</small></article>
-            <article><span>API 等价预计成本</span><strong id="usage-kpi-cost">$0.00</strong><small id="usage-kpi-coverage">等待定价</small></article>
-            <article><span>任务</span><strong id="usage-kpi-tasks">0</strong><small id="usage-kpi-projects">0 个项目</small></article>
-            <article><span>缓存率</span><strong id="usage-kpi-cache">0%</strong><small id="usage-kpi-cached">0 cached</small></article>
-            <article><span>每次模型调用</span><strong id="usage-kpi-average">0</strong><small>平均 Token</small></article>
-          </section>
-
-          <section class="usage-panel usage-comparison-panel" aria-labelledby="usage-comparison-title">
-            <div class="usage-panel-heading"><div><span class="eyebrow">Account comparison</span><h2 id="usage-comparison-title">账号对比</h2></div><span class="panel-meta">点击账号查看详情</span></div>
-            <div class="usage-comparison-scroll"><div class="usage-comparison" id="usage-comparison"></div></div>
+            <article class="usage-kpi-primary"><span>总 Token</span><strong id="usage-kpi-total">0</strong><small id="usage-kpi-total-note">0 回合 · 0 次模型调用</small></article>
+            <article class="usage-kpi-primary"><span>预计成本</span><strong id="usage-kpi-cost">$0.00</strong><small id="usage-kpi-coverage">等待定价</small></article>
+            <article class="usage-kpi-primary"><span>任务</span><strong id="usage-kpi-tasks">0</strong><small id="usage-kpi-projects">0 个项目</small></article>
+            <div class="usage-kpi-secondary">
+              <article><span>缓存率</span><strong id="usage-kpi-cache">0%</strong><small id="usage-kpi-cached">0 cached</small></article>
+              <article><span>平均调用</span><strong id="usage-kpi-average">0</strong><small>Token</small></article>
+            </div>
           </section>
 
           <section class="usage-overview-grid">
             <div class="usage-panel trend-panel">
-              <div class="usage-panel-heading"><div><span class="eyebrow">Token trend</span><h2>使用趋势</h2></div><div class="trend-legend"><span><i class="legend-input"></i>输入</span><span><i class="legend-output"></i>输出</span></div></div>
+              <div class="usage-panel-heading"><h2>使用趋势</h2><div class="trend-legend"><span><i class="legend-input"></i>输入</span><span><i class="legend-output"></i>输出</span></div></div>
               <div class="usage-chart" id="usage-trend-chart"></div>
             </div>
             <div class="usage-panel cost-panel">
-              <div class="usage-panel-heading"><div><span class="eyebrow">Cost breakdown</span><h2>预计成本构成</h2></div><span id="usage-cost-total" class="panel-total">$0.00</span></div>
+              <div class="usage-panel-heading"><h2>成本构成</h2><span id="usage-cost-total" class="panel-total">$0.00</span></div>
               <div class="cost-breakdown" id="usage-cost-breakdown"></div>
               <div class="budget-progress"><div><span>预算使用</span><strong id="usage-budget-label">未设置</strong></div><progress class="budget-track" id="usage-budget-bar" max="100" value="0"></progress></div>
             </div>
           </section>
 
-          <section class="usage-detail-grid">
-            <div class="usage-panel">
-              <div class="usage-panel-heading"><div><span class="eyebrow">Distribution</span><h2>模型与项目</h2></div></div>
+          <section class="usage-detail-shell">
+            <div class="usage-detail-tabs" id="usage-detail-tabs" role="tablist" aria-label="用量明细">
+              <button type="button" role="tab" aria-selected="true" aria-controls="usage-detail-accounts" data-usage-detail="accounts">账户</button>
+              <button type="button" role="tab" aria-selected="false" aria-controls="usage-detail-distribution" data-usage-detail="distribution">模型与项目</button>
+              <button type="button" role="tab" aria-selected="false" aria-controls="usage-detail-tasks" data-usage-detail="tasks">最近任务 <span id="usage-task-count"></span></button>
+              <button type="button" role="tab" aria-selected="false" aria-controls="usage-detail-report" data-usage-detail="report">周期报告</button>
+            </div>
+
+            <div class="usage-detail-panel usage-comparison-panel" id="usage-detail-accounts" role="tabpanel" data-usage-detail-panel="accounts" aria-labelledby="usage-comparison-title">
+              <div class="usage-panel-heading"><h2 id="usage-comparison-title">账号对比</h2><span class="panel-meta">选择账号查看独立数据</span></div>
+              <div class="usage-comparison-scroll"><div class="usage-comparison" id="usage-comparison"></div></div>
+            </div>
+
+            <div class="usage-detail-panel" id="usage-detail-distribution" role="tabpanel" data-usage-detail-panel="distribution" hidden>
+              <div class="usage-panel-heading"><h2>模型分布</h2></div>
               <div class="usage-table" id="usage-distribution"></div>
             </div>
-            <div class="usage-panel">
-              <div class="usage-panel-heading"><div><span class="eyebrow">Recent tasks</span><h2>最近任务</h2></div><span id="usage-task-count" class="panel-meta"></span></div>
+
+            <div class="usage-detail-panel" id="usage-detail-tasks" role="tabpanel" data-usage-detail-panel="tasks" hidden>
+              <div class="usage-panel-heading"><h2>最近任务</h2></div>
               <div class="usage-task-list" id="usage-task-list"></div>
             </div>
-          </section>
 
-          <section class="usage-panel period-report" aria-labelledby="period-report-title">
-            <div class="usage-panel-heading report-heading">
-              <div><span class="eyebrow">Periodic report</span><h2 id="period-report-title">本周报告</h2><p id="period-report-dates"></p></div>
-              <div class="report-actions">
-                <div class="usage-range report-period" id="report-period" role="group" aria-label="报告周期">
-                  <button type="button" data-report-period="week" class="is-active">周报</button>
-                  <button type="button" data-report-period="month">月报</button>
+            <div class="usage-detail-panel period-report" id="usage-detail-report" role="tabpanel" data-usage-detail-panel="report" aria-labelledby="period-report-title" hidden>
+              <div class="usage-panel-heading report-heading">
+                <div><h2 id="period-report-title">本周报告</h2><p id="period-report-dates"></p></div>
+                <div class="report-actions">
+                  <div class="usage-range report-period" id="report-period" role="group" aria-label="报告周期">
+                    <button type="button" data-report-period="week" class="is-active">周报</button>
+                    <button type="button" data-report-period="month">月报</button>
+                  </div>
+                  <button class="secondary-button" id="report-poster-button" type="button"><i data-lucide="image-down"></i><span>导出报告</span></button>
                 </div>
-                <button class="secondary-button" id="report-poster-button" type="button"><i data-lucide="image-down"></i><span>导出报告</span></button>
               </div>
-            </div>
-            <div class="report-metrics" id="report-metrics"></div>
-            <div class="report-body">
-              <div class="report-chart" id="report-chart"></div>
-              <div class="report-leaders" id="report-leaders"></div>
+              <div class="report-metrics" id="report-metrics"></div>
+              <div class="report-body">
+                <div class="report-chart" id="report-chart"></div>
+                <div class="report-leaders" id="report-leaders"></div>
+              </div>
             </div>
           </section>
         </div>

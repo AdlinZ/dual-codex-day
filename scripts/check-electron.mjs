@@ -17,7 +17,7 @@ const profileDoctor = readFileSync(path.join(root, 'scripts', 'lib', 'profile-do
 const css = readFileSync(path.join(root, 'electron', 'renderer', 'app.css'), 'utf8');
 const capture = readFileSync(path.join(root, 'scripts', 'capture-electron.mjs'), 'utf8');
 
-assert(packageMetadata.version === '0.19.0', 'Electron release must use package version 0.19.0');
+assert(packageMetadata.version === '0.20.0', 'Electron release must use package version 0.20.0');
 assert(packageMetadata.main === 'electron/main.mjs', 'Electron main entry must be declared in package metadata');
 assert(packageMetadata.scripts.desktop === 'electron .', 'desktop command must launch the Electron entry');
 assert(/contextIsolation:\s*true/.test(main), 'Electron windows must enable context isolation');
@@ -66,6 +66,8 @@ assert(/task-detail-dialog/.test(html + renderer) && /groupUsageTasks/.test(rend
 assert(/screenshotView === 'dashboard-task'/.test(main), 'visual verification must cover the task drilldown');
 assert(!/dashboardWindow|dashboard:open|openDashboardWindow/.test(main + preload + renderer), 'Electron must not create a second dashboard window');
 assert(/id="native-usage-content"/.test(html) && /data-view="dashboard"/.test(html), 'Electron interface must include a native usage-analysis view');
+assert(/usage-detail-tabs/.test(html + css) && /selectUsageDetail/.test(renderer), 'usage analysis must progressively disclose account, model, task, and report details');
+assert(/position:\s*absolute[\s\S]*left:\s*50%/.test(css) && /translateX\(-50%\)/.test(css), 'primary desktop navigation must remain centered independently of side content');
 assert(/id="usage-source-select"/.test(html) && /usageSources/.test(main + renderer), 'usage analysis must expose default, combined, and Profile data sources');
 assert(/usage-diagnostics-scope/.test(html + renderer + css) && /counts\.missingFiles/.test(renderer) && /droppedLegacyFiles/.test(renderer), 'usage diagnostics must explain current, retained, deferred, and discarded legacy sources');
 assert(/codex-day-\$\{slug\}\.sqlite/.test(main) && /refreshIndex\(database, source\.roots\)/.test(main), 'each usage source must use an isolated index and explicit CODEX_HOME roots');

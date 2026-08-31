@@ -55,13 +55,13 @@ const exported = createProfileDiagnosisExport({
       ? { ...item, detail: 'Missing C:\\Users\\Alice\\.codex\\skills', items: [...item.items, 'C:\\Users\\Alice\\private-skill'] }
       : item)
   }))
-}, { appVersion: '0.19.0' });
+}, { appVersion: '0.20.0' });
 const serialized = JSON.stringify(exported);
 assert.equal(exported.profile.reference.length, 20);
 assert(!serialized.includes('工作账号') && !serialized.includes(healthyInput.profile.id), 'diagnostic export must remove Profile names and internal ids');
 assert(!/C:\\Users|Alice|private-skill/.test(serialized), 'diagnostic export must redact absolute paths and path-contained names');
 assert(!/auth\.json|api.?key|secret/i.test(serialized), 'diagnostic export must not contain credential material or credential filenames');
-assert.equal(exported.appVersion, '0.19.0');
+assert.equal(exported.appVersion, '0.20.0');
 
 assert.throws(() => createProfileDiagnosisExport({ schemaVersion: 99 }), /Invalid Profile diagnosis report/);
 console.log('Profile doctor checks passed: severity, actionable groups, and sanitized export.');

@@ -4,6 +4,18 @@ Project name: **Dual Codex Day** (`dual-codex-day`). Historical entries may reta
 
 ## Unreleased
 
+## [0.20.0] - 2026-08-31
+
+### Changed
+
+- Reworked the Electron shell around one centered navigation bar and moved usage controls into the page heading.
+- Replaced the stacked usage dashboard with a focused trend view and tabbed account, model, task, and report details.
+- Unified launcher, sidebar, usage analysis, and window chrome on a neutral white canvas with lighter separators.
+
+### Reliability
+
+- Added screenshot coverage for the minimum dashboard window and the filter, action, and report states.
+
 ## [0.19.0] - 2026-08-31
 
 ### Added
