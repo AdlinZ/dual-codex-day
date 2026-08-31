@@ -5,7 +5,7 @@ import path from 'node:path';
 import { createProfile, launchProfile } from './lib/profile-store.mjs';
 
 const root = path.resolve('.');
-const outputPath = path.resolve(process.argv[2] || path.join(root, 'dist', 'electron-v0.16.0.png'));
+const outputPath = path.resolve(process.argv[2] || path.join(root, 'dist', 'electron-v0.18.0.png'));
 const packagedExecutable = process.argv[3] && !process.argv[3].startsWith('--') ? path.resolve(process.argv[3]) : null;
 const screenshotView = process.argv.find(argument => argument.startsWith('--view='))?.slice('--view='.length) || '';
 const liveData = process.argv.includes('--live');
@@ -37,15 +37,18 @@ function createUsageFixture(codexRoot, fixtureId = 'default', scale = 1) {
   const now = new Date();
   const sessionDirectory = path.join(codexRoot, 'sessions', String(now.getFullYear()), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0'));
   const project = path.join(temporaryRoot, `fictional-${fixtureId}-project`);
+  const sessionId = fixtureId === 'work'
+    ? '22222222-2222-4222-8222-222222222222'
+    : '11111111-1111-4111-8111-111111111111';
   mkdirSync(sessionDirectory, { recursive: true });
   const events = [
-    JSON.stringify({ type: 'session_meta', payload: { id: `synthetic-${fixtureId}-session`, cwd: project } }),
+    JSON.stringify({ type: 'session_meta', payload: { id: sessionId, cwd: project } }),
     JSON.stringify({ type: 'turn_context', payload: { model: 'gpt-5.6-sol', cwd: project } }),
     tokenEvent(new Date(now.getTime() - 70 * 60 * 1000).toISOString(), 128000 * scale, 96000 * scale, 9200 * scale),
     tokenEvent(new Date(now.getTime() - 35 * 60 * 1000).toISOString(), 86000 * scale, 61000 * scale, 6800 * scale),
     tokenEvent(new Date(now.getTime() - 8 * 60 * 1000).toISOString(), 154000 * scale, 122000 * scale, 11300 * scale)
   ];
-  writeFileSync(path.join(sessionDirectory, 'synthetic.jsonl'), `${events.join('\n')}\n`, 'utf8');
+  writeFileSync(path.join(sessionDirectory, `rollout-synthetic-${sessionId}.jsonl`), `${events.join('\n')}\n`, 'utf8');
 }
 
 function createSkillFixture(skillsRoot, name, description) {
@@ -82,7 +85,11 @@ try {
     cwd: root,
     env: {
       ...process.env,
-      ...(liveData ? {} : { CODEX_PROFILES_ROOT: temporaryRoot, CODEX_USAGE_ROOT: usageRoot }),
+      ...(liveData ? {} : {
+        CODEX_PROFILES_ROOT: temporaryRoot,
+        CODEX_USAGE_ROOT: usageRoot,
+        CODEX_USAGE_DATA_ROOT: path.join(temporaryRoot, 'usage-index')
+      }),
       DUAL_CODEX_DAY_SCREENSHOT: outputPath,
       DUAL_CODEX_DAY_SCREENSHOT_VIEW: screenshotView,
       DUAL_CODEX_DAY_SCREENSHOT_WORKSPACE: liveData ? '' : screenshotWorkspace,

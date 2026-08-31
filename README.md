@@ -14,7 +14,7 @@
 
 ![Dual Codex Day 虚构用量 Demo](assets/demo-preview.png)
 
-## 两项核心能力
+## 三项核心能力
 
 ### 多账号隔离启动
 
@@ -23,6 +23,7 @@
 - 持久记录启动实例并显示每个账号当前运行数量
 - Electron 桌面控制台统一展示账号、入口状态、今日用量与最近启动记录
 - 每个 Profile 可选择 OpenAI 官方登录或独立的 Responses API 中转站
+- 通过版本化迁移文件预览、导出和恢复 Profile 设置，写入前自动创建本地备份
 - 不读取、复制、导入或展示 `auth.json`；中转站 API Key 使用操作系统加密
 - 启动时清除继承的 API Key 和 Access Token，只向目标 Profile 注入其专用密钥
 - 原生 Windows 图形界面，编译器不可用时自动回退到 PowerShell 界面
@@ -34,6 +35,7 @@
 - 按模型公开 API 标价估算成本，支持缓存写入、长上下文与处理模式
 - 今日成本、本月累计、月底预测、预算进度与价格覆盖提示
 - 周报/月报、同期对比、近 12 周活跃日历、CSV、分享海报与 CC Switch 只读对账
+- 默认账号与各 Profile 并列对比，并可从最近任务钻取模型调用与 Token 构成
 - SQLite 增量索引、本地项目别名、任务详情和完整 24 小时时间轴
 - 仅监听 `127.0.0.1`，不上传日志，不依赖远程服务
 
@@ -120,6 +122,12 @@ npm run package:electron
 保存供应商时会解析现有 `config.toml` 并只替换当前供应商管理的字段，插件、MCP、桌面偏好、项目信任、通知和其他通用配置会保留。供应商编辑器中的“导入配置”可以选择另一个 `config.toml`：CDC 会移除来源文件的活动模型与供应商，再叠加目标 Profile 的当前供应商；`auth.json` 不会被读取或复制。TOML 会由序列化器重新排版，原注释和手工格式不会保留。
 
 自定义中转站必须兼容 Codex 的 Responses API。CDC 不会自动发起可能计费的连接测试。使用“CDC 安全密钥”时，Electron 控制台会自动解密并向目标进程注入密钥；直接使用 Node.js 命令启动该类 Profile 时，需要调用方自行提供 `DUAL_CODEX_DAY_PROVIDER_API_KEY`。
+
+### Profile 迁移与恢复
+
+启动中心的导出按钮会生成版本化 JSON，内容包括 Profile 名称、供应商元数据、运行与用量来源、脱敏后的通用 `config.toml`、Profile-local Skill 状态、已安装插件状态和该账号的用量偏好。迁移文件不包含 `auth.json`、API Key、加密密钥、日志、SQLite 用量数据或启动历史。
+
+导入时先显示创建或更新目标、变更范围、缺少的 Skills/插件和凭据要求。只有确认后才写入；每次写入前会在 `%LOCALAPPDATA%\dual-codex-day\profiles\backups` 建立本地备份，失败时自动回滚。目标环境缺少的 Skills 和插件只会列出，不会自动安装。自定义环境认证无法随文件迁移，供应商身份发生变化时需要重新填写 API Key。
 
 命令行管理入口：
 
@@ -378,8 +386,7 @@ dual-codex-day/
 
 - 可选的周目标和月目标回顾
 - 价格候选快照的人工确认与显式更新流程
-- 跨版本数据 Schema 迁移与备份恢复
-- 任务详情钻取与多账号并列对比
+- Profile 环境体检与脱敏诊断导出
 
 v0.10.1 已补齐实例关闭、PID 归属保护和交互式 CLI 终端；Electron 控制中心的设计范围与验收标准见 [v0.10.0 规划](docs/plans/v0.10.0.md)。价格审计与 90 天回顾见 [v0.9.0 规划](docs/plans/v0.9.0.md)，设置迁移与每日摘要见 [v0.8.0 规划](docs/plans/v0.8.0.md)。
 

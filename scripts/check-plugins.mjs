@@ -45,4 +45,11 @@ setPluginEnabled(codexHome, 'demo-plugin@demo-market', false);
 const config = readFileSync(path.join(codexHome, 'config.toml'), 'utf8');
 assert.match(config, /keep = true/);
 assert.match(config, /enabled = false/);
+const failedScan = scanPluginSkills({
+  environments: [{ id: 'offline', label: 'Offline', codexHome: path.join(root, 'offline') }],
+  codexExecutable: 'codex',
+  runner: () => ({ status: 1, stdout: '', stderr: 'codex unavailable' })
+});
+assert.equal(failedScan.failures.length, 1, 'plugin discovery failures must be reported without breaking Profile transfer availability');
+assert.deepEqual(failedScan.plugins, []);
 console.log('Plugin checks passed.');

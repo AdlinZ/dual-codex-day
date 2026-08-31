@@ -28,6 +28,7 @@ import Pencil from '../../node_modules/lucide/dist/esm/icons/pencil.mjs';
 import Trash2 from '../../node_modules/lucide/dist/esm/icons/trash-2.mjs';
 import LogIn from '../../node_modules/lucide/dist/esm/icons/log-in.mjs';
 import Square from '../../node_modules/lucide/dist/esm/icons/square.mjs';
+import { aggregateUsage, filterUsageEvents, groupUsageTasks, topUsageLabel } from './usage-analysis.mjs';
 
 const iconNodes = {
   'refresh-cw': RefreshCw,
@@ -83,6 +84,7 @@ const state = {
   skillsMode: 'standalone',
   activePlugin: null,
   usageData: null,
+  usageComparison: null,
   usageRange: 'week',
   usageCustomStart: '',
   usageCustomEnd: '',
@@ -95,7 +97,8 @@ const state = {
   reportPeriod: 'week',
   posterCanvas: null,
   posterFilename: '',
-  posterSuccessMessage: '海报已保存。'
+  posterSuccessMessage: '海报已保存。',
+  pendingProfileTransferToken: null
 };
 
 const elements = {
@@ -170,6 +173,13 @@ const elements = {
   usageReconcileBreakdown: document.querySelector('#usage-reconcile-breakdown'),
   usageReconcileChoose: document.querySelector('#usage-reconcile-choose'),
   usageReconcileClose: document.querySelector('#usage-reconcile-close'),
+  usageComparison: document.querySelector('#usage-comparison'),
+  taskDetailDialog: document.querySelector('#task-detail-dialog'),
+  taskDetailTitle: document.querySelector('#task-detail-title'),
+  taskDetailMeta: document.querySelector('#task-detail-meta'),
+  taskDetailSummary: document.querySelector('#task-detail-summary'),
+  taskDetailCalls: document.querySelector('#task-detail-calls'),
+  taskDetailClose: document.querySelector('#task-detail-close'),
   reportPeriod: document.querySelector('#report-period'),
   reportPosterButton: document.querySelector('#report-poster-button'),
   reportTitle: document.querySelector('#period-report-title'),
@@ -178,6 +188,21 @@ const elements = {
   reportChart: document.querySelector('#report-chart'),
   reportLeaders: document.querySelector('#report-leaders'),
   addProfile: document.querySelector('#add-profile-button'),
+  exportProfileTransfer: document.querySelector('#export-profile-transfer-button'),
+  importProfileTransfer: document.querySelector('#import-profile-transfer-button'),
+  profileTransferDialog: document.querySelector('#profile-transfer-dialog'),
+  profileTransferForm: document.querySelector('#profile-transfer-form'),
+  profileTransferAction: document.querySelector('#profile-transfer-action'),
+  profileTransferName: document.querySelector('#profile-transfer-name'),
+  profileTransferVersion: document.querySelector('#profile-transfer-version'),
+  profileTransferChanges: document.querySelector('#profile-transfer-changes'),
+  profileTransferMissingSkills: document.querySelector('#profile-transfer-missing-skills'),
+  profileTransferMissingSkillsList: document.querySelector('#profile-transfer-missing-skills-list'),
+  profileTransferMissingPlugins: document.querySelector('#profile-transfer-missing-plugins'),
+  profileTransferMissingPluginsList: document.querySelector('#profile-transfer-missing-plugins-list'),
+  profileTransferCredential: document.querySelector('#profile-transfer-credential'),
+  profileTransferCancel: document.querySelector('#profile-transfer-cancel'),
+  profileTransferApply: document.querySelector('#profile-transfer-apply'),
   profileList: document.querySelector('#profile-list'),
   profileName: document.querySelector('#selected-profile-name'),
   profilePath: document.querySelector('#selected-profile-path'),
@@ -322,11 +347,34 @@ function friendlyProviderError(error) {
   return message || '供应商配置无效。';
 }
 
+function renderProfileTransferPreview(preview) {
+  elements.profileTransferAction.textContent = preview.action === 'update' ? '更新现有 Profile' : '新建 Profile';
+  elements.profileTransferName.textContent = preview.profileName;
+  elements.profileTransferVersion.textContent = preview.sourceVersion ? `来源版本 v${preview.sourceVersion}` : '来源版本未记录';
+  elements.profileTransferChanges.innerHTML = preview.changes.length
+    ? preview.changes.map(change => `<li>${escapeHtml(change.label)}</li>`).join('')
+    : '<li>配置内容没有变化</li>';
+  elements.profileTransferMissingSkills.hidden = preview.missingSkills.length === 0;
+  elements.profileTransferMissingSkillsList.textContent = preview.missingSkills.join('、');
+  elements.profileTransferMissingPlugins.hidden = preview.missingPlugins.length === 0;
+  elements.profileTransferMissingPluginsList.textContent = preview.missingPlugins.join('、');
+  elements.profileTransferCredential.hidden = !preview.credentialRequired;
+}
+
+async function discardProfileTransfer() {
+  const token = state.pendingProfileTransferToken;
+  state.pendingProfileTransferToken = null;
+  if (token) await window.dualCodexDay.discardProfileTransfer(token).catch(() => {});
+}
+
 function setBusy(value) {
   state.busy = value;
   document.body.classList.toggle('is-busy', value);
   elements.refresh.disabled = value;
   elements.addProfile.disabled = value;
+  elements.importProfileTransfer.disabled = value;
+  elements.exportProfileTransfer.disabled = value || !selectedProfile();
+  elements.profileTransferApply.disabled = value;
   elements.saveProvider.disabled = value;
   elements.importProviderConfig.disabled = value;
   elements.renameProfile.disabled = value || !selectedProfile();
@@ -367,6 +415,7 @@ function renderSelectedProfile() {
     elements.openProfileFolder.disabled = true;
     elements.renameProfile.disabled = true;
     elements.deleteProfile.disabled = true;
+    elements.exportProfileTransfer.disabled = true;
     elements.usageSourceButton.disabled = true;
     elements.profileLoginStatus.textContent = '未选择账号';
     elements.profileRuntimeSource.textContent = '请选择一个账号配置';
@@ -387,6 +436,7 @@ function renderSelectedProfile() {
   elements.usageSourceButton.disabled = state.busy;
   elements.renameProfile.disabled = state.busy;
   elements.deleteProfile.disabled = state.busy;
+  elements.exportProfileTransfer.disabled = state.busy;
   const provider = profile.provider || { type: 'official', name: 'OpenAI 官方' };
   const providerReady = provider.type === 'official'
     || provider.authMode !== 'environment'
@@ -637,49 +687,34 @@ function renderDashboardState(errorMessage = '') {
   if (state.snapshot) renderUsage();
 }
 
-function usageSettingsKey() {
-  return `dual-codex-native-usage:${state.selectedUsageSourceId}`;
+function usageSettingsKey(sourceId = state.selectedUsageSourceId) {
+  return `dual-codex-native-usage:${sourceId}`;
 }
 
-function loadUsageSettings() {
+function readUsageSettings(sourceId = state.selectedUsageSourceId) {
   try {
-    const saved = JSON.parse(localStorage.getItem(usageSettingsKey()) || '{}');
-    state.usageSettings = {
+    const saved = JSON.parse(localStorage.getItem(usageSettingsKey(sourceId)) || '{}');
+    return {
       relayMultiplier: Math.max(0, Number(saved.relayMultiplier ?? 1)),
       monthlyBudget: Math.max(0, Number(saved.monthlyBudget || 0)),
       costMode: ['standard', 'batch', 'flex', 'fast'].includes(saved.costMode) ? saved.costMode : 'standard'
     };
   } catch {
-    state.usageSettings = { relayMultiplier: 1, monthlyBudget: 0, costMode: 'standard' };
+    return { relayMultiplier: 1, monthlyBudget: 0, costMode: 'standard' };
   }
 }
 
+function loadUsageSettings() {
+  state.usageSettings = readUsageSettings();
+}
+
 function usageEvents() {
-  const now = new Date();
-  let start = new Date(0);
-  let end = null;
-  if (state.usageRange === 'today') start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  if (state.usageRange === 'week') {
-    start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    start.setDate(start.getDate() - ((start.getDay() || 7) - 1));
-  }
-  if (state.usageRange === '30d') {
-    start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    start.setDate(start.getDate() - 29);
-  }
-  if (state.usageRange === '90d') {
-    start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    start.setDate(start.getDate() - 89);
-  }
-  if (state.usageRange === 'custom' && state.usageCustomStart && state.usageCustomEnd) {
-    start = new Date(`${state.usageCustomStart}T00:00:00`);
-    end = new Date(`${state.usageCustomEnd}T00:00:00`);
-    end.setDate(end.getDate() + 1);
-  }
-  return (state.usageData?.events || []).filter(event => {
-    const time = new Date(event.timestamp);
-    return time >= start && (!end || time < end) && (!state.usageModel || event.model === state.usageModel)
-      && (!state.usageProject || event.projectId === state.usageProject);
+  return filterUsageEvents(state.usageData?.events, {
+    range: state.usageRange,
+    customStart: state.usageCustomStart,
+    customEnd: state.usageCustomEnd,
+    model: state.usageModel,
+    projectId: state.usageProject
   });
 }
 
@@ -763,18 +798,18 @@ async function openReconcile() {
   }
 }
 
-function resolvePriceModel(model) {
-  const pricing = state.usageData?.pricing || {};
+function resolvePriceModel(model, usageData = state.usageData) {
+  const pricing = usageData?.pricing || {};
   if (pricing.models?.[model]) return model;
   if (pricing.aliases?.[model] && pricing.models?.[pricing.aliases[model]]) return pricing.aliases[model];
   return Object.keys(pricing.models || {}).find(key => model.startsWith(key)) || '';
 }
 
-function estimateUsageEvent(event) {
-  const pricing = state.usageData?.pricing || {};
-  const modelId = resolvePriceModel(event.model);
+function estimateUsageEvent(event, usageData = state.usageData, settings = state.usageSettings) {
+  const pricing = usageData?.pricing || {};
+  const modelId = resolvePriceModel(event.model, usageData);
   const rates = pricing.models?.[modelId];
-  const mode = pricing.modes?.[state.usageSettings.costMode] || pricing.modes?.standard || { multiplier: 1 };
+  const mode = pricing.modes?.[settings.costMode] || pricing.modes?.standard || { multiplier: 1 };
   if (!rates || (mode.modelPrefixes && !mode.modelPrefixes.some(prefix => modelId.startsWith(prefix)))) {
     return { priced: false, total: 0, parts: { input: 0, cached: 0, output: 0 } };
   }
@@ -786,7 +821,7 @@ function estimateUsageEvent(event) {
     && (pricing.longContext.modelPrefixes || []).some(prefix => modelId.startsWith(prefix));
   const inputMultiplier = long ? Number(pricing.longContext.inputMultiplier || 1) : 1;
   const outputMultiplier = long ? Number(pricing.longContext.outputMultiplier || 1) : 1;
-  const multiplier = Number(mode.multiplier || 1) * state.usageSettings.relayMultiplier;
+  const multiplier = Number(mode.multiplier || 1) * settings.relayMultiplier;
   const unit = Number(pricing.unitTokens || 1_000_000);
   const parts = {
     input: regular / unit * Number(rates.input || 0) * inputMultiplier * multiplier,
@@ -797,23 +832,7 @@ function estimateUsageEvent(event) {
 }
 
 function usageAggregate(events) {
-  const input = events.reduce((sum, event) => sum + Number(event.input || 0), 0);
-  const cached = events.reduce((sum, event) => sum + Number(event.cachedInput || 0), 0);
-  const total = events.reduce((sum, event) => sum + Number(event.total || 0), 0);
-  const estimates = events.map(estimateUsageEvent);
-  const cost = estimates.reduce((sum, estimate) => sum + estimate.total, 0);
-  return {
-    input, cached, total, cost,
-    output: events.reduce((sum, event) => sum + Number(event.output || 0), 0),
-    calls: events.length,
-    turns: new Set(events.map(event => event.turnId).filter(Boolean)).size,
-    tasks: new Set(events.map(event => event.sessionId)).size,
-    projects: new Set(events.map(event => event.projectId)).size,
-    cacheRate: input ? cached / input : 0,
-    average: events.length ? total / events.length : 0,
-    coverage: total ? events.reduce((sum, event, index) => sum + (estimates[index].priced ? Number(event.total || 0) : 0), 0) / total : 1,
-    parts: estimates.reduce((parts, estimate) => ({ input: parts.input + estimate.parts.input, cached: parts.cached + estimate.parts.cached, output: parts.output + estimate.parts.output }), { input: 0, cached: 0, output: 0 })
-  };
+  return aggregateUsage(events, event => estimateUsageEvent(event));
 }
 
 function filteredUsageEvents() {
@@ -1367,6 +1386,61 @@ function renderTrend(events) {
   </svg>`;
 }
 
+function comparisonEvents(dataset) {
+  return filterUsageEvents(dataset?.events, {
+    range: state.usageRange,
+    customStart: state.usageCustomStart,
+    customEnd: state.usageCustomEnd,
+    model: state.usageModel,
+    projectId: state.usageProject
+  });
+}
+
+function renderUsageComparison() {
+  const datasets = state.usageComparison?.sources || [];
+  if (!datasets.length) {
+    elements.usageComparison.innerHTML = '<div class="usage-empty compact-empty">暂无可比较账号</div>';
+    return;
+  }
+  const rows = datasets.map(dataset => {
+    if (dataset.error) return `<div class="comparison-row is-error"><div><strong>${escapeHtml(dataset.source.name)}</strong><small>${escapeHtml(dataset.error)}</small></div><span>读取失败</span></div>`;
+    const events = comparisonEvents(dataset);
+    const settings = readUsageSettings(dataset.source.id);
+    const aggregate = aggregateUsage(events, event => estimateUsageEvent(event, dataset, settings));
+    const topModel = topUsageLabel(events, 'model');
+    return `<button class="comparison-row" type="button" data-comparison-source="${escapeHtml(dataset.source.id)}">
+      <div class="comparison-account"><strong>${escapeHtml(dataset.source.name)}</strong><small>${escapeHtml(dataset.source.detail)}</small></div>
+      <span><strong>${formatTokens(aggregate.total)}</strong><small>Token</small></span>
+      <span><strong>${aggregate.tasks.toLocaleString('zh-CN')}</strong><small>任务</small></span>
+      <span><strong>${aggregate.calls.toLocaleString('zh-CN')}</strong><small>调用</small></span>
+      <span><strong>${(aggregate.cacheRate * 100).toFixed(1)}%</strong><small>缓存率</small></span>
+      <span><strong>${formatUsd(aggregate.cost)}</strong><small>预计成本</small></span>
+      <span class="comparison-model"><strong>${escapeHtml(topModel?.label || '暂无数据')}</strong><small>主要模型</small></span>
+    </button>`;
+  });
+  elements.usageComparison.innerHTML = rows.join('');
+}
+
+function openTaskDetail(taskId) {
+  const task = groupUsageTasks(usageEvents()).find(item => item.id === taskId);
+  if (!task) return;
+  elements.taskDetailTitle.textContent = task.project;
+  elements.taskDetailMeta.textContent = `${new Date(task.timestamp).toLocaleString('zh-CN')} · 任务 ${task.id.slice(-8)}`;
+  const cacheRate = task.input ? task.cached / task.input : 0;
+  const summary = [
+    ['总 Token', formatTokens(task.total)],
+    ['交互回合', task.turns.size.toLocaleString('zh-CN')],
+    ['模型调用', task.calls.toLocaleString('zh-CN')],
+    ['缓存率', `${(cacheRate * 100).toFixed(1)}%`]
+  ];
+  elements.taskDetailSummary.innerHTML = summary.map(([label, value]) => `<div><span>${label}</span><strong>${value}</strong></div>`).join('');
+  elements.taskDetailCalls.innerHTML = [...task.events].sort((a, b) => b.timestamp.localeCompare(a.timestamp)).map(event => `<div class="task-call-row">
+    <div><strong>${escapeHtml(event.model)}</strong><small>${new Date(event.timestamp).toLocaleString('zh-CN')}</small></div>
+    <span>${formatTokens(event.input)}</span><span>${formatTokens(event.cachedInput)}</span><span>${formatTokens(event.output)}</span><strong>${formatTokens(event.total)}</strong>
+  </div>`).join('');
+  elements.taskDetailDialog.showModal();
+}
+
 function renderNativeUsage() {
   const events = usageEvents();
   const aggregate = usageAggregate(events);
@@ -1387,6 +1461,7 @@ function renderNativeUsage() {
   const budget = state.usageSettings.monthlyBudget;
   document.querySelector('#usage-budget-label').textContent = budget ? `${formatUsd(aggregate.cost)} / ${formatUsd(budget)}` : '未设置';
   document.querySelector('#usage-budget-bar').value = budget ? Math.min(100, aggregate.cost / budget * 100) : 0;
+  renderUsageComparison();
   renderTrend(events);
 
   const groups = new Map();
@@ -1397,14 +1472,10 @@ function renderNativeUsage() {
   const rows = [...groups.values()].sort((a, b) => b.total - a.total).slice(0, 7);
   document.querySelector('#usage-distribution').innerHTML = rows.length ? `<div class="usage-table-row header"><span>模型</span><span>模型调用</span><span>Token</span><span>成本</span></div>${rows.map(row => `<div class="usage-table-row"><strong>${escapeHtml(row.label)}</strong><span>${row.calls}</span><span>${formatTokens(row.total)}</span><span>${formatUsd(row.cost)}</span></div>`).join('')}` : '<div class="usage-empty">当前范围暂无模型记录</div>';
 
-  const tasks = new Map();
-  events.forEach(event => {
-    const task = tasks.get(event.sessionId) || { id: event.sessionId, project: event.project, model: event.model, timestamp: event.timestamp, calls: 0, turns: new Set(), total: 0 };
-    task.calls += 1; if (event.turnId) task.turns.add(event.turnId); task.total += Number(event.total || 0); if (event.timestamp > task.timestamp) task.timestamp = event.timestamp; tasks.set(event.sessionId, task);
-  });
-  const taskRows = [...tasks.values()].sort((a, b) => b.timestamp.localeCompare(a.timestamp)).slice(0, 7);
-  document.querySelector('#usage-task-count').textContent = `${tasks.size} 个任务`;
-  document.querySelector('#usage-task-list').innerHTML = taskRows.length ? taskRows.map(task => `<div class="usage-task-row"><div><strong>${escapeHtml(task.project)}</strong><span>${escapeHtml(task.model)} · ${new Date(task.timestamp).toLocaleString('zh-CN')}</span></div><div class="usage-task-metric"><strong>${formatTokens(task.total)}</strong><span>${task.turns.size} 回合 · ${task.calls} 次模型调用</span></div></div>`).join('') : '<div class="usage-empty">当前范围暂无任务</div>';
+  const tasks = groupUsageTasks(events);
+  const taskRows = tasks.slice(0, 7);
+  document.querySelector('#usage-task-count').textContent = `${tasks.length} 个任务`;
+  document.querySelector('#usage-task-list').innerHTML = taskRows.length ? taskRows.map(task => `<button class="usage-task-row" type="button" data-task-id="${escapeHtml(task.id)}"><div><strong>${escapeHtml(task.project)}</strong><span>${escapeHtml([...task.models].join(' / '))} · ${new Date(task.timestamp).toLocaleString('zh-CN')}</span></div><div class="usage-task-metric"><strong>${formatTokens(task.total)}</strong><span>${task.turns.size} 回合 · ${task.calls} 次模型调用</span></div></button>`).join('') : '<div class="usage-empty">当前范围暂无任务</div>';
   renderPeriodReport();
 }
 
@@ -1427,6 +1498,7 @@ async function loadDashboard(force = false) {
   renderDashboardState();
   try {
     state.usageData = await window.dualCodexDay.getUsageData(state.selectedUsageSourceId);
+    state.usageComparison = await window.dualCodexDay.getUsageComparison();
     loadUsageSettings();
     initializeUsageFilters();
     state.dashboardLoading = false;
@@ -1703,6 +1775,74 @@ elements.addProfile.addEventListener('click', () => {
   elements.nameInput.focus();
 });
 
+elements.exportProfileTransfer.addEventListener('click', async () => {
+  const profile = selectedProfile();
+  if (!profile || state.busy) return;
+  setBusy(true);
+  try {
+    const exported = await window.dualCodexDay.exportProfileTransfer(profile.id, readUsageSettings(`profile:${profile.id}`));
+    if (exported) showToast(`“${exported.profileName}”已导出。`);
+  } catch (error) {
+    showToast(friendlyProviderError(error) || '无法导出 Profile。', true);
+  } finally {
+    setBusy(false);
+    renderSelectedProfile();
+  }
+});
+
+elements.importProfileTransfer.addEventListener('click', async () => {
+  if (state.busy) return;
+  setBusy(true);
+  try {
+    await discardProfileTransfer();
+    const selected = await window.dualCodexDay.chooseProfileTransfer();
+    if (!selected) return;
+    state.pendingProfileTransferToken = selected.token;
+    renderProfileTransferPreview(selected.preview);
+    elements.profileTransferDialog.showModal();
+    refreshIcons();
+  } catch (error) {
+    showToast(friendlyProviderError(error) || '无法读取 Profile 迁移文件。', true);
+  } finally {
+    setBusy(false);
+    renderSelectedProfile();
+  }
+});
+
+elements.profileTransferCancel.addEventListener('click', async () => {
+  await discardProfileTransfer();
+  elements.profileTransferDialog.close();
+});
+
+elements.profileTransferDialog.addEventListener('cancel', event => {
+  event.preventDefault();
+  discardProfileTransfer().finally(() => elements.profileTransferDialog.close());
+});
+
+elements.profileTransferForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  const token = state.pendingProfileTransferToken;
+  if (!token || state.busy) return;
+  let credentialRequired = false;
+  setBusy(true);
+  try {
+    const applied = await window.dualCodexDay.applyProfileTransfer(token);
+    state.pendingProfileTransferToken = null;
+    credentialRequired = applied.preview.credentialRequired;
+    localStorage.setItem(usageSettingsKey(`profile:${applied.profile.id}`), JSON.stringify(applied.preferences));
+    elements.profileTransferDialog.close();
+    state.dashboardLoaded = false;
+    await refreshSnapshot(applied.profile.id, true);
+    showToast(credentialRequired ? 'Profile 已导入，请重新填写中转站 API Key。' : `“${applied.profile.name}”已导入。`);
+  } catch (error) {
+    showToast(friendlyProviderError(error) || '无法应用 Profile 迁移。', true);
+  } finally {
+    setBusy(false);
+    renderSelectedProfile();
+  }
+  if (credentialRequired) openProviderEditor();
+});
+
 elements.cancelProfile.addEventListener('click', () => elements.dialog.close());
 elements.renameProfileCancel.addEventListener('click', () => elements.renameProfileDialog.close());
 elements.deleteProfileCancel.addEventListener('click', () => elements.deleteProfileDialog.close());
@@ -1949,6 +2089,19 @@ elements.usageSourceSelect.addEventListener('change', () => {
   renderUsageSources();
   loadDashboard(true);
 });
+elements.usageComparison.addEventListener('click', event => {
+  const row = event.target.closest('[data-comparison-source]');
+  if (!row) return;
+  state.selectedUsageSourceId = row.dataset.comparisonSource;
+  state.dashboardLoaded = false;
+  renderUsageSources();
+  loadDashboard(true);
+});
+document.querySelector('#usage-task-list').addEventListener('click', event => {
+  const row = event.target.closest('[data-task-id]');
+  if (row) openTaskDetail(row.dataset.taskId);
+});
+elements.taskDetailClose.addEventListener('click', () => elements.taskDetailDialog.close());
 elements.usageRange.addEventListener('click', event => {
   const button = event.target.closest('[data-range]');
   if (!button) return;

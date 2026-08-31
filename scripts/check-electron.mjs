@@ -12,10 +12,11 @@ const main = readFileSync(path.join(root, 'electron', 'main.mjs'), 'utf8');
 const preload = readFileSync(path.join(root, 'electron', 'preload.cjs'), 'utf8');
 const html = readFileSync(path.join(root, 'electron', 'renderer', 'index.html'), 'utf8');
 const renderer = readFileSync(path.join(root, 'electron', 'renderer', 'app.js'), 'utf8');
+const usageAnalysis = readFileSync(path.join(root, 'electron', 'renderer', 'usage-analysis.mjs'), 'utf8');
 const css = readFileSync(path.join(root, 'electron', 'renderer', 'app.css'), 'utf8');
 const capture = readFileSync(path.join(root, 'scripts', 'capture-electron.mjs'), 'utf8');
 
-assert(packageMetadata.version === '0.16.0', 'Electron release must use package version 0.16.0');
+assert(packageMetadata.version === '0.18.0', 'Electron release must use package version 0.18.0');
 assert(packageMetadata.main === 'electron/main.mjs', 'Electron main entry must be declared in package metadata');
 assert(packageMetadata.scripts.desktop === 'electron .', 'desktop command must launch the Electron entry');
 assert(/contextIsolation:\s*true/.test(main), 'Electron windows must enable context isolation');
@@ -39,6 +40,11 @@ assert(/profile-usage-source-dialog/.test(html) && /profileUsageSource/.test(ren
 assert(/profileRuntimeSource/.test(html + renderer) && /当前默认 Codex/.test(html), 'Electron must distinguish the system-default runtime from isolated Profiles');
 assert(/screenshotView === 'usage-source'/.test(main) && /profile-usage-source-dialog/.test(main), 'visual verification must cover the Profile usage-source dialog');
 assert(/profiles:import-config/.test(main) && /importProfileConfig/.test(main), 'Electron main process must expose a scoped config.toml import flow');
+assert(/profiles:export-transfer/.test(main) && /profiles:choose-transfer/.test(main) && /profiles:apply-transfer/.test(main), 'Electron must expose a preview-before-apply Profile transfer flow');
+assert(/pendingProfileTransfers/.test(main) && /webContentsId/.test(main) && /PROFILE_TRANSFER_TTL_MS/.test(main), 'Profile transfer apply must use a renderer-scoped short-lived token');
+assert(/PROFILE_TRANSFER_MAX_BYTES/.test(main) && /showSaveDialog/.test(main) && /showOpenDialog/.test(main), 'Profile transfer files must use bounded native file dialogs');
+assert(/profile-transfer-dialog/.test(html + renderer + css) && /credentialRequired/.test(renderer), 'Electron must preview changes, missing components, and credential requirements');
+assert(/screenshotView === 'profile-transfer'/.test(main), 'visual verification must cover the Profile transfer preview');
 assert(/confirmLaunch/.test(main) && /listProfileLaunches/.test(main), 'Electron must verify launches and expose persistent instance status');
 assert(/safeStorage\.encryptString/.test(main) && /safeStorage\.decryptString/.test(main), 'provider API keys must use operating-system encryption');
 assert(/readDailySummary/.test(main), 'Electron main process must expose local usage summary data');
@@ -47,6 +53,10 @@ assert(/getSnapshot:\s*profileId\s*=>/.test(preload) && /getSnapshot\(preferredP
 assert(/usage\.source\?\.name/.test(renderer) && /profile:\$\{state\.selectedProfileId\}/.test(renderer), 'launcher and usage analysis must label and open the selected Profile source');
 assert(/launcher-empty/.test(main) && /heading\.includes\('个人账号'\).*tokens === '0'.*calls === '0'/s.test(main), 'screenshot verification must cover an empty isolated Profile summary');
 assert(/usage:get-data/.test(main) && /getUsageData/.test(preload), 'Electron must expose scoped native usage data IPC');
+assert(/usage:get-comparison/.test(main) && /getUsageComparison/.test(preload) && /usage-comparison/.test(html + renderer + css), 'Electron must compare account usage through scoped read-only data');
+assert(/readUsageSettings\(dataset\.source\.id\)/.test(renderer), 'account comparison must use each source cost settings');
+assert(/task-detail-dialog/.test(html + renderer) && /groupUsageTasks/.test(renderer), 'usage tasks must open a drilldown with per-call details');
+assert(/screenshotView === 'dashboard-task'/.test(main), 'visual verification must cover the task drilldown');
 assert(!/dashboardWindow|dashboard:open|openDashboardWindow/.test(main + preload + renderer), 'Electron must not create a second dashboard window');
 assert(/id="native-usage-content"/.test(html) && /data-view="dashboard"/.test(html), 'Electron interface must include a native usage-analysis view');
 assert(/id="usage-source-select"/.test(html) && /usageSources/.test(main + renderer), 'usage analysis must expose default, combined, and Profile data sources');
@@ -70,7 +80,7 @@ assert(!/cpSync.*plugins.cache/s.test(readFileSync(path.join(root, 'scripts', 'l
 assert(/setInterval\(\(\) =>/.test(renderer) && /loadDashboard\(true\)/.test(renderer), 'native usage analysis must refresh automatically while visible');
 assert(/usage-poster-button/.test(html) && /createUsagePoster/.test(renderer) && /canvas\.width = 1200/.test(renderer) && /canvas\.height = 1600/.test(renderer), 'native usage analysis must export a filtered 1200 by 1600 poster');
 assert(/data-report-period="week"/.test(html) && /data-report-period="month"/.test(html) && /createPeriodReportPoster/.test(renderer), 'native usage analysis must provide weekly and monthly reports with a dedicated poster');
-assert(/turnId/.test(renderer) && /交互回合/.test(html + renderer) && /模型调用/.test(html + renderer), 'usage metrics must distinguish interaction turns from model calls');
+assert(/turnId/.test(renderer + usageAnalysis) && /交互回合/.test(html + renderer) && /模型调用/.test(html + renderer), 'usage metrics must distinguish interaction turns from model calls');
 assert(/dashboard-poster/.test(main) && /naturalWidth === 1200.*naturalHeight === 1600/s.test(main), 'visual verification must validate the rendered poster dimensions');
 assert(/will-download/.test(main) && /nativeImage\.createFromPath/.test(main), 'packaged verification must exercise the PNG download and validate the saved file');
 assert(!/auth\.json/i.test(main + preload + renderer + html), 'Electron code must never reference profile credential files');
@@ -82,9 +92,11 @@ assert(/import-provider-config-button/.test(html) && /disable_response_storage/.
 assert(/setInterval/.test(renderer) && /activeLaunches/.test(renderer), 'renderer must refresh and display active profile instances');
 assert(/data-stop-launch/.test(renderer) && /stop-instance-button/.test(css), 'active launch rows must expose a stable close-instance control');
 assert(!/readProviderSecret|decryptString|getProviderSecret/.test(preload), 'preload bridge must not expose provider key reads');
+assert(!/filePath.*applyProfileTransfer|applyProfileTransfer.*filePath/s.test(preload), 'renderer must not submit a filesystem path when applying a Profile transfer');
 assert(/previewProvider:\s*\(profileId, provider\)/.test(preload) && /importProfileConfig/.test(preload), 'preload must scope provider previews and imports to a selected Profile');
 assert(!/linear-gradient|radial-gradient/.test(css), 'Electron interface must avoid decorative gradients');
 assert(/DUAL_CODEX_DAY_SCREENSHOT_PATH_REPLACEMENTS/.test(main + capture), 'public Electron screenshots must replace local filesystem paths');
+assert(/CODEX_USAGE_DATA_ROOT/.test(main + capture), 'Electron screenshot checks must isolate generated SQLite indexes');
 
 if (process.platform === 'win32') {
   const electronExecutable = path.join(root, 'node_modules', 'electron', 'dist', 'electron.exe');

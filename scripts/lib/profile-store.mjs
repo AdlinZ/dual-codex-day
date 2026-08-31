@@ -1,10 +1,11 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
+import { createProfileTransfer, parseProfileTransfer, transferDiff } from './profile-transfer.mjs';
 
 export const PROFILE_SCHEMA_VERSION = 1;
 export const PROFILE_TARGETS = Object.freeze(['cli', 'vscode', 'desktop']);
@@ -566,6 +567,160 @@ export function importProfileConfig(root = defaultProfilesRoot(), reference, sou
   const configPath = path.join(profile.paths.codexHome, 'config.toml');
   writeTextAtomically(configPath, providerConfigPreview(profile.provider, stringifyToml(imported), null));
   return findProfile(root, profile.id);
+}
+
+function installedProfileSkills(profile) {
+  const root = path.join(profile.paths.codexHome, 'skills');
+  if (!existsSync(root) || !statSync(root).isDirectory()) return [];
+  const configPath = path.join(profile.paths.codexHome, 'config.toml');
+  const config = existsSync(configPath) ? parseProfileConfig(readFileSync(configPath, 'utf8')) : {};
+  const enabledByPath = new Map((Array.isArray(config.skills?.config) ? config.skills.config : [])
+    .map(item => [path.resolve(String(item?.path || '')).toLowerCase(), item?.enabled !== false]));
+  return readdirSync(root, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && entry.name !== '.system')
+    .map(entry => {
+      const skillFile = path.join(root, entry.name, 'SKILL.md');
+      return { id: entry.name, enabled: enabledByPath.get(path.resolve(skillFile).toLowerCase()) !== false };
+    });
+}
+
+export function exportProfileTransfer(root = defaultProfilesRoot(), reference, options = {}) {
+  const profile = findProfile(root, reference);
+  const configPath = path.join(profile.paths.codexHome, 'config.toml');
+  const configText = existsSync(configPath) ? readFileSync(configPath, 'utf8') : '';
+  return createProfileTransfer({
+    appVersion: options.appVersion,
+    profile,
+    configText,
+    skills: options.skills || installedProfileSkills(profile),
+    plugins: options.plugins || [],
+    preferences: options.preferences,
+    exportedAt: options.exportedAt
+  });
+}
+
+function normalizedTransfer(transferValue) {
+  const transfer = parseProfileTransfer(transferValue);
+  transfer.profile = {
+    name: normalizeProfileName(transfer.profile.name),
+    provider: normalizeProfileProvider(transfer.profile.provider),
+    usageSource: normalizeProfileUsageSource(transfer.profile.usageSource),
+    runtimeSource: normalizeProfileRuntimeSource(transfer.profile.runtimeSource)
+  };
+  if (transfer.profile.provider.type === 'custom' && transfer.profile.runtimeSource === 'default') {
+    throw new Error('Custom providers require an isolated Profile runtime.');
+  }
+  return transfer;
+}
+
+export function previewProfileTransfer(root = defaultProfilesRoot(), transferValue, options = {}) {
+  const transfer = normalizedTransfer(transferValue);
+  const target = listProfiles(root).find(profile => profile.name.localeCompare(transfer.profile.name, undefined, { sensitivity: 'accent' }) === 0) || null;
+  return { transfer, preview: transferDiff(transfer, target, options.available || {}) };
+}
+
+function transferConfigText(transfer, provider, available = {}) {
+  const config = structuredClone(transfer.commonConfig);
+  const skillPaths = new Map((available.skills || [])
+    .filter(item => item && typeof item === 'object' && item.path)
+    .map(item => [String(item.id), path.resolve(String(item.path))]));
+  const skills = transfer.inventory.skills
+    .filter(item => skillPaths.has(item.id))
+    .map(item => ({ path: skillPaths.get(item.id), enabled: item.enabled }));
+  if (skills.length) config.skills = { ...(config.skills || {}), config: skills };
+  else delete config.skills;
+
+  const pluginIds = new Set((available.plugins || []).map(item => String(item && typeof item === 'object' ? item.id : item)));
+  const plugins = Object.fromEntries(transfer.inventory.plugins
+    .filter(item => pluginIds.has(item.id))
+    .map(item => [item.id, { enabled: item.enabled }]));
+  if (Object.keys(plugins).length) config.plugins = plugins;
+  else delete config.plugins;
+  return providerConfigPreview(provider, stringifyToml(config), null);
+}
+
+function createTransferBackup(root, target, action) {
+  const backupRoot = path.join(path.resolve(root), 'backups', `profile-transfer-${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID()}`);
+  mkdirSync(backupRoot, { recursive: true });
+  const registry = registryPath(path.resolve(root));
+  const config = target ? path.join(target.paths.codexHome, 'config.toml') : null;
+  if (existsSync(registry)) copyFileSync(registry, path.join(backupRoot, 'profiles.json'));
+  if (config && existsSync(config)) copyFileSync(config, path.join(backupRoot, 'config.toml'));
+  writeJsonAtomically(path.join(backupRoot, 'backup.json'), {
+    schemaVersion: 1,
+    createdAt: new Date().toISOString(),
+    action,
+    targetProfileId: target?.id || null,
+    registryExisted: existsSync(registry),
+    configExisted: Boolean(config && existsSync(config))
+  });
+  return backupRoot;
+}
+
+function restoreTransferBackup(root, backupRoot, target, createdProfile) {
+  const metadata = JSON.parse(readFileSync(path.join(backupRoot, 'backup.json'), 'utf8'));
+  const registry = registryPath(path.resolve(root));
+  const registryBackup = path.join(backupRoot, 'profiles.json');
+  if (metadata.registryExisted) copyFileSync(registryBackup, registry);
+  else if (existsSync(registry)) rmSync(registry);
+
+  if (target) {
+    const config = path.join(target.paths.codexHome, 'config.toml');
+    const configBackup = path.join(backupRoot, 'config.toml');
+    if (metadata.configExisted) copyFileSync(configBackup, config);
+    else if (existsSync(config)) rmSync(config);
+  }
+  if (createdProfile && existsSync(createdProfile.paths.root)) {
+    renameSync(createdProfile.paths.root, path.join(backupRoot, 'failed-profile-data'));
+  }
+}
+
+export function applyProfileTransfer(root = defaultProfilesRoot(), transferValue, options = {}) {
+  const { transfer, preview } = previewProfileTransfer(root, transferValue, options);
+  const target = preview.targetProfileId ? findProfile(root, preview.targetProfileId) : null;
+  const backupPath = createTransferBackup(root, target, preview.action);
+  let createdProfile = null;
+  try {
+    const registry = loadProfileRegistry(root);
+    const now = new Date().toISOString();
+    let profile;
+    if (target) {
+      const index = registry.profiles.findIndex(item => item.id === target.id);
+      profile = registry.profiles[index];
+      profile.name = transfer.profile.name;
+      profile.provider = transfer.profile.provider;
+      profile.usageSource = transfer.profile.usageSource;
+      profile.runtimeSource = transfer.profile.runtimeSource;
+      profile.updatedAt = now;
+    } else {
+      profile = {
+        id: randomUUID(),
+        name: transfer.profile.name,
+        provider: transfer.profile.provider,
+        usageSource: transfer.profile.usageSource,
+        runtimeSource: transfer.profile.runtimeSource,
+        createdAt: now,
+        updatedAt: now
+      };
+      registry.profiles.push(profile);
+      createdProfile = enrichProfile(root, profile);
+    }
+    const paths = profilePaths(root, profile.id);
+    ensureProfileDirectories(paths, profile.provider);
+    writeTextAtomically(path.join(paths.codexHome, 'config.toml'), transferConfigText(transfer, profile.provider, options.available));
+    options.afterConfigWrite?.({ profile: enrichProfile(root, profile), backupPath });
+    saveProfileRegistry(root, registry);
+    return {
+      profile: enrichProfile(root, profile),
+      preferences: transfer.preferences,
+      preview,
+      backupPath
+    };
+  } catch (error) {
+    try { restoreTransferBackup(root, backupPath, target, createdProfile); }
+    catch (rollbackError) { throw new AggregateError([error, rollbackError], 'Profile transfer failed and rollback could not be completed.'); }
+    throw error;
+  }
 }
 
 function executableFromPath(names, environment = process.env) {

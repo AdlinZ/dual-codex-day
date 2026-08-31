@@ -103,7 +103,7 @@ export function scanPluginSkills({ environments = [], codexExecutable = 'codex',
     const key = normalizePath(environment.codexHome).toLowerCase();
     if (!cache.has(key)) {
       try { cache.set(key, readPluginEnvironment(environment, codexExecutable, runner)); }
-      catch (error) { cache.set(key, []); failures.push({ environmentId: environment.id, message: error.message }); }
+      catch (error) { cache.set(key, { installed: [], available: [] }); failures.push({ environmentId: environment.id, message: error.message }); }
     }
     const source = cache.get(key);
     entries.push(...source.installed.map(plugin => ({ ...plugin, environmentId: environment.id, environmentLabel: environment.label })));

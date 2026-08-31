@@ -1,12 +1,15 @@
 import { existsSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, safeStorage, shell } from 'electron';
 import {
+  applyProfileTransfer,
   createProfile,
   defaultProfilesRoot,
   detectProfileTargets,
+  exportProfileTransfer,
   findProfile,
   importProfileConfig,
   isProcessAlive,
@@ -15,6 +18,7 @@ import {
   listProfiles,
   normalizeProfileProvider,
   PROFILE_TARGETS,
+  previewProfileTransfer,
   providerConfigPreview,
   readProfileLoginStatus,
   removeProfile,
@@ -38,7 +42,8 @@ const externalRepoRoot = repoRoot.endsWith(asarMarker)
     ? repoRoot.replace(`${asarMarker}${path.sep}`, `${asarMarker}.unpacked${path.sep}`)
     : repoRoot;
 const packageMetadata = JSON.parse(readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
-const usageDataRoot = app.isPackaged ? path.join(app.getPath('userData'), 'usage') : path.join(repoRoot, '.codex-day');
+const usageDataRoot = path.resolve(process.env.CODEX_USAGE_DATA_ROOT
+  || (app.isPackaged ? path.join(app.getPath('userData'), 'usage') : path.join(repoRoot, '.codex-day')));
 const defaultCodexRoot = path.resolve(process.env.CODEX_USAGE_ROOT || process.env.CODEX_HOME || path.join(os.homedir(), '.codex'));
 const defaultCcSwitchDatabase = path.resolve(process.env.CC_SWITCH_DATABASE || path.join(os.homedir(), '.cc-switch', 'cc-switch.db'));
 const profilesRoot = defaultProfilesRoot();
@@ -50,6 +55,9 @@ let currentWorkspace = process.env.DUAL_CODEX_DAY_SCREENSHOT_WORKSPACE
 let targetCache = null;
 let projectSkillRootsCache = null;
 const loginStatusCache = new Map();
+const pendingProfileTransfers = new Map();
+const PROFILE_TRANSFER_MAX_BYTES = 2 * 1024 * 1024;
+const PROFILE_TRANSFER_TTL_MS = 10 * 60 * 1000;
 
 function serializableTargets(targets) {
   return Object.fromEntries(Object.entries(targets).map(([key, value]) => [key, {
@@ -293,6 +301,37 @@ function skillInventory({ refreshProjects = false } = {}) {
   return { ...scanSkills(context), pluginData: scanPluginSkills({ environments, codexExecutable }) };
 }
 
+function profileTransferAvailability() {
+  const inventory = skillInventory();
+  const skills = [];
+  const skillIds = new Set();
+  for (const skill of inventory.skills) {
+    for (const location of skill.locations) {
+      const id = String(location.directory || path.basename(location.path));
+      if (skillIds.has(id) || location.scope === 'system' || location.readOnly) continue;
+      skillIds.add(id);
+      skills.push({ id, path: path.join(location.path, 'SKILL.md') });
+    }
+  }
+  const plugins = inventory.pluginData.plugins.map(plugin => ({ id: plugin.pluginId }));
+  return { skills, plugins, inventory };
+}
+
+function profilePlugins(profile, inventory) {
+  const codexHome = path.resolve(profile.paths.codexHome).toLowerCase();
+  return inventory.pluginData.plugins.flatMap(plugin => {
+    const location = plugin.locations.find(item => path.resolve(item.codexHome).toLowerCase() === codexHome);
+    return location ? [{ id: plugin.pluginId, enabled: location.enabled !== false }] : [];
+  });
+}
+
+function prunePendingProfileTransfers() {
+  const cutoff = Date.now() - PROFILE_TRANSFER_TTL_MS;
+  for (const [token, pending] of pendingProfileTransfers) {
+    if (pending.createdAt < cutoff) pendingProfileTransfers.delete(token);
+  }
+}
+
 function knownSkill(skillPath, { writable = false } = {}) {
   const target = path.resolve(String(skillPath || ''));
   const entry = skillInventory().skills.flatMap(skill => skill.locations).find(item => path.resolve(item.path).toLowerCase() === target.toLowerCase());
@@ -338,6 +377,23 @@ function readUsageData(sourceId) {
   } finally {
     database.close();
   }
+}
+
+function readUsageComparison() {
+  return {
+    generatedAt: new Date().toISOString(),
+    sources: usageSources().filter(source => source.kind !== 'all').map(source => {
+      try {
+        return readUsageData(source.id);
+      } catch (error) {
+        return {
+          source: { id: source.id, name: source.name, detail: source.detail, kind: source.kind },
+          events: [],
+          error: error?.message || String(error)
+        };
+      }
+    })
+  };
 }
 
 async function confirmLaunch(result) {
@@ -420,6 +476,71 @@ function registerIpc() {
     if (statSync(sourcePath).size > 2 * 1024 * 1024) throw new Error('config.toml 不能超过 2 MB。');
     return publicProfile(importProfileConfig(profilesRoot, profile.id, readFileSync(sourcePath, 'utf8')));
   });
+  ipcMain.handle('profiles:export-transfer', async (_event, payload) => {
+    const profile = findProfile(profilesRoot, String(payload?.profileId || ''));
+    const availability = profileTransferAvailability();
+    const transfer = exportProfileTransfer(profilesRoot, profile.id, {
+      appVersion: packageMetadata.version,
+      plugins: profilePlugins(profile, availability.inventory),
+      preferences: payload?.preferences
+    });
+    const safeName = profile.name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').slice(0, 60) || 'profile';
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: `导出“${profile.name}”`,
+      defaultPath: path.join(app.getPath('downloads'), `dual-codex-day-${safeName}.json`),
+      filters: [{ name: 'Dual Codex Day Profile', extensions: ['json'] }]
+    });
+    if (result.canceled || !result.filePath) return null;
+    writeFileSync(result.filePath, `${JSON.stringify(transfer, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+    return { filePath: path.resolve(result.filePath), profileName: profile.name };
+  });
+  ipcMain.handle('profiles:choose-transfer', async event => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: '导入 Profile 配置',
+      defaultPath: app.getPath('downloads'),
+      properties: ['openFile'],
+      filters: [{ name: 'Dual Codex Day Profile', extensions: ['json'] }]
+    });
+    if (result.canceled || !result.filePaths[0]) return null;
+    const sourcePath = result.filePaths[0];
+    if (statSync(sourcePath).size > PROFILE_TRANSFER_MAX_BYTES) throw new Error('Profile 迁移文件不能超过 2 MB。');
+    const availability = profileTransferAvailability();
+    const selected = previewProfileTransfer(profilesRoot, readFileSync(sourcePath, 'utf8'), { available: availability });
+    prunePendingProfileTransfers();
+    const token = randomUUID();
+    pendingProfileTransfers.set(token, {
+      createdAt: Date.now(),
+      webContentsId: event.sender.id,
+      transfer: selected.transfer
+    });
+    return { token, preview: selected.preview };
+  });
+  ipcMain.handle('profiles:apply-transfer', (event, token) => {
+    prunePendingProfileTransfers();
+    const key = String(token || '');
+    const pending = pendingProfileTransfers.get(key);
+    if (!pending || pending.webContentsId !== event.sender.id) throw new Error('导入预览已失效，请重新选择迁移文件。');
+    pendingProfileTransfers.delete(key);
+    const availability = profileTransferAvailability();
+    const applied = applyProfileTransfer(profilesRoot, pending.transfer, { available: availability });
+    if (applied.preview.credentialRequired) {
+      const secretPath = providerSecretPath(applied.profile);
+      if (existsSync(secretPath)) unlinkSync(secretPath);
+    }
+    loginStatusCache.clear();
+    return {
+      profile: publicProfile(applied.profile),
+      preferences: applied.preferences,
+      preview: applied.preview,
+      backupPath: applied.backupPath
+    };
+  });
+  ipcMain.handle('profiles:discard-transfer', (event, token) => {
+    const key = String(token || '');
+    const pending = pendingProfileTransfers.get(key);
+    if (pending?.webContentsId === event.sender.id) pendingProfileTransfers.delete(key);
+    return true;
+  });
   ipcMain.handle('profiles:launch', async (_event, payload) => {
     const profileId = String(payload?.profileId || '');
     const target = String(payload?.target || '');
@@ -491,6 +612,7 @@ function registerIpc() {
     return currentWorkspace;
   });
   ipcMain.handle('usage:get-data', (_event, sourceId) => readUsageData(sourceId));
+  ipcMain.handle('usage:get-comparison', () => readUsageComparison());
   ipcMain.handle('usage:cc-switch-audit', (_event, databasePath) => readCcSwitchAudit(databasePath || defaultCcSwitchDatabase));
   ipcMain.handle('usage:choose-cc-switch-db', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
@@ -553,7 +675,33 @@ async function captureRequestedScreenshot(window) {
   if (!target) return;
   await new Promise(resolve => setTimeout(resolve, 1200));
   const screenshotView = process.env.DUAL_CODEX_DAY_SCREENSHOT_VIEW || '';
-  if (screenshotView.startsWith('provider')) {
+  if (screenshotView === 'profile-transfer') {
+    window.setSize(1400, 960);
+    const transferOpened = await window.webContents.executeJavaScript(`(() => {
+      const dialog = document.querySelector('#profile-transfer-dialog');
+      const values = {
+        '#profile-transfer-action': '更新现有 Profile',
+        '#profile-transfer-name': '工作账号',
+        '#profile-transfer-version': '来源版本 v0.17.0',
+        '#profile-transfer-missing-skills-list': 'release-check',
+        '#profile-transfer-missing-plugins-list': 'openai-docs@openai'
+      };
+      for (const [selector, value] of Object.entries(values)) {
+        const node = document.querySelector(selector);
+        if (node) node.textContent = value;
+      }
+      const changes = document.querySelector('#profile-transfer-changes');
+      if (changes) changes.innerHTML = '<li>供应商设置</li><li>通用 config.toml</li><li>Skills 与插件状态</li><li>用量设置</li>';
+      for (const selector of ['#profile-transfer-missing-skills', '#profile-transfer-missing-plugins', '#profile-transfer-credential']) {
+        const node = document.querySelector(selector);
+        if (node) node.hidden = false;
+      }
+      dialog?.showModal();
+      return dialog?.open === true;
+    })()`);
+    if (!transferOpened) throw new Error('Profile transfer preview did not open for the screenshot check.');
+    await new Promise(resolve => setTimeout(resolve, 350));
+  } else if (screenshotView.startsWith('provider')) {
     const screenshotAuthMode = screenshotView === 'provider-openai' ? 'openai' : 'environment';
     window.setSize(1400, 960);
     const providerOpened = await window.webContents.executeJavaScript(`(async () => {
@@ -686,7 +834,9 @@ async function captureRequestedScreenshot(window) {
       tab?.click();
       for (let attempt = 0; attempt < 160; attempt += 1) {
         const content = document.querySelector('#native-usage-content');
-        if (content && !content.hidden && document.querySelector('#usage-kpi-total')?.textContent !== '0') return { ready: true };
+        if (content && !content.hidden
+          && document.querySelector('#usage-kpi-total')?.textContent !== '0'
+          && document.querySelectorAll('#usage-comparison .comparison-row').length >= 2) return { ready: true };
         await new Promise(resolve => setTimeout(resolve, 50));
       }
       return {
@@ -694,7 +844,11 @@ async function captureRequestedScreenshot(window) {
         hidden: document.querySelector('#native-usage-content')?.hidden ?? null,
         loading: document.querySelector('#dashboard-loading')?.hidden ?? null,
         error: document.querySelector('#dashboard-error-message')?.textContent || '',
-        total: document.querySelector('#usage-kpi-total')?.textContent || ''
+        total: document.querySelector('#usage-kpi-total')?.textContent || '',
+        subtitle: document.querySelector('#usage-subtitle')?.textContent || '',
+        source: document.querySelector('#usage-source-select')?.value || '',
+        taskCount: document.querySelector('#usage-task-count')?.textContent || '',
+        comparison: document.querySelector('#usage-comparison')?.textContent?.replace(/\s+/g, ' ').trim() || ''
       };
     })()`);
     if (!dashboardLoaded?.ready) throw new Error(`Embedded dashboard did not load for the screenshot check: ${JSON.stringify(dashboardLoaded)}`);
@@ -713,6 +867,14 @@ async function captureRequestedScreenshot(window) {
         return false;
       })()`);
       if (!profileLoaded) throw new Error('Isolated Profile dashboard did not load for the screenshot check.');
+    }
+    if (screenshotView === 'dashboard-task') {
+      const taskOpened = await window.webContents.executeJavaScript(`(() => {
+        document.querySelector('[data-task-id]')?.click();
+        return document.querySelector('#task-detail-dialog')?.open === true
+          && document.querySelectorAll('#task-detail-calls .task-call-row').length > 0;
+      })()`);
+      if (!taskOpened) throw new Error('Task drilldown did not open for the screenshot check.');
     }
     if (screenshotView === 'dashboard-report') {
       const reportVisible = await window.webContents.executeJavaScript(`(() => {

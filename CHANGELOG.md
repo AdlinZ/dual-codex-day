@@ -4,10 +4,34 @@ Project name: **Dual Codex Day** (`dual-codex-day`). Historical entries may reta
 
 ## Unreleased
 
+## [0.18.0] - 2026-08-31
+
 ### Added
 
-- A responsive GitHub Pages product site with current Electron screenshots, release downloads and the existing fictional-data demo.
-- Automated Pages deployment and local site regression checks.
+- Versioned, non-sensitive Profile transfer files for moving Profile metadata, common Codex settings, Skill and plugin state, and usage preferences.
+- Import preview for create or update actions, changed sections, missing Skills and plugins, and credential re-entry requirements.
+
+### Security
+
+- Profile transfers reject credential-like fields and exclude authentication files, provider keys, logs, SQLite usage data, and launch history.
+- Import apply uses renderer-scoped short-lived tokens; the renderer cannot submit arbitrary transfer paths or modified transfer documents.
+
+### Reliability
+
+- Every import creates a local registry and config backup before writing and restores it automatically if application fails.
+- Missing Skills and plugins are reported without automatic installation; existing local provider credentials are cleared only when provider identity changes.
+
+## [0.17.0] - 2026-08-31
+
+### Added
+
+- Side-by-side usage comparison for the default Codex account and every isolated Profile across the active date, model and project filters.
+- Click-through task details with interaction-turn, model-call, input, cache, output and total Token breakdowns.
+- A pure usage-analysis module with deterministic range, aggregate and task-grouping checks.
+
+### Changed
+
+- Account comparison failures are isolated per data source so one unreadable Profile does not block the complete dashboard.
 
 ## [0.16.0] - 2026-08-28
 
@@ -15,6 +39,8 @@ Project name: **Dual Codex Day** (`dual-codex-day`). Historical entries may reta
 
 - Automatic discovery of project-level `.agents/skills` below the user's Documents directory.
 - Read-only project columns labeled with the discovered project name, so repository Skills appear without changing the launch workspace.
+- A responsive GitHub Pages product site with current Electron screenshots, release downloads and the existing fictional-data demo.
+- Automated Pages deployment and local site regression checks.
 
 ### Performance
 

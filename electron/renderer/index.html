@@ -14,7 +14,7 @@
         <img src="../../assets/codex-day-mark.svg" alt="" class="brand-mark">
         <div>
           <strong>Dual Codex Day</strong>
-          <span id="version-label">v0.16.0</span>
+          <span id="version-label">v0.18.0</span>
         </div>
       </div>
       <nav class="primary-tabs" aria-label="主要功能">
@@ -71,6 +71,8 @@
               <p id="selected-profile-path">请选择一个账号配置</p>
             </div>
             <div class="profile-header-actions">
+              <button class="icon-button" id="export-profile-transfer-button" type="button" title="导出 Profile" aria-label="导出 Profile" disabled><i data-lucide="download"></i></button>
+              <button class="icon-button" id="import-profile-transfer-button" type="button" title="导入 Profile" aria-label="导入 Profile"><i data-lucide="file-input"></i></button>
               <button class="secondary-button" id="profile-usage-source-button" type="button" disabled>
                 <i data-lucide="database"></i>
                 <span id="profile-usage-source-label">独立账号</span>
@@ -239,6 +241,11 @@
             <article><span>任务</span><strong id="usage-kpi-tasks">0</strong><small id="usage-kpi-projects">0 个项目</small></article>
             <article><span>缓存率</span><strong id="usage-kpi-cache">0%</strong><small id="usage-kpi-cached">0 cached</small></article>
             <article><span>每次模型调用</span><strong id="usage-kpi-average">0</strong><small>平均 Token</small></article>
+          </section>
+
+          <section class="usage-panel usage-comparison-panel" aria-labelledby="usage-comparison-title">
+            <div class="usage-panel-heading"><div><span class="eyebrow">Account comparison</span><h2 id="usage-comparison-title">账号对比</h2></div><span class="panel-meta">点击账号查看详情</span></div>
+            <div class="usage-comparison-scroll"><div class="usage-comparison" id="usage-comparison"></div></div>
           </section>
 
           <section class="usage-overview-grid">
@@ -522,6 +529,32 @@
     </form>
   </dialog>
 
+  <dialog class="modal profile-transfer-modal" id="profile-transfer-dialog">
+    <form id="profile-transfer-form">
+      <div class="modal-heading"><div class="modal-icon"><i data-lucide="file-input"></i></div><div><span class="eyebrow">Profile transfer</span><h2>确认导入 Profile</h2></div></div>
+      <div class="transfer-summary">
+        <span id="profile-transfer-action">新建 Profile</span>
+        <strong id="profile-transfer-name"></strong>
+        <small id="profile-transfer-version"></small>
+      </div>
+      <section class="transfer-section">
+        <h3>将应用的变更</h3>
+        <ul id="profile-transfer-changes"></ul>
+      </section>
+      <section class="transfer-section" id="profile-transfer-missing-skills" hidden>
+        <h3>缺少 Skills</h3>
+        <p id="profile-transfer-missing-skills-list"></p>
+      </section>
+      <section class="transfer-section" id="profile-transfer-missing-plugins" hidden>
+        <h3>缺少插件</h3>
+        <p id="profile-transfer-missing-plugins-list"></p>
+      </section>
+      <div class="transfer-warning" id="profile-transfer-credential" hidden><i data-lucide="key-round"></i><span>导入后需要重新填写此中转站的 API Key。</span></div>
+      <div class="transfer-note"><i data-lucide="shield-check"></i><span>写入前会在本地创建备份；写入失败时自动恢复。缺失组件不会自动安装。</span></div>
+      <div class="modal-actions"><button class="secondary-button" id="profile-transfer-cancel" type="button">取消</button><button class="primary-button" id="profile-transfer-apply" type="submit"><i data-lucide="save-check"></i><span>应用导入</span></button></div>
+    </form>
+  </dialog>
+
   <dialog class="modal" id="rename-profile-dialog">
     <form id="rename-profile-form">
       <div class="modal-heading"><div class="modal-icon"><i data-lucide="pencil"></i></div><div><span class="eyebrow">Rename profile</span><h2>重命名账号</h2></div></div>
@@ -552,6 +585,18 @@
     <div class="reconcile-summary" id="usage-reconcile-summary"></div>
     <div class="reconcile-breakdown" id="usage-reconcile-breakdown"></div>
     <div class="modal-actions"><button class="secondary-button" id="usage-reconcile-choose" type="button">选择数据库</button><button class="primary-button" id="usage-reconcile-close" type="button">关闭</button></div>
+  </dialog>
+
+  <dialog class="modal task-detail-modal" id="task-detail-dialog">
+    <div class="task-detail-body">
+      <div class="modal-heading"><div class="modal-icon"><i data-lucide="chart-no-axes-combined"></i></div><div><span class="eyebrow">Task detail</span><h2 id="task-detail-title">任务详情</h2><p id="task-detail-meta"></p></div></div>
+      <div class="task-detail-summary" id="task-detail-summary"></div>
+      <div class="task-call-table">
+        <div class="task-call-row header"><span>模型与时间</span><span>输入</span><span>缓存</span><span>输出</span><span>总量</span></div>
+        <div id="task-detail-calls"></div>
+      </div>
+      <div class="modal-actions"><button class="primary-button" id="task-detail-close" type="button">关闭</button></div>
+    </div>
   </dialog>
 
   <dialog class="modal poster-modal" id="usage-poster-dialog">
