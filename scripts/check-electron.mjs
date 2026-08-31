@@ -16,8 +16,9 @@ const usageAnalysis = readFileSync(path.join(root, 'electron', 'renderer', 'usag
 const profileDoctor = readFileSync(path.join(root, 'scripts', 'lib', 'profile-doctor.mjs'), 'utf8');
 const css = readFileSync(path.join(root, 'electron', 'renderer', 'app.css'), 'utf8');
 const capture = readFileSync(path.join(root, 'scripts', 'capture-electron.mjs'), 'utf8');
+const packager = readFileSync(path.join(root, 'scripts', 'package-electron.mjs'), 'utf8');
 
-assert(packageMetadata.version === '0.20.0', 'Electron release must use package version 0.20.0');
+assert(packageMetadata.version === '0.21.0', 'Electron release must use package version 0.21.0');
 assert(packageMetadata.main === 'electron/main.mjs', 'Electron main entry must be declared in package metadata');
 assert(packageMetadata.scripts.desktop === 'electron .', 'desktop command must launch the Electron entry');
 assert(/contextIsolation:\s*true/.test(main), 'Electron windows must enable context isolation');
@@ -51,6 +52,12 @@ assert(/new DatabaseSync\(databasePath, \{ readOnly: true/.test(main) && /readOn
 assert(/pendingProfileDiagnoses/.test(main) && /webContentsId/.test(main) && /createProfileDiagnosisExport/.test(main), 'diagnostic export must use a renderer-scoped report token');
 assert(/profile-diagnosis-dialog/.test(html + renderer + css) && /diagnosisStatusLabel/.test(renderer), 'Electron must render grouped Profile health results');
 assert(/screenshotView === 'profile-diagnosis'/.test(main), 'visual verification must cover the Profile diagnosis dialog');
+assert(/profiles:list-recovery-backups/.test(main) && /profiles:preview-recovery/.test(main) && /profiles:apply-recovery/.test(main), 'Electron must expose a scoped preview-before-restore recovery flow');
+assert(/pendingProfileRecoveries/.test(main) && /PROFILE_RECOVERY_TTL_MS/.test(main) && /webContentsId/.test(main), 'Profile recovery apply must use a renderer-scoped short-lived token');
+assert(/isProfileRunning/.test(main) && /listProfileLaunches/.test(main), 'Profile recovery must reject active target instances');
+assert(/profile-recovery-dialog/.test(html + renderer + css) && /renderProfileRecoveryPreview/.test(renderer), 'Electron must render backup validity and recovery scope before confirmation');
+assert(/screenshotView === 'profile-recovery'/.test(main), 'visual verification must cover the Profile recovery center');
+assert(/archive-restore\.mjs/.test(packager), 'packaged Electron builds must retain the Profile recovery icon');
 assert(/PROFILE_DIAGNOSIS_SCHEMA_VERSION/.test(profileDoctor) && /createProfileDiagnosisExport/.test(profileDoctor), 'Profile diagnosis must use a versioned sanitized export');
 assert(/confirmLaunch/.test(main) && /listProfileLaunches/.test(main), 'Electron must verify launches and expose persistent instance status');
 assert(/safeStorage\.encryptString/.test(main) && /safeStorage\.decryptString/.test(main), 'provider API keys must use operating-system encryption');
@@ -103,6 +110,7 @@ assert(/data-stop-launch/.test(renderer) && /stop-instance-button/.test(css), 'a
 assert(!/readProviderSecret|decryptString|getProviderSecret/.test(preload), 'preload bridge must not expose provider key reads');
 assert(!/filePath.*applyProfileTransfer|applyProfileTransfer.*filePath/s.test(preload), 'renderer must not submit a filesystem path when applying a Profile transfer');
 assert(!/exportProfileDiagnosis:\s*\([^)]*report/.test(preload), 'renderer must export a stored diagnosis token instead of submitting report content');
+assert(!/applyProfileRecovery:\s*\([^)]*backup/.test(preload), 'renderer must apply Profile recovery with a stored preview token instead of a backup path');
 assert(/previewProvider:\s*\(profileId, provider\)/.test(preload) && /importProfileConfig/.test(preload), 'preload must scope provider previews and imports to a selected Profile');
 assert(!/linear-gradient|radial-gradient/.test(css), 'Electron interface must avoid decorative gradients');
 assert(/DUAL_CODEX_DAY_SCREENSHOT_PATH_REPLACEMENTS/.test(main + capture), 'public Electron screenshots must replace local filesystem paths');

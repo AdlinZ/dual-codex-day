@@ -4,6 +4,23 @@ Project name: **Dual Codex Day** (`dual-codex-day`). Historical entries may reta
 
 ## Unreleased
 
+## [0.21.0] - 2026-08-31
+
+### Added
+
+- Added a manual Profile recovery center that lists local update backups, reports invalid backups, and previews account-setting and `config.toml` changes.
+- Added per-file backup integrity metadata while retaining structurally valid legacy update backups.
+
+### Security
+
+- Recovery confirmation uses renderer-scoped five-minute tokens and rechecks the backup fingerprint before applying changes.
+- Recovery rejects foreign, incomplete, damaged, path-escaping, and unsupported creation backups.
+
+### Reliability
+
+- Recovery is blocked while the target Profile has active instances.
+- Each restore creates a protection backup, merges only the selected Profile registry entry, preserves credentials, logs, usage databases, and other Profiles, and rolls back automatically on failure.
+
 ## [0.20.0] - 2026-08-31
 
 ### Changed

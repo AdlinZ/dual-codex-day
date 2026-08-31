@@ -1,6 +1,6 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,6 +20,8 @@ const RESERVED_PROVIDER_IDS = new Set(['openai', 'ollama', 'lmstudio']);
 const LAUNCH_HISTORY_SCHEMA_VERSION = 1;
 const MAX_LAUNCH_HISTORY = 24;
 const PROCESS_IDENTITY_TOLERANCE_MS = 30_000;
+const PROFILE_BACKUP_SCHEMA_VERSION = 2;
+const PROFILE_BACKUP_MAX_BYTES = 2 * 1024 * 1024;
 
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 const scriptsDirectory = path.dirname(moduleDirectory);
@@ -254,6 +256,11 @@ function writeTextAtomically(target, value) {
   const temporary = `${target}.${process.pid}.${Date.now()}.tmp`;
   writeFileSync(temporary, value, { encoding: 'utf8', mode: 0o600 });
   renameSync(temporary, target);
+}
+
+function fileIntegrity(target) {
+  const content = readFileSync(target);
+  return { bytes: content.byteLength, sha256: createHash('sha256').update(content).digest('hex') };
 }
 
 function loadLaunchHistory(root) {
@@ -640,19 +647,24 @@ function transferConfigText(transfer, provider, available = {}) {
 }
 
 function createTransferBackup(root, target, action) {
-  const backupRoot = path.join(path.resolve(root), 'backups', `profile-transfer-${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID()}`);
+  const prefix = action === 'recovery-protection' ? 'profile-recovery-protection' : 'profile-transfer';
+  const backupRoot = path.join(path.resolve(root), 'backups', `${prefix}-${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID()}`);
   mkdirSync(backupRoot, { recursive: true });
   const registry = registryPath(path.resolve(root));
   const config = target ? path.join(target.paths.codexHome, 'config.toml') : null;
   if (existsSync(registry)) copyFileSync(registry, path.join(backupRoot, 'profiles.json'));
   if (config && existsSync(config)) copyFileSync(config, path.join(backupRoot, 'config.toml'));
+  const files = {};
+  if (existsSync(path.join(backupRoot, 'profiles.json'))) files.registry = fileIntegrity(path.join(backupRoot, 'profiles.json'));
+  if (existsSync(path.join(backupRoot, 'config.toml'))) files.config = fileIntegrity(path.join(backupRoot, 'config.toml'));
   writeJsonAtomically(path.join(backupRoot, 'backup.json'), {
-    schemaVersion: 1,
+    schemaVersion: PROFILE_BACKUP_SCHEMA_VERSION,
     createdAt: new Date().toISOString(),
     action,
     targetProfileId: target?.id || null,
     registryExisted: existsSync(registry),
-    configExisted: Boolean(config && existsSync(config))
+    configExisted: Boolean(config && existsSync(config)),
+    files
   });
   return backupRoot;
 }
@@ -722,6 +734,173 @@ export function applyProfileTransfer(root = defaultProfilesRoot(), transferValue
   } catch (error) {
     try { restoreTransferBackup(root, backupPath, target, createdProfile); }
     catch (rollbackError) { throw new AggregateError([error, rollbackError], 'Profile transfer failed and rollback could not be completed.'); }
+    throw error;
+  }
+}
+
+function validIsoDate(value) {
+  return typeof value === 'string' && value.length >= 20 && Number.isFinite(Date.parse(value));
+}
+
+function containedBackupPath(root, backupId) {
+  const backupRoot = path.resolve(root, 'backups');
+  const normalizedId = String(backupId || '');
+  if (!/^profile-transfer-[a-z0-9-]+$/i.test(normalizedId)) throw new Error('备份标识无效。');
+  const candidate = path.resolve(backupRoot, normalizedId);
+  const relative = path.relative(backupRoot, candidate);
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('备份路径超出恢复目录。');
+  if (!existsSync(candidate) || !lstatSync(candidate).isDirectory() || lstatSync(candidate).isSymbolicLink()) {
+    throw new Error('备份目录不存在或类型不安全。');
+  }
+  return candidate;
+}
+
+function readBackupFile(backupRoot, filename, required) {
+  const target = path.join(backupRoot, filename);
+  if (!existsSync(target)) {
+    if (required) throw new Error(`备份缺少 ${filename}。`);
+    return null;
+  }
+  const details = lstatSync(target);
+  if (!details.isFile() || details.isSymbolicLink()) throw new Error(`${filename} 不是安全的普通文件。`);
+  if (details.size > PROFILE_BACKUP_MAX_BYTES) throw new Error(`${filename} 超过 2 MB 限制。`);
+  return { target, text: readFileSync(target, 'utf8'), integrity: fileIntegrity(target) };
+}
+
+function sameIntegrity(expected, actual) {
+  return expected
+    && Number(expected.bytes) === actual.bytes
+    && /^[0-9a-f]{64}$/i.test(String(expected.sha256 || ''))
+    && String(expected.sha256).toLowerCase() === actual.sha256;
+}
+
+function backupFingerprint(metadataText, registryFile, configFile) {
+  const hash = createHash('sha256').update(metadataText).update('\0').update(registryFile.integrity.sha256);
+  if (configFile) hash.update('\0').update(configFile.integrity.sha256);
+  return hash.digest('hex');
+}
+
+function inspectProfileRecoveryBackup(root, profile, backupId) {
+  const backupRoot = containedBackupPath(root, backupId);
+  const metadataFile = readBackupFile(backupRoot, 'backup.json', true);
+  let metadata;
+  try { metadata = JSON.parse(metadataFile.text); }
+  catch { throw new Error('backup.json 无法解析。'); }
+  if (![1, PROFILE_BACKUP_SCHEMA_VERSION].includes(metadata?.schemaVersion)) throw new Error('备份格式版本不受支持。');
+  if (metadata.action !== 'update' || !validIsoDate(metadata.completedAt)) throw new Error('当前版本只支持已完成的 Profile 更新备份。');
+  if (!validIsoDate(metadata.createdAt)) throw new Error('备份创建时间无效。');
+  if (metadata.targetProfileId !== profile.id) throw new Error('备份属于其他 Profile。');
+  if (metadata.registryExisted !== true) throw new Error('更新备份缺少原注册表状态。');
+  if (typeof metadata.configExisted !== 'boolean') throw new Error('备份配置状态无效。');
+
+  const registryFile = readBackupFile(backupRoot, 'profiles.json', true);
+  const configFile = readBackupFile(backupRoot, 'config.toml', metadata.configExisted);
+  if (!metadata.configExisted && configFile) throw new Error('备份包含与元数据不一致的 config.toml。');
+  if (metadata.schemaVersion === PROFILE_BACKUP_SCHEMA_VERSION) {
+    if (!sameIntegrity(metadata.files?.registry, registryFile.integrity)) throw new Error('profiles.json 完整性校验失败。');
+    if (metadata.configExisted && !sameIntegrity(metadata.files?.config, configFile.integrity)) throw new Error('config.toml 完整性校验失败。');
+    if (!metadata.configExisted && metadata.files?.config) throw new Error('config.toml 完整性元数据不一致。');
+  }
+
+  let backupRegistry;
+  try { backupRegistry = validateRegistry(JSON.parse(registryFile.text)); }
+  catch (error) { throw new Error(`profiles.json 无效：${error.message}`); }
+  const matchingProfiles = backupRegistry.profiles.filter(item => item.id === profile.id);
+  if (matchingProfiles.length !== 1) throw new Error('备份注册表中缺少目标 Profile 或身份不唯一。');
+  if (configFile) {
+    try { parseToml(configFile.text); }
+    catch { throw new Error('config.toml 无法解析。'); }
+  }
+  const backupProfile = matchingProfiles[0];
+  const currentRegistry = loadProfileRegistry(root);
+  if (currentRegistry.profiles.some(item => item.id !== profile.id
+    && item.name.localeCompare(backupProfile.name, undefined, { sensitivity: 'accent' }) === 0)) {
+    throw new Error('备份中的 Profile 名称已被其他 Profile 使用。');
+  }
+  const configPath = path.join(profile.paths.codexHome, 'config.toml');
+  const currentConfigExists = existsSync(configPath);
+  const registryFields = ['name', 'provider', 'usageSource', 'runtimeSource', 'createdAt', 'updatedAt'];
+  const registryChanges = registryFields.filter(field => JSON.stringify(profile[field] ?? null) !== JSON.stringify(backupProfile[field] ?? null));
+  let configChange = 'unchanged';
+  if (metadata.configExisted && (!currentConfigExists || fileIntegrity(configPath).sha256 !== configFile.integrity.sha256)) configChange = currentConfigExists ? 'replace' : 'create';
+  if (!metadata.configExisted && currentConfigExists) configChange = 'remove';
+  return {
+    backupRoot,
+    metadata,
+    backupProfile: structuredClone(backupProfile),
+    configText: configFile?.text ?? null,
+    fingerprint: backupFingerprint(metadataFile.text, registryFile, configFile),
+    preview: {
+      id: path.basename(backupRoot),
+      createdAt: metadata.createdAt,
+      completedAt: metadata.completedAt,
+      action: metadata.action,
+      status: 'valid',
+      recoverable: { profileRegistry: true, config: true },
+      configExisted: metadata.configExisted,
+      registryChanges,
+      configChange,
+      profileName: backupProfile.name
+    }
+  };
+}
+
+export function listProfileRecoveryBackups(root = defaultProfilesRoot(), reference) {
+  const profile = findProfile(root, reference);
+  const backupsRoot = path.join(path.resolve(root), 'backups');
+  if (!existsSync(backupsRoot)) return [];
+  return readdirSync(backupsRoot, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && entry.name.startsWith('profile-transfer-'))
+    .map(entry => {
+      try { return inspectProfileRecoveryBackup(root, profile, entry.name).preview; }
+      catch (error) {
+        const metadataPath = path.join(backupsRoot, entry.name, 'backup.json');
+        let createdAt = '';
+        let targetProfileId = null;
+        try {
+          const metadata = JSON.parse(readFileSync(metadataPath, 'utf8'));
+          createdAt = validIsoDate(metadata.createdAt) ? metadata.createdAt : '';
+          targetProfileId = metadata.targetProfileId;
+        } catch { /* Invalid backups remain visible when they can be associated safely. */ }
+        if (targetProfileId && targetProfileId !== profile.id) return null;
+        return { id: entry.name, createdAt, action: '', status: 'invalid', reason: error.message, recoverable: { profileRegistry: false, config: false }, registryChanges: [], configChange: 'unavailable' };
+      }
+    })
+    .filter(Boolean)
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+}
+
+export function previewProfileRecovery(root = defaultProfilesRoot(), reference, backupId) {
+  const profile = findProfile(root, reference);
+  const inspected = inspectProfileRecoveryBackup(root, profile, backupId);
+  return { preview: inspected.preview, fingerprint: inspected.fingerprint };
+}
+
+export function applyProfileRecovery(root = defaultProfilesRoot(), reference, backupId, options = {}) {
+  const profile = findProfile(root, reference);
+  if (options.isProfileRunning?.(profile.id)) throw new Error('请先关闭该 Profile 正在运行的客户端，再执行恢复。');
+  const inspected = inspectProfileRecoveryBackup(root, profile, backupId);
+  if (!options.expectedFingerprint || options.expectedFingerprint !== inspected.fingerprint) {
+    throw new Error('备份内容已变化，请重新预览后再恢复。');
+  }
+  const protectionPath = createTransferBackup(root, profile, 'recovery-protection');
+  try {
+    const registry = loadProfileRegistry(root);
+    const index = registry.profiles.findIndex(item => item.id === profile.id);
+    if (index < 0) throw new Error('目标 Profile 已不存在。');
+    registry.profiles[index] = structuredClone(inspected.backupProfile);
+    saveProfileRegistry(root, registry);
+    const configPath = path.join(profile.paths.codexHome, 'config.toml');
+    if (inspected.metadata.configExisted) writeTextAtomically(configPath, inspected.configText);
+    else if (existsSync(configPath)) unlinkSync(configPath);
+    options.afterRestoreWrite?.({ profileId: profile.id, protectionPath });
+    const protectionMetadataPath = path.join(protectionPath, 'backup.json');
+    const protectionMetadata = JSON.parse(readFileSync(protectionMetadataPath, 'utf8'));
+    writeJsonAtomically(protectionMetadataPath, { ...protectionMetadata, completedAt: new Date().toISOString() });
+    return { profile: findProfile(root, profile.id), preview: inspected.preview, protectionPath };
+  } catch (error) {
+    try { restoreTransferBackup(root, protectionPath, profile, null); }
+    catch (rollbackError) { throw new AggregateError([error, rollbackError], 'Profile recovery failed and rollback could not be completed.'); }
     throw error;
   }
 }

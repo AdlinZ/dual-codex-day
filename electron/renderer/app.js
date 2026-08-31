@@ -28,6 +28,7 @@ import Pencil from '../../node_modules/lucide/dist/esm/icons/pencil.mjs';
 import Trash2 from '../../node_modules/lucide/dist/esm/icons/trash-2.mjs';
 import LogIn from '../../node_modules/lucide/dist/esm/icons/log-in.mjs';
 import Square from '../../node_modules/lucide/dist/esm/icons/square.mjs';
+import ArchiveRestore from '../../node_modules/lucide/dist/esm/icons/archive-restore.mjs';
 import { aggregateUsage, filterUsageEvents, groupUsageTasks, topUsageLabel } from './usage-analysis.mjs';
 
 const iconNodes = {
@@ -59,7 +60,8 @@ const iconNodes = {
   pencil: Pencil,
   'trash-2': Trash2,
   'log-in': LogIn,
-  square: Square
+  square: Square,
+  'archive-restore': ArchiveRestore
 };
 
 const targetMetadata = {
@@ -100,7 +102,10 @@ const state = {
   posterFilename: '',
   posterSuccessMessage: '海报已保存。',
   pendingProfileTransferToken: null,
-  profileDiagnosisToken: null
+  profileDiagnosisToken: null,
+  profileRecoveryToken: null,
+  profileRecoveryBackups: [],
+  selectedRecoveryBackupId: null
 };
 
 const elements = {
@@ -206,6 +211,15 @@ const elements = {
   profileDiagnosisClose: document.querySelector('#profile-diagnosis-close'),
   profileDiagnosisRefresh: document.querySelector('#profile-diagnosis-refresh'),
   profileDiagnosisExport: document.querySelector('#profile-diagnosis-export'),
+  profileRecoveryButton: document.querySelector('#profile-recovery-button'),
+  profileRecoveryDialog: document.querySelector('#profile-recovery-dialog'),
+  profileRecoveryTitle: document.querySelector('#profile-recovery-title'),
+  profileRecoveryCount: document.querySelector('#profile-recovery-count'),
+  profileRecoveryList: document.querySelector('#profile-recovery-list'),
+  profileRecoveryPreview: document.querySelector('#profile-recovery-preview'),
+  profileRecoveryRunning: document.querySelector('#profile-recovery-running'),
+  profileRecoveryClose: document.querySelector('#profile-recovery-close'),
+  profileRecoveryApply: document.querySelector('#profile-recovery-apply'),
   exportProfileTransfer: document.querySelector('#export-profile-transfer-button'),
   importProfileTransfer: document.querySelector('#import-profile-transfer-button'),
   profileTransferDialog: document.querySelector('#profile-transfer-dialog'),
@@ -406,6 +420,51 @@ function renderProfileDiagnosis(report) {
   `).join('');
 }
 
+function recoveryDate(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.valueOf()) ? '时间未知' : date.toLocaleString('zh-CN', { hour12: false });
+}
+
+function renderProfileRecoveryList() {
+  const backups = state.profileRecoveryBackups;
+  elements.profileRecoveryCount.textContent = `${backups.length} 个`;
+  if (!backups.length) {
+    elements.profileRecoveryList.innerHTML = '<div class="recovery-list-empty">当前 Profile 暂无可恢复备份</div>';
+    return;
+  }
+  elements.profileRecoveryList.innerHTML = backups.map(backup => `
+    <button class="recovery-backup${backup.id === state.selectedRecoveryBackupId ? ' is-selected' : ''}${backup.status === 'invalid' ? ' is-invalid' : ''}" type="button" data-recovery-backup="${escapeHtml(backup.id)}" ${backup.status === 'invalid' ? 'disabled' : ''}>
+      <span class="recovery-backup-status"></span>
+      <span class="recovery-backup-copy"><strong>${backup.status === 'valid' ? '更新前备份' : '不可用备份'}</strong><small>${escapeHtml(recoveryDate(backup.createdAt))}</small>${backup.reason ? `<em title="${escapeHtml(backup.reason)}">${escapeHtml(backup.reason)}</em>` : ''}</span>
+      <i data-lucide="chevron-right"></i>
+    </button>
+  `).join('');
+}
+
+function renderProfileRecoveryPreview(preview) {
+  const fieldLabels = {
+    name: '显示名称',
+    provider: '供应商设置',
+    usageSource: '用量来源',
+    runtimeSource: '运行环境',
+    createdAt: '创建时间',
+    updatedAt: '更新时间'
+  };
+  const changes = preview.registryChanges.map(field => fieldLabels[field] || field);
+  const configLabels = {
+    replace: '替换当前 config.toml',
+    create: '恢复备份中的 config.toml',
+    remove: '恢复为无 config.toml 状态',
+    unchanged: 'config.toml 内容相同'
+  };
+  elements.profileRecoveryPreview.innerHTML = `
+    <div class="recovery-preview-heading"><span>可恢复</span><strong>${escapeHtml(preview.profileName)}</strong><small>${escapeHtml(recoveryDate(preview.createdAt))}</small></div>
+    <div class="recovery-scope-row"><span><i data-lucide="settings-2"></i>账号设置</span><strong>${changes.length ? escapeHtml(changes.join('、')) : '内容相同'}</strong></div>
+    <div class="recovery-scope-row"><span><i data-lucide="file-input"></i>config.toml</span><strong>${escapeHtml(configLabels[preview.configChange] || '状态未知')}</strong></div>
+    <p class="recovery-preview-note">恢复会把这两部分还原到备份创建时的状态。完成时间：${escapeHtml(recoveryDate(preview.completedAt))}</p>
+  `;
+}
+
 async function discardProfileTransfer() {
   const token = state.pendingProfileTransferToken;
   state.pendingProfileTransferToken = null;
@@ -416,6 +475,58 @@ async function discardProfileDiagnosis() {
   const token = state.profileDiagnosisToken;
   state.profileDiagnosisToken = null;
   if (token) await window.dualCodexDay.discardProfileDiagnosis(token).catch(() => {});
+}
+
+async function discardProfileRecovery() {
+  const token = state.profileRecoveryToken;
+  state.profileRecoveryToken = null;
+  if (token) await window.dualCodexDay.discardProfileRecovery(token).catch(() => {});
+}
+
+async function selectProfileRecovery(backupId) {
+  const profile = selectedProfile();
+  if (!profile || state.busy) return;
+  state.selectedRecoveryBackupId = backupId;
+  renderProfileRecoveryList();
+  elements.profileRecoveryPreview.innerHTML = '<div class="recovery-empty"><span class="dashboard-spinner"></span><strong>正在校验备份</strong></div>';
+  refreshIcons();
+  setBusy(true);
+  try {
+    await discardProfileRecovery();
+    const result = await window.dualCodexDay.previewProfileRecovery(profile.id, backupId);
+    state.profileRecoveryToken = result.token;
+    renderProfileRecoveryPreview(result.preview);
+    refreshIcons();
+  } catch (error) {
+    elements.profileRecoveryPreview.innerHTML = `<div class="recovery-empty is-error"><i data-lucide="circle-alert"></i><strong>备份不可恢复</strong><span>${escapeHtml(friendlyProviderError(error))}</span></div>`;
+    showToast(friendlyProviderError(error) || '无法预览 Profile 备份。', true);
+    refreshIcons();
+  } finally {
+    setBusy(false);
+    renderSelectedProfile();
+  }
+}
+
+async function openProfileRecovery() {
+  const profile = selectedProfile();
+  if (!profile || state.busy) return;
+  setBusy(true);
+  try {
+    await discardProfileRecovery();
+    state.selectedRecoveryBackupId = null;
+    state.profileRecoveryBackups = await window.dualCodexDay.listProfileRecoveryBackups(profile.id);
+    elements.profileRecoveryTitle.textContent = `${profile.name} · 恢复中心`;
+    elements.profileRecoveryRunning.hidden = activeLaunches(profile.id).length === 0;
+    renderProfileRecoveryList();
+    elements.profileRecoveryPreview.innerHTML = '<div class="recovery-empty"><i data-lucide="archive-restore"></i><strong>选择一个可用备份</strong><span>查看账号设置和 config.toml 的恢复范围。</span></div>';
+    elements.profileRecoveryDialog.showModal();
+    refreshIcons();
+  } catch (error) {
+    showToast(friendlyProviderError(error) || '无法读取 Profile 备份。', true);
+  } finally {
+    setBusy(false);
+    renderSelectedProfile();
+  }
 }
 
 async function loadProfileDiagnosis() {
@@ -445,6 +556,8 @@ function setBusy(value) {
   elements.importProfileTransfer.disabled = value;
   elements.exportProfileTransfer.disabled = value || !selectedProfile();
   elements.profileDiagnosisButton.disabled = value || !selectedProfile();
+  elements.profileRecoveryButton.disabled = value || !selectedProfile();
+  elements.profileRecoveryApply.disabled = value || !state.profileRecoveryToken || activeLaunches(state.selectedProfileId).length > 0;
   elements.profileTransferApply.disabled = value;
   elements.profileDiagnosisRefresh.disabled = value;
   elements.profileDiagnosisExport.disabled = value || !state.profileDiagnosisToken;
@@ -490,6 +603,7 @@ function renderSelectedProfile() {
     elements.deleteProfile.disabled = true;
     elements.exportProfileTransfer.disabled = true;
     elements.profileDiagnosisButton.disabled = true;
+    elements.profileRecoveryButton.disabled = true;
     elements.usageSourceButton.disabled = true;
     elements.profileLoginStatus.textContent = '未选择账号';
     elements.profileRuntimeSource.textContent = '请选择一个账号配置';
@@ -501,6 +615,7 @@ function renderSelectedProfile() {
   elements.profileName.textContent = profile.name;
   elements.profilePath.textContent = profile.runtimeRoot || profile.codexHome;
   const running = activeLaunches(profile.id).length;
+  if (elements.profileRecoveryDialog.open) elements.profileRecoveryRunning.hidden = running === 0;
   elements.profileRuntime.textContent = running ? `${running} 个实例运行中` : '当前未运行';
   elements.profileRuntime.classList.toggle('is-active', running > 0);
   const sameSource = profile.runtimeSource === profile.usageSource;
@@ -512,6 +627,7 @@ function renderSelectedProfile() {
   elements.deleteProfile.disabled = state.busy;
   elements.exportProfileTransfer.disabled = state.busy;
   elements.profileDiagnosisButton.disabled = state.busy;
+  elements.profileRecoveryButton.disabled = state.busy;
   const provider = profile.provider || { type: 'official', name: 'OpenAI 官方' };
   const providerReady = provider.type === 'official'
     || provider.authMode !== 'environment'
@@ -1883,6 +1999,41 @@ elements.profileDiagnosisExport.addEventListener('click', async () => {
     if (exported) showToast('脱敏 Profile 诊断已导出。');
   } catch (error) {
     showToast(friendlyProviderError(error) || '无法导出 Profile 诊断。', true);
+  } finally {
+    setBusy(false);
+    renderSelectedProfile();
+  }
+});
+
+elements.profileRecoveryButton.addEventListener('click', openProfileRecovery);
+elements.profileRecoveryList.addEventListener('click', event => {
+  const button = event.target.closest('[data-recovery-backup]');
+  if (!button || button.disabled) return;
+  selectProfileRecovery(button.dataset.recoveryBackup);
+});
+elements.profileRecoveryClose.addEventListener('click', async () => {
+  await discardProfileRecovery();
+  elements.profileRecoveryDialog.close();
+});
+elements.profileRecoveryDialog.addEventListener('cancel', event => {
+  event.preventDefault();
+  discardProfileRecovery().finally(() => elements.profileRecoveryDialog.close());
+});
+elements.profileRecoveryApply.addEventListener('click', async () => {
+  const token = state.profileRecoveryToken;
+  const profile = selectedProfile();
+  if (!token || !profile || state.busy) return;
+  if (activeLaunches(profile.id).length) return showToast('请先关闭该 Profile 正在运行的客户端。', true);
+  state.profileRecoveryToken = null;
+  setBusy(true);
+  try {
+    const restored = await window.dualCodexDay.applyProfileRecovery(token);
+    elements.profileRecoveryDialog.close();
+    state.dashboardLoaded = false;
+    await refreshSnapshot(restored.profile.id, true);
+    showToast(`“${restored.profile.name}”已恢复，并已创建保护备份。`);
+  } catch (error) {
+    showToast(friendlyProviderError(error) || '无法恢复 Profile。', true);
   } finally {
     setBusy(false);
     renderSelectedProfile();

@@ -8,6 +8,7 @@ import { app, BrowserWindow, dialog, ipcMain, nativeImage, safeStorage, shell } 
 import { parse as parseToml } from 'smol-toml';
 import {
   applyProfileTransfer,
+  applyProfileRecovery,
   createProfile,
   defaultProfilesRoot,
   detectProfileTargets,
@@ -17,10 +18,12 @@ import {
   isProcessAlive,
   launchProfile,
   listProfileLaunches,
+  listProfileRecoveryBackups,
   listProfiles,
   normalizeProfileProvider,
   PROFILE_TARGETS,
   previewProfileTransfer,
+  previewProfileRecovery,
   providerConfigPreview,
   readProfileLoginStatus,
   removeProfile,
@@ -60,8 +63,10 @@ let projectSkillRootsCache = null;
 const loginStatusCache = new Map();
 const pendingProfileTransfers = new Map();
 const pendingProfileDiagnoses = new Map();
+const pendingProfileRecoveries = new Map();
 const PROFILE_TRANSFER_MAX_BYTES = 2 * 1024 * 1024;
 const PROFILE_TRANSFER_TTL_MS = 10 * 60 * 1000;
+const PROFILE_RECOVERY_TTL_MS = 5 * 60 * 1000;
 
 function serializableTargets(targets) {
   return Object.fromEntries(Object.entries(targets).map(([key, value]) => [key, {
@@ -350,24 +355,10 @@ function readActiveProfileConfig(profile) {
 }
 
 function latestProfileBackup(profile) {
-  const backupRoot = path.join(profilesRoot, 'backups');
-  if (!directoryAvailable(backupRoot)) return { backupState: 'none' };
-  const candidates = readdirSync(backupRoot, { withFileTypes: true })
-    .filter(entry => entry.isDirectory())
-    .map(entry => path.join(backupRoot, entry.name))
-    .sort((a, b) => b.localeCompare(a));
-  for (const candidate of candidates) {
-    const metadataPath = path.join(candidate, 'backup.json');
-    if (!existsSync(metadataPath)) continue;
-    try {
-      const metadata = JSON.parse(readFileSync(metadataPath, 'utf8'));
-      if (metadata.targetProfileId !== profile.id) continue;
-      const complete = (!metadata.registryExisted || existsSync(path.join(candidate, 'profiles.json')))
-        && (!metadata.configExisted || existsSync(path.join(candidate, 'config.toml')));
-      return { backupState: complete ? 'valid' : 'invalid', backupCreatedAt: metadata.createdAt || '' };
-    } catch { /* An unreadable backup cannot be safely associated with a Profile. */ }
-  }
-  return { backupState: 'none' };
+  const latest = listProfileRecoveryBackups(profilesRoot, profile.id)[0];
+  return latest
+    ? { backupState: latest.status, backupCreatedAt: latest.createdAt || '' }
+    : { backupState: 'none' };
 }
 
 function readOnlyUsageHealth(sourceId) {
@@ -437,6 +428,13 @@ function prunePendingProfileDiagnoses() {
   const cutoff = Date.now() - PROFILE_TRANSFER_TTL_MS;
   for (const [token, pending] of pendingProfileDiagnoses) {
     if (pending.createdAt < cutoff) pendingProfileDiagnoses.delete(token);
+  }
+}
+
+function prunePendingProfileRecoveries() {
+  const cutoff = Date.now() - PROFILE_RECOVERY_TTL_MS;
+  for (const [token, pending] of pendingProfileRecoveries) {
+    if (pending.createdAt < cutoff) pendingProfileRecoveries.delete(token);
   }
 }
 
@@ -677,6 +675,44 @@ function registerIpc() {
     if (pending?.webContentsId === event.sender.id) pendingProfileDiagnoses.delete(key);
     return true;
   });
+  ipcMain.handle('profiles:list-recovery-backups', (_event, profileId) => {
+    return listProfileRecoveryBackups(profilesRoot, String(profileId || ''));
+  });
+  ipcMain.handle('profiles:preview-recovery', (event, payload) => {
+    const profileId = String(payload?.profileId || '');
+    const backupId = String(payload?.backupId || '');
+    const selected = previewProfileRecovery(profilesRoot, profileId, backupId);
+    prunePendingProfileRecoveries();
+    const token = randomUUID();
+    pendingProfileRecoveries.set(token, {
+      createdAt: Date.now(),
+      webContentsId: event.sender.id,
+      profileId,
+      backupId,
+      fingerprint: selected.fingerprint
+    });
+    return { token, preview: selected.preview };
+  });
+  ipcMain.handle('profiles:apply-recovery', (event, token) => {
+    prunePendingProfileRecoveries();
+    const key = String(token || '');
+    const pending = pendingProfileRecoveries.get(key);
+    if (!pending || pending.webContentsId !== event.sender.id) throw new Error('恢复预览已失效，请重新选择备份。');
+    pendingProfileRecoveries.delete(key);
+    const restored = applyProfileRecovery(profilesRoot, pending.profileId, pending.backupId, {
+      expectedFingerprint: pending.fingerprint,
+      isProfileRunning: profileId => listProfileLaunches(profilesRoot, { limit: 24 })
+        .some(launch => launch.profileId === profileId && launch.active)
+    });
+    loginStatusCache.clear();
+    return { profile: publicProfile(restored.profile), preview: restored.preview };
+  });
+  ipcMain.handle('profiles:discard-recovery', (event, token) => {
+    const key = String(token || '');
+    const pending = pendingProfileRecoveries.get(key);
+    if (pending?.webContentsId === event.sender.id) pendingProfileRecoveries.delete(key);
+    return true;
+  });
   ipcMain.handle('profiles:launch', async (_event, payload) => {
     const profileId = String(payload?.profileId || '');
     const target = String(payload?.target || '');
@@ -811,7 +847,35 @@ async function captureRequestedScreenshot(window) {
   if (!target) return;
   await new Promise(resolve => setTimeout(resolve, 1200));
   const screenshotView = process.env.DUAL_CODEX_DAY_SCREENSHOT_VIEW || '';
-  if (screenshotView === 'profile-diagnosis') {
+  if (screenshotView === 'profile-recovery') {
+    window.setSize(1400, 960);
+    const recoveryOpened = await window.webContents.executeJavaScript(`(async () => {
+      for (let attempt = 0; attempt < 160; attempt += 1) {
+        const button = document.querySelector('#profile-recovery-button');
+        if (button && !button.disabled) {
+          button.click();
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      for (let attempt = 0; attempt < 160; attempt += 1) {
+        const backup = document.querySelector('[data-recovery-backup]:not(:disabled)');
+        if (backup) {
+          backup.click();
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      for (let attempt = 0; attempt < 160; attempt += 1) {
+        if (document.querySelector('#profile-recovery-dialog')?.open
+          && document.querySelector('.recovery-preview-heading')) return true;
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      return false;
+    })()`);
+    if (!recoveryOpened) throw new Error('Profile recovery center did not open for the screenshot check.');
+    await new Promise(resolve => setTimeout(resolve, 350));
+  } else if (screenshotView === 'profile-diagnosis') {
     window.setSize(1400, 960);
     const diagnosisOpened = await window.webContents.executeJavaScript(`(() => {
       const dialog = document.querySelector('#profile-diagnosis-dialog');

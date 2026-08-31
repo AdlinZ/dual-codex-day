@@ -71,6 +71,7 @@
               <p id="selected-profile-path">请选择一个账号配置</p>
             </div>
             <div class="profile-header-actions">
+              <button class="icon-button" id="profile-recovery-button" type="button" title="Profile 恢复中心" aria-label="Profile 恢复中心" disabled><i data-lucide="archive-restore"></i></button>
               <button class="icon-button" id="profile-diagnosis-button" type="button" title="Profile 环境体检" aria-label="Profile 环境体检" disabled><i data-lucide="shield-check"></i></button>
               <button class="icon-button" id="export-profile-transfer-button" type="button" title="导出 Profile" aria-label="导出 Profile" disabled><i data-lucide="download"></i></button>
               <button class="icon-button" id="import-profile-transfer-button" type="button" title="导入 Profile" aria-label="导入 Profile"><i data-lucide="file-input"></i></button>
@@ -594,6 +595,27 @@
         <button class="secondary-button" id="profile-diagnosis-close" type="button">关闭</button>
         <button class="secondary-button" id="profile-diagnosis-refresh" type="button"><i data-lucide="refresh-cw"></i><span>重新检查</span></button>
         <button class="primary-button" id="profile-diagnosis-export" type="button"><i data-lucide="download"></i><span>导出诊断</span></button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog class="modal profile-recovery-modal" id="profile-recovery-dialog">
+    <div class="profile-recovery-body">
+      <div class="modal-heading"><div class="modal-icon"><i data-lucide="archive-restore"></i></div><div><span class="eyebrow">Profile recovery</span><h2 id="profile-recovery-title">Profile 恢复中心</h2></div></div>
+      <div class="recovery-layout">
+        <section class="recovery-backups" aria-labelledby="profile-recovery-list-heading">
+          <div class="recovery-section-heading"><h3 id="profile-recovery-list-heading">本地备份</h3><span id="profile-recovery-count">0 个</span></div>
+          <div class="recovery-backup-list" id="profile-recovery-list"></div>
+        </section>
+        <section class="recovery-preview" id="profile-recovery-preview" aria-live="polite">
+          <div class="recovery-empty"><i data-lucide="archive-restore"></i><strong>选择一个可用备份</strong><span>查看账号设置和 config.toml 的恢复范围。</span></div>
+        </section>
+      </div>
+      <div class="recovery-running" id="profile-recovery-running" hidden><i data-lucide="circle-alert"></i><span>该 Profile 仍有客户端运行，请关闭实例后再恢复。</span></div>
+      <div class="recovery-safety"><i data-lucide="shield-check"></i><span>恢复前会创建保护备份。凭据、日志、用量数据库和其他 Profile 保持不变。</span></div>
+      <div class="modal-actions">
+        <button class="secondary-button" id="profile-recovery-close" type="button">关闭</button>
+        <button class="danger-button" id="profile-recovery-apply" type="button" disabled><i data-lucide="archive-restore"></i><span>确认恢复</span></button>
       </div>
     </div>
   </dialog>
