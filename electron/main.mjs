@@ -1,9 +1,11 @@
-import { existsSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, safeStorage, shell } from 'electron';
+import { parse as parseToml } from 'smol-toml';
 import {
   applyProfileTransfer,
   createProfile,
@@ -32,6 +34,7 @@ import { getIndexDiagnostics, openIndex, readDailySummary, readIndexedEvents, re
 import { readCcSwitchAudit } from '../scripts/lib/cc-switch-audit.mjs';
 import { discoverProjectSkillRoots, removeManagedSkill, scanSkills, setSkillEnabled, shareSkill, skillRoots, syncSkill } from '../scripts/lib/skill-store.mjs';
 import { installPlugin, listPluginMarketplaces, removePlugin, scanPluginSkills, setPluginEnabled } from '../scripts/lib/plugin-store.mjs';
+import { createProfileDiagnosisExport, diagnoseProfileEnvironment } from '../scripts/lib/profile-doctor.mjs';
 
 const electronDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.dirname(electronDirectory);
@@ -56,6 +59,7 @@ let targetCache = null;
 let projectSkillRootsCache = null;
 const loginStatusCache = new Map();
 const pendingProfileTransfers = new Map();
+const pendingProfileDiagnoses = new Map();
 const PROFILE_TRANSFER_MAX_BYTES = 2 * 1024 * 1024;
 const PROFILE_TRANSFER_TTL_MS = 10 * 60 * 1000;
 
@@ -332,6 +336,110 @@ function prunePendingProfileTransfers() {
   }
 }
 
+function directoryAvailable(directory) {
+  try { return existsSync(directory) && statSync(directory).isDirectory(); }
+  catch { return false; }
+}
+
+function readActiveProfileConfig(profile) {
+  const codexHome = profile.runtimeSource === 'default' ? defaultCodexRoot : profile.paths.codexHome;
+  const configPath = path.join(codexHome, 'config.toml');
+  if (!existsSync(configPath)) return { codexHome, exists: false, valid: false, config: {} };
+  try { return { codexHome, exists: true, valid: true, config: parseToml(readFileSync(configPath, 'utf8')) }; }
+  catch { return { codexHome, exists: true, valid: false, config: {} }; }
+}
+
+function latestProfileBackup(profile) {
+  const backupRoot = path.join(profilesRoot, 'backups');
+  if (!directoryAvailable(backupRoot)) return { backupState: 'none' };
+  const candidates = readdirSync(backupRoot, { withFileTypes: true })
+    .filter(entry => entry.isDirectory())
+    .map(entry => path.join(backupRoot, entry.name))
+    .sort((a, b) => b.localeCompare(a));
+  for (const candidate of candidates) {
+    const metadataPath = path.join(candidate, 'backup.json');
+    if (!existsSync(metadataPath)) continue;
+    try {
+      const metadata = JSON.parse(readFileSync(metadataPath, 'utf8'));
+      if (metadata.targetProfileId !== profile.id) continue;
+      const complete = (!metadata.registryExisted || existsSync(path.join(candidate, 'profiles.json')))
+        && (!metadata.configExisted || existsSync(path.join(candidate, 'config.toml')));
+      return { backupState: complete ? 'valid' : 'invalid', backupCreatedAt: metadata.createdAt || '' };
+    } catch { /* An unreadable backup cannot be safely associated with a Profile. */ }
+  }
+  return { backupState: 'none' };
+}
+
+function readOnlyUsageHealth(sourceId) {
+  const { databasePath } = usageStoragePaths(sourceId);
+  if (!existsSync(databasePath)) return { available: false, status: 'error' };
+  let database;
+  try {
+    database = new DatabaseSync(databasePath, { readOnly: true, timeout: 3_000 });
+    const diagnostics = getIndexDiagnostics(database);
+    return { available: true, status: diagnostics.status };
+  } catch {
+    return { available: false, status: 'error' };
+  } finally {
+    database?.close();
+  }
+}
+
+function collectProfileDiagnosis(profile) {
+  const activeConfig = readActiveProfileConfig(profile);
+  const usageRoot = profile.usageSource === 'default' ? defaultCodexRoot : profile.paths.codexHome;
+  const skillConfig = Array.isArray(activeConfig.config.skills?.config) ? activeConfig.config.skills.config : [];
+  const missingSkills = skillConfig
+    .filter(item => !item?.path || !existsSync(path.resolve(String(item.path))))
+    .map(item => path.basename(path.dirname(String(item?.path || 'missing-skill'))) || 'unknown-skill');
+  const configuredPlugins = Object.keys(activeConfig.config.plugins || {});
+  const environmentId = profile.runtimeSource === 'default' ? 'default' : `profile:${profile.id}`;
+  const pluginData = scanPluginSkills({
+    environments: [{ id: environmentId, label: profile.name, codexHome: activeConfig.codexHome }],
+    codexExecutable: detectedTargets().cli?.executable || 'codex'
+  });
+  const installedPluginIds = new Set(pluginData.plugins.map(item => item.pluginId));
+  const encryptedSecretPath = providerSecretPath(profile);
+  const hasProviderCredential = profile.provider.type === 'custom'
+    && profile.provider.authMode === 'environment'
+    && existsSync(encryptedSecretPath);
+  const usage = readOnlyUsageHealth(`profile:${profile.id}`);
+  const targets = detectedTargets();
+  const credentialStorageAvailable = secureProviderStorageAvailable();
+  const resolvedLoginStatus = profile.provider.type === 'custom'
+    && profile.provider.authMode === 'environment'
+    && (!hasProviderCredential || !credentialStorageAvailable)
+    ? { state: 'missing', method: 'provider-key' }
+    : loginStatus(profile, hasProviderCredential);
+  return diagnoseProfileEnvironment({
+    profile,
+    configuration: { registryValid: true, configExists: activeConfig.exists, configValid: activeConfig.valid },
+    directories: { runtimeAvailable: directoryAvailable(activeConfig.codexHome), usageAvailable: directoryAvailable(usageRoot) },
+    credentialStorageAvailable,
+    loginStatus: resolvedLoginStatus,
+    targets,
+    components: {
+      configuredSkills: skillConfig.length,
+      missingSkills,
+      installedPlugins: installedPluginIds.size,
+      missingPlugins: configuredPlugins.filter(id => !installedPluginIds.has(id)),
+      pluginFailureCount: pluginData.failures.length
+    },
+    usage: { available: usage.available, status: usage.status },
+    recovery: {
+      activeLaunches: listProfileLaunches(profilesRoot, { limit: 24 }).filter(item => item.profileId === profile.id && item.active).length,
+      ...latestProfileBackup(profile)
+    }
+  });
+}
+
+function prunePendingProfileDiagnoses() {
+  const cutoff = Date.now() - PROFILE_TRANSFER_TTL_MS;
+  for (const [token, pending] of pendingProfileDiagnoses) {
+    if (pending.createdAt < cutoff) pendingProfileDiagnoses.delete(token);
+  }
+}
+
 function knownSkill(skillPath, { writable = false } = {}) {
   const target = path.resolve(String(skillPath || ''));
   const entry = skillInventory().skills.flatMap(skill => skill.locations).find(item => path.resolve(item.path).toLowerCase() === target.toLowerCase());
@@ -541,6 +649,34 @@ function registerIpc() {
     if (pending?.webContentsId === event.sender.id) pendingProfileTransfers.delete(key);
     return true;
   });
+  ipcMain.handle('profiles:diagnose', (event, profileId) => {
+    const profile = findProfile(profilesRoot, String(profileId || ''));
+    const report = collectProfileDiagnosis(profile);
+    prunePendingProfileDiagnoses();
+    const token = randomUUID();
+    pendingProfileDiagnoses.set(token, { createdAt: Date.now(), webContentsId: event.sender.id, report });
+    return { token, report };
+  });
+  ipcMain.handle('profiles:export-diagnosis', async (event, token) => {
+    prunePendingProfileDiagnoses();
+    const pending = pendingProfileDiagnoses.get(String(token || ''));
+    if (!pending || pending.webContentsId !== event.sender.id) throw new Error('体检报告已失效，请重新检查。');
+    const exported = createProfileDiagnosisExport(pending.report, { appVersion: packageMetadata.version });
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: '导出脱敏 Profile 诊断',
+      defaultPath: path.join(app.getPath('downloads'), 'dual-codex-day-profile-diagnosis.json'),
+      filters: [{ name: 'Dual Codex Day Diagnosis', extensions: ['json'] }]
+    });
+    if (result.canceled || !result.filePath) return null;
+    writeFileSync(result.filePath, `${JSON.stringify(exported, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+    return { filePath: path.resolve(result.filePath) };
+  });
+  ipcMain.handle('profiles:discard-diagnosis', (event, token) => {
+    const key = String(token || '');
+    const pending = pendingProfileDiagnoses.get(key);
+    if (pending?.webContentsId === event.sender.id) pendingProfileDiagnoses.delete(key);
+    return true;
+  });
   ipcMain.handle('profiles:launch', async (_event, payload) => {
     const profileId = String(payload?.profileId || '');
     const target = String(payload?.target || '');
@@ -675,7 +811,37 @@ async function captureRequestedScreenshot(window) {
   if (!target) return;
   await new Promise(resolve => setTimeout(resolve, 1200));
   const screenshotView = process.env.DUAL_CODEX_DAY_SCREENSHOT_VIEW || '';
-  if (screenshotView === 'profile-transfer') {
+  if (screenshotView === 'profile-diagnosis') {
+    window.setSize(1400, 960);
+    const diagnosisOpened = await window.webContents.executeJavaScript(`(() => {
+      const dialog = document.querySelector('#profile-diagnosis-dialog');
+      const status = document.querySelector('#profile-diagnosis-status');
+      if (status) { status.textContent = '需处理'; status.dataset.status = 'error'; }
+      const title = document.querySelector('#profile-diagnosis-title');
+      if (title) title.textContent = '工作账号 · 环境体检';
+      const headline = document.querySelector('#profile-diagnosis-headline');
+      if (headline) headline.textContent = '2 项需要处理';
+      const meta = document.querySelector('#profile-diagnosis-meta');
+      if (meta) meta.textContent = '2026/8/31 16:30:00';
+      const groups = document.querySelector('#profile-diagnosis-groups');
+      const rows = group => group.checks.map(item => '<div class="diagnosis-check" data-status="' + item.status + '"><span class="diagnosis-dot"></span><strong>' + item.label + '</strong><span class="diagnosis-check-copy">' + item.detail + (item.items ? '<small>' + item.items + '</small>' : '') + '</span></div>').join('');
+      const data = [
+        { label: '配置与目录', status: '正常', checks: [{ status: 'ok', label: 'config.toml', detail: 'config.toml 可正常解析' }, { status: 'ok', label: '运行目录', detail: '当前运行目录可读' }] },
+        { label: '供应商与认证', status: '需处理', checks: [{ status: 'ok', label: '安全凭据存储', detail: '操作系统安全凭据存储可用' }, { status: 'error', label: '认证状态', detail: '当前供应商缺少所需凭据' }] },
+        { label: '客户端入口', status: '需留意', checks: [{ status: 'ok', label: 'Codex CLI', detail: '入口可用' }, { status: 'ok', label: 'VS Code', detail: '入口可用' }, { status: 'warning', label: 'Codex 桌面端', detail: '未检测到可用入口' }] },
+        { label: 'Skills 与插件', status: '需留意', checks: [{ status: 'warning', label: 'Skills 配置', detail: '1 个 Skill 路径失效', items: 'release-check' }, { status: 'ok', label: '插件状态', detail: '2 个插件状态可读取' }] },
+        { label: '用量索引', status: '需处理', checks: [{ status: 'error', label: '账号用量', detail: '用量索引无法读取' }] },
+        { label: '运行与恢复', status: '正常', checks: [{ status: 'ok', label: '迁移备份', detail: '最近备份：2026-08-31T15:42:00.000Z' }] }
+      ];
+      if (groups) groups.innerHTML = data.map(group => '<section class="diagnosis-group"><div class="diagnosis-group-heading"><h3>' + group.label + '</h3><span>' + group.status + '</span></div>' + rows(group) + '</section>').join('');
+      const exportButton = document.querySelector('#profile-diagnosis-export');
+      if (exportButton) exportButton.disabled = false;
+      dialog?.showModal();
+      return dialog?.open === true;
+    })()`);
+    if (!diagnosisOpened) throw new Error('Profile diagnosis dialog did not open for the screenshot check.');
+    await new Promise(resolve => setTimeout(resolve, 350));
+  } else if (screenshotView === 'profile-transfer') {
     window.setSize(1400, 960);
     const transferOpened = await window.webContents.executeJavaScript(`(() => {
       const dialog = document.querySelector('#profile-transfer-dialog');

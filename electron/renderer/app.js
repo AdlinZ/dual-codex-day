@@ -98,7 +98,8 @@ const state = {
   posterCanvas: null,
   posterFilename: '',
   posterSuccessMessage: '海报已保存。',
-  pendingProfileTransferToken: null
+  pendingProfileTransferToken: null,
+  profileDiagnosisToken: null
 };
 
 const elements = {
@@ -188,6 +189,16 @@ const elements = {
   reportChart: document.querySelector('#report-chart'),
   reportLeaders: document.querySelector('#report-leaders'),
   addProfile: document.querySelector('#add-profile-button'),
+  profileDiagnosisButton: document.querySelector('#profile-diagnosis-button'),
+  profileDiagnosisDialog: document.querySelector('#profile-diagnosis-dialog'),
+  profileDiagnosisTitle: document.querySelector('#profile-diagnosis-title'),
+  profileDiagnosisStatus: document.querySelector('#profile-diagnosis-status'),
+  profileDiagnosisHeadline: document.querySelector('#profile-diagnosis-headline'),
+  profileDiagnosisMeta: document.querySelector('#profile-diagnosis-meta'),
+  profileDiagnosisGroups: document.querySelector('#profile-diagnosis-groups'),
+  profileDiagnosisClose: document.querySelector('#profile-diagnosis-close'),
+  profileDiagnosisRefresh: document.querySelector('#profile-diagnosis-refresh'),
+  profileDiagnosisExport: document.querySelector('#profile-diagnosis-export'),
   exportProfileTransfer: document.querySelector('#export-profile-transfer-button'),
   importProfileTransfer: document.querySelector('#import-profile-transfer-button'),
   profileTransferDialog: document.querySelector('#profile-transfer-dialog'),
@@ -361,10 +372,62 @@ function renderProfileTransferPreview(preview) {
   elements.profileTransferCredential.hidden = !preview.credentialRequired;
 }
 
+function diagnosisStatusLabel(status) {
+  return { ok: '正常', warning: '需留意', error: '需处理' }[status] || '未知';
+}
+
+function renderProfileDiagnosis(report) {
+  elements.profileDiagnosisTitle.textContent = `${report.profile.name} · 环境体检`;
+  elements.profileDiagnosisStatus.textContent = diagnosisStatusLabel(report.status);
+  elements.profileDiagnosisStatus.dataset.status = report.status;
+  elements.profileDiagnosisHeadline.textContent = report.status === 'error'
+    ? `${report.counts.error} 项需要处理`
+    : report.status === 'warning' ? `${report.counts.warning} 项需要留意` : '当前环境检查正常';
+  const generatedAt = new Date(report.generatedAt);
+  elements.profileDiagnosisMeta.textContent = Number.isNaN(generatedAt.valueOf()) ? '' : generatedAt.toLocaleString('zh-CN', { hour12: false });
+  elements.profileDiagnosisGroups.innerHTML = report.groups.map(group => `
+    <section class="diagnosis-group">
+      <div class="diagnosis-group-heading"><h3>${escapeHtml(group.label)}</h3><span>${escapeHtml(diagnosisStatusLabel(group.status))}</span></div>
+      ${group.checks.map(item => `
+        <div class="diagnosis-check" data-status="${escapeHtml(item.status)}">
+          <span class="diagnosis-dot"></span>
+          <strong>${escapeHtml(item.label)}</strong>
+          <span class="diagnosis-check-copy">${escapeHtml(item.detail)}${item.items?.length ? `<small>${escapeHtml(item.items.join('、'))}</small>` : ''}</span>
+        </div>
+      `).join('')}
+    </section>
+  `).join('');
+}
+
 async function discardProfileTransfer() {
   const token = state.pendingProfileTransferToken;
   state.pendingProfileTransferToken = null;
   if (token) await window.dualCodexDay.discardProfileTransfer(token).catch(() => {});
+}
+
+async function discardProfileDiagnosis() {
+  const token = state.profileDiagnosisToken;
+  state.profileDiagnosisToken = null;
+  if (token) await window.dualCodexDay.discardProfileDiagnosis(token).catch(() => {});
+}
+
+async function loadProfileDiagnosis() {
+  const profile = selectedProfile();
+  if (!profile || state.busy) return;
+  setBusy(true);
+  try {
+    await discardProfileDiagnosis();
+    const result = await window.dualCodexDay.diagnoseProfile(profile.id);
+    state.profileDiagnosisToken = result.token;
+    renderProfileDiagnosis(result.report);
+    if (!elements.profileDiagnosisDialog.open) elements.profileDiagnosisDialog.showModal();
+    refreshIcons();
+  } catch (error) {
+    showToast(friendlyProviderError(error) || '无法完成 Profile 环境体检。', true);
+  } finally {
+    setBusy(false);
+    renderSelectedProfile();
+  }
 }
 
 function setBusy(value) {
@@ -374,7 +437,10 @@ function setBusy(value) {
   elements.addProfile.disabled = value;
   elements.importProfileTransfer.disabled = value;
   elements.exportProfileTransfer.disabled = value || !selectedProfile();
+  elements.profileDiagnosisButton.disabled = value || !selectedProfile();
   elements.profileTransferApply.disabled = value;
+  elements.profileDiagnosisRefresh.disabled = value;
+  elements.profileDiagnosisExport.disabled = value || !state.profileDiagnosisToken;
   elements.saveProvider.disabled = value;
   elements.importProviderConfig.disabled = value;
   elements.renameProfile.disabled = value || !selectedProfile();
@@ -416,6 +482,7 @@ function renderSelectedProfile() {
     elements.renameProfile.disabled = true;
     elements.deleteProfile.disabled = true;
     elements.exportProfileTransfer.disabled = true;
+    elements.profileDiagnosisButton.disabled = true;
     elements.usageSourceButton.disabled = true;
     elements.profileLoginStatus.textContent = '未选择账号';
     elements.profileRuntimeSource.textContent = '请选择一个账号配置';
@@ -437,6 +504,7 @@ function renderSelectedProfile() {
   elements.renameProfile.disabled = state.busy;
   elements.deleteProfile.disabled = state.busy;
   elements.exportProfileTransfer.disabled = state.busy;
+  elements.profileDiagnosisButton.disabled = state.busy;
   const provider = profile.provider || { type: 'official', name: 'OpenAI 官方' };
   const providerReady = provider.type === 'official'
     || provider.authMode !== 'environment'
@@ -1773,6 +1841,30 @@ elements.addProfile.addEventListener('click', () => {
   elements.nameInput.value = '';
   elements.dialog.showModal();
   elements.nameInput.focus();
+});
+
+elements.profileDiagnosisButton.addEventListener('click', loadProfileDiagnosis);
+elements.profileDiagnosisRefresh.addEventListener('click', loadProfileDiagnosis);
+elements.profileDiagnosisClose.addEventListener('click', async () => {
+  await discardProfileDiagnosis();
+  elements.profileDiagnosisDialog.close();
+});
+elements.profileDiagnosisDialog.addEventListener('cancel', event => {
+  event.preventDefault();
+  discardProfileDiagnosis().finally(() => elements.profileDiagnosisDialog.close());
+});
+elements.profileDiagnosisExport.addEventListener('click', async () => {
+  if (!state.profileDiagnosisToken || state.busy) return;
+  setBusy(true);
+  try {
+    const exported = await window.dualCodexDay.exportProfileDiagnosis(state.profileDiagnosisToken);
+    if (exported) showToast('脱敏 Profile 诊断已导出。');
+  } catch (error) {
+    showToast(friendlyProviderError(error) || '无法导出 Profile 诊断。', true);
+  } finally {
+    setBusy(false);
+    renderSelectedProfile();
+  }
 });
 
 elements.exportProfileTransfer.addEventListener('click', async () => {

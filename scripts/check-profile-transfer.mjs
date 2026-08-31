@@ -107,6 +107,8 @@ enabled = false
   assert(applied.profile.name === '迁移账号' && applied.preview.action === 'create', 'apply must create a missing Profile');
   assert(applied.preferences.monthlyBudget === 50 && applied.preferences.costMode === 'fast', 'apply must return portable usage preferences for the renderer');
   assert(existsSync(path.join(applied.backupPath, 'backup.json')), 'apply must create backup metadata before writing');
+  const appliedBackup = JSON.parse(readFileSync(path.join(applied.backupPath, 'backup.json'), 'utf8'));
+  assert(appliedBackup.targetProfileId === applied.profile.id && appliedBackup.completedAt, 'successful imports must associate backup metadata with the target Profile');
   const appliedConfig = parseToml(readFileSync(path.join(applied.profile.paths.codexHome, 'config.toml'), 'utf8'));
   assert(appliedConfig.model_provider === 'company' && appliedConfig.features.js_repl === true, 'apply must combine imported common config with the imported provider');
   assert(appliedConfig.skills.config[0].path === path.resolve(installedSkill) && appliedConfig.skills.config[0].enabled === false, 'apply must rebuild Skill paths from the target environment');

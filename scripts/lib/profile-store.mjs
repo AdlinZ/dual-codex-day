@@ -710,6 +710,9 @@ export function applyProfileTransfer(root = defaultProfilesRoot(), transferValue
     writeTextAtomically(path.join(paths.codexHome, 'config.toml'), transferConfigText(transfer, profile.provider, options.available));
     options.afterConfigWrite?.({ profile: enrichProfile(root, profile), backupPath });
     saveProfileRegistry(root, registry);
+    const backupMetadataPath = path.join(backupPath, 'backup.json');
+    const backupMetadata = JSON.parse(readFileSync(backupMetadataPath, 'utf8'));
+    writeJsonAtomically(backupMetadataPath, { ...backupMetadata, targetProfileId: profile.id, completedAt: new Date().toISOString() });
     return {
       profile: enrichProfile(root, profile),
       preferences: transfer.preferences,

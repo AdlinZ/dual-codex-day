@@ -24,6 +24,7 @@
 - Electron 桌面控制台统一展示账号、入口状态、今日用量与最近启动记录
 - 每个 Profile 可选择 OpenAI 官方登录或独立的 Responses API 中转站
 - 通过版本化迁移文件预览、导出和恢复 Profile 设置，写入前自动创建本地备份
+- 只读检查 Profile 配置、认证、入口、Skills、插件、用量索引和备份，并导出脱敏诊断
 - 不读取、复制、导入或展示 `auth.json`；中转站 API Key 使用操作系统加密
 - 启动时清除继承的 API Key 和 Access Token，只向目标 Profile 注入其专用密钥
 - 原生 Windows 图形界面，编译器不可用时自动回退到 PowerShell 界面
@@ -128,6 +129,12 @@ npm run package:electron
 启动中心的导出按钮会生成版本化 JSON，内容包括 Profile 名称、供应商元数据、运行与用量来源、脱敏后的通用 `config.toml`、Profile-local Skill 状态、已安装插件状态和该账号的用量偏好。迁移文件不包含 `auth.json`、API Key、加密密钥、日志、SQLite 用量数据或启动历史。
 
 导入时先显示创建或更新目标、变更范围、缺少的 Skills/插件和凭据要求。只有确认后才写入；每次写入前会在 `%LOCALAPPDATA%\dual-codex-day\profiles\backups` 建立本地备份，失败时自动回滚。目标环境缺少的 Skills 和插件只会列出，不会自动安装。自定义环境认证无法随文件迁移，供应商身份发生变化时需要重新填写 API Key。
+
+### Profile 环境体检
+
+选中 Profile 后可以从启动中心打开环境体检。检查过程保持只读，覆盖注册信息与活动 `config.toml`、运行与用量目录、供应商认证状态、CLI/VS Code/桌面端入口、Skill 路径、已配置插件、用量索引、活动实例和最近迁移备份。单项检查失败会保留其他分组结果。
+
+体检结果分为“正常”“需留意”“需处理”。导出的版本化 JSON 会移除 Profile 名称、内部 ID、用户名和绝对路径，不包含认证文件、API Key、加密密钥、日志正文或用量事件。v0.19.0 不提供自动修复；涉及配置变更和备份恢复的操作继续要求单独确认。
 
 命令行管理入口：
 
@@ -386,7 +393,6 @@ dual-codex-day/
 
 - 可选的周目标和月目标回顾
 - 价格候选快照的人工确认与显式更新流程
-- Profile 环境体检与脱敏诊断导出
 
 v0.10.1 已补齐实例关闭、PID 归属保护和交互式 CLI 终端；Electron 控制中心的设计范围与验收标准见 [v0.10.0 规划](docs/plans/v0.10.0.md)。价格审计与 90 天回顾见 [v0.9.0 规划](docs/plans/v0.9.0.md)，设置迁移与每日摘要见 [v0.8.0 规划](docs/plans/v0.8.0.md)。
 

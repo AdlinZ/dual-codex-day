@@ -4,6 +4,24 @@ Project name: **Dual Codex Day** (`dual-codex-day`). Historical entries may reta
 
 ## Unreleased
 
+## [0.19.0] - 2026-08-31
+
+### Added
+
+- Read-only Profile health checks covering active configuration, runtime and usage directories, authentication readiness, client targets, Skills, plugins, usage indexes, active instances, and migration backups.
+- Grouped health results in the Electron launch center with normal, warning, and error severity.
+- Versioned, sanitized Profile diagnosis export without Profile names, internal ids, usernames, absolute paths, credentials, or log content.
+
+### Security
+
+- Diagnostic exports use renderer-scoped short-lived report tokens; the renderer cannot submit modified report content or a destination path.
+- Health checks inspect credential availability without reading or exporting credential values.
+
+### Reliability
+
+- Plugin discovery failures remain isolated and appear as warnings without blocking the rest of the diagnosis.
+- Successful Profile creation imports now associate their backup metadata with the created Profile for later health checks.
+
 ## [0.18.0] - 2026-08-31
 
 ### Added

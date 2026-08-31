@@ -1157,6 +1157,62 @@ button:disabled {
   overflow: auto;
 }
 
+.profile-diagnosis-modal {
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 40px);
+}
+
+.profile-diagnosis-body {
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  padding: 24px;
+}
+
+.diagnosis-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.diagnosis-summary > div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.diagnosis-summary strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.diagnosis-summary small { color: var(--faint); font-size: 10px; white-space: nowrap; }
+.diagnosis-status { flex: 0 0 auto; padding: 4px 7px; border-radius: 5px; font-size: 10px; font-weight: 800; }
+.diagnosis-status[data-status="ok"] { color: var(--green); background: var(--green-soft); }
+.diagnosis-status[data-status="warning"] { color: #8a5a18; background: var(--amber-soft); }
+.diagnosis-status[data-status="error"] { color: var(--red); background: #f9e9e7; }
+
+.diagnosis-groups { border-bottom: 1px solid var(--line-strong); }
+.diagnosis-group { padding: 15px 0 9px; border-top: 1px solid var(--line); }
+.diagnosis-group:first-child { border-top: 0; }
+.diagnosis-group-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 7px; }
+.diagnosis-group-heading h3 { margin: 0; font-size: 11px; }
+.diagnosis-group-heading span { color: var(--faint); font-size: 9px; font-weight: 700; }
+.diagnosis-check { display: grid; grid-template-columns: 9px minmax(100px, .55fr) minmax(0, 1.7fr); align-items: start; gap: 10px; padding: 7px 0; }
+.diagnosis-dot { width: 7px; height: 7px; margin-top: 4px; border-radius: 50%; background: var(--green); }
+.diagnosis-check[data-status="warning"] .diagnosis-dot { background: var(--amber); }
+.diagnosis-check[data-status="error"] .diagnosis-dot { background: var(--red); }
+.diagnosis-check strong { font-size: 10px; }
+.diagnosis-check-copy { min-width: 0; color: var(--muted); font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+.diagnosis-check-copy small { display: block; margin-top: 2px; color: var(--faint); font-size: 9px; }
+.diagnosis-privacy { display: flex; align-items: flex-start; gap: 9px; padding-top: 14px; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.diagnosis-privacy svg { width: 15px; height: 15px; flex: 0 0 15px; color: var(--green); }
+
 .transfer-summary {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);

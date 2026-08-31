@@ -13,10 +13,11 @@ const preload = readFileSync(path.join(root, 'electron', 'preload.cjs'), 'utf8')
 const html = readFileSync(path.join(root, 'electron', 'renderer', 'index.html'), 'utf8');
 const renderer = readFileSync(path.join(root, 'electron', 'renderer', 'app.js'), 'utf8');
 const usageAnalysis = readFileSync(path.join(root, 'electron', 'renderer', 'usage-analysis.mjs'), 'utf8');
+const profileDoctor = readFileSync(path.join(root, 'scripts', 'lib', 'profile-doctor.mjs'), 'utf8');
 const css = readFileSync(path.join(root, 'electron', 'renderer', 'app.css'), 'utf8');
 const capture = readFileSync(path.join(root, 'scripts', 'capture-electron.mjs'), 'utf8');
 
-assert(packageMetadata.version === '0.18.0', 'Electron release must use package version 0.18.0');
+assert(packageMetadata.version === '0.19.0', 'Electron release must use package version 0.19.0');
 assert(packageMetadata.main === 'electron/main.mjs', 'Electron main entry must be declared in package metadata');
 assert(packageMetadata.scripts.desktop === 'electron .', 'desktop command must launch the Electron entry');
 assert(/contextIsolation:\s*true/.test(main), 'Electron windows must enable context isolation');
@@ -45,6 +46,12 @@ assert(/pendingProfileTransfers/.test(main) && /webContentsId/.test(main) && /PR
 assert(/PROFILE_TRANSFER_MAX_BYTES/.test(main) && /showSaveDialog/.test(main) && /showOpenDialog/.test(main), 'Profile transfer files must use bounded native file dialogs');
 assert(/profile-transfer-dialog/.test(html + renderer + css) && /credentialRequired/.test(renderer), 'Electron must preview changes, missing components, and credential requirements');
 assert(/screenshotView === 'profile-transfer'/.test(main), 'visual verification must cover the Profile transfer preview');
+assert(/profiles:diagnose/.test(main) && /profiles:export-diagnosis/.test(main) && /collectProfileDiagnosis/.test(main), 'Electron must expose a read-only Profile diagnosis flow');
+assert(/new DatabaseSync\(databasePath, \{ readOnly: true/.test(main) && /readOnlyUsageHealth/.test(main), 'Profile diagnosis must inspect the existing usage index without refreshing it');
+assert(/pendingProfileDiagnoses/.test(main) && /webContentsId/.test(main) && /createProfileDiagnosisExport/.test(main), 'diagnostic export must use a renderer-scoped report token');
+assert(/profile-diagnosis-dialog/.test(html + renderer + css) && /diagnosisStatusLabel/.test(renderer), 'Electron must render grouped Profile health results');
+assert(/screenshotView === 'profile-diagnosis'/.test(main), 'visual verification must cover the Profile diagnosis dialog');
+assert(/PROFILE_DIAGNOSIS_SCHEMA_VERSION/.test(profileDoctor) && /createProfileDiagnosisExport/.test(profileDoctor), 'Profile diagnosis must use a versioned sanitized export');
 assert(/confirmLaunch/.test(main) && /listProfileLaunches/.test(main), 'Electron must verify launches and expose persistent instance status');
 assert(/safeStorage\.encryptString/.test(main) && /safeStorage\.decryptString/.test(main), 'provider API keys must use operating-system encryption');
 assert(/readDailySummary/.test(main), 'Electron main process must expose local usage summary data');
@@ -93,6 +100,7 @@ assert(/setInterval/.test(renderer) && /activeLaunches/.test(renderer), 'rendere
 assert(/data-stop-launch/.test(renderer) && /stop-instance-button/.test(css), 'active launch rows must expose a stable close-instance control');
 assert(!/readProviderSecret|decryptString|getProviderSecret/.test(preload), 'preload bridge must not expose provider key reads');
 assert(!/filePath.*applyProfileTransfer|applyProfileTransfer.*filePath/s.test(preload), 'renderer must not submit a filesystem path when applying a Profile transfer');
+assert(!/exportProfileDiagnosis:\s*\([^)]*report/.test(preload), 'renderer must export a stored diagnosis token instead of submitting report content');
 assert(/previewProvider:\s*\(profileId, provider\)/.test(preload) && /importProfileConfig/.test(preload), 'preload must scope provider previews and imports to a selected Profile');
 assert(!/linear-gradient|radial-gradient/.test(css), 'Electron interface must avoid decorative gradients');
 assert(/DUAL_CODEX_DAY_SCREENSHOT_PATH_REPLACEMENTS/.test(main + capture), 'public Electron screenshots must replace local filesystem paths');

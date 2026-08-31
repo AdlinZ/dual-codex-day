@@ -14,7 +14,7 @@
         <img src="../../assets/codex-day-mark.svg" alt="" class="brand-mark">
         <div>
           <strong>Dual Codex Day</strong>
-          <span id="version-label">v0.18.0</span>
+          <span id="version-label">v0.19.0</span>
         </div>
       </div>
       <nav class="primary-tabs" aria-label="主要功能">
@@ -71,6 +71,7 @@
               <p id="selected-profile-path">请选择一个账号配置</p>
             </div>
             <div class="profile-header-actions">
+              <button class="icon-button" id="profile-diagnosis-button" type="button" title="Profile 环境体检" aria-label="Profile 环境体检" disabled><i data-lucide="shield-check"></i></button>
               <button class="icon-button" id="export-profile-transfer-button" type="button" title="导出 Profile" aria-label="导出 Profile" disabled><i data-lucide="download"></i></button>
               <button class="icon-button" id="import-profile-transfer-button" type="button" title="导入 Profile" aria-label="导入 Profile"><i data-lucide="file-input"></i></button>
               <button class="secondary-button" id="profile-usage-source-button" type="button" disabled>
@@ -553,6 +554,23 @@
       <div class="transfer-note"><i data-lucide="shield-check"></i><span>写入前会在本地创建备份；写入失败时自动恢复。缺失组件不会自动安装。</span></div>
       <div class="modal-actions"><button class="secondary-button" id="profile-transfer-cancel" type="button">取消</button><button class="primary-button" id="profile-transfer-apply" type="submit"><i data-lucide="save-check"></i><span>应用导入</span></button></div>
     </form>
+  </dialog>
+
+  <dialog class="modal profile-diagnosis-modal" id="profile-diagnosis-dialog">
+    <div class="profile-diagnosis-body">
+      <div class="modal-heading"><div class="modal-icon"><i data-lucide="shield-check"></i></div><div><span class="eyebrow">Profile health</span><h2 id="profile-diagnosis-title">Profile 环境体检</h2></div></div>
+      <div class="diagnosis-summary">
+        <div><span class="diagnosis-status" id="profile-diagnosis-status">检查中</span><strong id="profile-diagnosis-headline">正在读取本机环境</strong></div>
+        <small id="profile-diagnosis-meta"></small>
+      </div>
+      <div class="diagnosis-groups" id="profile-diagnosis-groups"></div>
+      <div class="diagnosis-privacy"><i data-lucide="shield-check"></i><span>导出文件会移除 Profile 名称、内部 ID、用户名和绝对路径，不包含凭据或日志内容。</span></div>
+      <div class="modal-actions">
+        <button class="secondary-button" id="profile-diagnosis-close" type="button">关闭</button>
+        <button class="secondary-button" id="profile-diagnosis-refresh" type="button"><i data-lucide="refresh-cw"></i><span>重新检查</span></button>
+        <button class="primary-button" id="profile-diagnosis-export" type="button"><i data-lucide="download"></i><span>导出诊断</span></button>
+      </div>
+    </div>
   </dialog>
 
   <dialog class="modal" id="rename-profile-dialog">
