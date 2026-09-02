@@ -43,6 +43,28 @@ export function defaultProfilesRoot() {
   return path.resolve(process.env.CODEX_PROFILES_ROOT || path.join(localDataRoot(), 'dual-codex-day', 'profiles'));
 }
 
+export const DEFAULT_PROFILE_ID = '00000000-0000-4000-8000-000000000000';
+
+export function defaultSystemProfile(root = defaultProfilesRoot(), options = {}) {
+  const codexHome = path.resolve(options.codexHome || process.env.CODEX_HOME || path.join(os.homedir(), '.codex'));
+  const sqliteHome = path.resolve(options.sqliteHome || process.env.CODEX_SQLITE_HOME || codexHome);
+  return {
+    id: DEFAULT_PROFILE_ID,
+    name: '默认账号',
+    builtIn: true,
+    createdAt: '',
+    updatedAt: '',
+    provider: defaultProfileProvider(),
+    usageSource: 'default',
+    runtimeSource: 'default',
+    paths: {
+      ...profilePaths(root, DEFAULT_PROFILE_ID),
+      codexHome,
+      sqliteHome
+    }
+  };
+}
+
 function emptyRegistry() {
   return { schemaVersion: PROFILE_SCHEMA_VERSION, profiles: [] };
 }
@@ -1060,7 +1082,7 @@ function validateWorkingDirectory(value) {
 
 export function buildLaunchPlan(profile, target, options = {}) {
   if (!PROFILE_TARGETS.includes(target)) throw new Error(`Unsupported target: ${target}`);
-  ensureProfileDirectories(profile.paths, profile.provider);
+  if (!profile.builtIn) ensureProfileDirectories(profile.paths, profile.provider);
   const workingDirectory = validateWorkingDirectory(options.workingDirectory);
   const targets = options.targets || detectProfileTargets(options.environment || process.env);
   const detected = targets[target];
@@ -1153,8 +1175,8 @@ function waitForReportedPid(pidFile, timeoutMs = 5_000) {
   throw new Error('Interactive terminal did not report a valid process id.');
 }
 
-export function launchProfile(root, reference, target, options = {}) {
-  const profile = findProfile(root, reference);
+export function launchResolvedProfile(root, profile, target, options = {}) {
+  if (!profile?.id || !profile.paths) throw new Error('A resolved Profile is required.');
   const plan = buildLaunchPlan(profile, target, options);
   const spawnProcess = options.spawnProcess || spawn;
   const child = spawnProcess(plan.command, plan.args, {
@@ -1185,4 +1207,8 @@ export function launchProfile(root, reference, target, options = {}) {
     launchedAt: result.launchedAt
   });
   return result;
+}
+
+export function launchProfile(root, reference, target, options = {}) {
+  return launchResolvedProfile(root, findProfile(root, reference), target, options);
 }

@@ -10,13 +10,15 @@ import {
   applyProfileTransfer,
   applyProfileRecovery,
   createProfile,
+  DEFAULT_PROFILE_ID,
   defaultProfilesRoot,
+  defaultSystemProfile,
   detectProfileTargets,
   exportProfileTransfer,
   findProfile,
   importProfileConfig,
   isProcessAlive,
-  launchProfile,
+  launchResolvedProfile,
   listProfileLaunches,
   listProfileRecoveryBackups,
   listProfiles,
@@ -81,6 +83,27 @@ function invalidateProfileHealth() {
   profileReadinessCache.clear();
 }
 
+function systemDefaultProfile() {
+  return defaultSystemProfile(profilesRoot, {
+    codexHome: defaultCodexRoot,
+    sqliteHome: process.env.CODEX_SQLITE_HOME || defaultCodexRoot
+  });
+}
+
+function listLauncherProfiles() {
+  return [systemDefaultProfile(), ...listProfiles(profilesRoot)];
+}
+
+function findLauncherProfile(reference) {
+  return String(reference || '') === DEFAULT_PROFILE_ID
+    ? systemDefaultProfile()
+    : findProfile(profilesRoot, reference);
+}
+
+function profileUsageSourceId(profile) {
+  return profile?.usageSource === 'default' ? 'default' : `profile:${profile?.id || ''}`;
+}
+
 function serializableTargets(targets) {
   return Object.fromEntries(Object.entries(targets).map(([key, value]) => [key, {
     available: Boolean(value.available),
@@ -136,6 +159,7 @@ function publicProfile(profile) {
   return {
     id: profile.id,
     name: profile.name,
+    builtIn: profile.builtIn === true,
     createdAt: profile.createdAt,
     updatedAt: profile.updatedAt,
     root: profile.paths.root,
@@ -332,9 +356,9 @@ function readWorkCombinations(profiles, targets) {
 }
 
 function getSnapshot(profileId) {
-  const profiles = listProfiles(profilesRoot);
+  const profiles = listLauncherProfiles();
   const selectedProfile = profiles.find(profile => profile.id === String(profileId || '')) || profiles[0] || null;
-  const launcherUsageSourceId = selectedProfile ? `profile:${selectedProfile.id}` : 'default';
+  const launcherUsageSourceId = profileUsageSourceId(selectedProfile);
   const recentLaunches = listProfileLaunches(profilesRoot, { limit: 10 });
   const targets = readTargets();
   return {
@@ -423,6 +447,7 @@ function readActiveProfileConfig(profile) {
 }
 
 function latestProfileBackup(profile) {
+  if (profile.builtIn) return { backupState: 'none' };
   const latest = listProfileRecoveryBackups(profilesRoot, profile.id)[0];
   return latest
     ? { backupState: latest.status, backupCreatedAt: latest.createdAt || '' }
@@ -462,7 +487,7 @@ function collectProfileDiagnosis(profile) {
   const hasProviderCredential = profile.provider.type === 'custom'
     && profile.provider.authMode === 'environment'
     && existsSync(encryptedSecretPath);
-  const usage = readOnlyUsageHealth(`profile:${profile.id}`);
+  const usage = readOnlyUsageHealth(profileUsageSourceId(profile));
   const targets = detectedTargets();
   const credentialStorageAvailable = secureProviderStorageAvailable();
   const resolvedLoginStatus = profile.provider.type === 'custom'
@@ -472,7 +497,13 @@ function collectProfileDiagnosis(profile) {
     : loginStatus(profile, hasProviderCredential);
   return diagnoseProfileEnvironment({
     profile,
-    configuration: { registryValid: true, configExists: activeConfig.exists, configValid: activeConfig.valid },
+    configuration: {
+      registryValid: true,
+      registryRequired: !profile.builtIn,
+      configExists: activeConfig.exists,
+      configValid: activeConfig.valid,
+      configRequired: !profile.builtIn || activeConfig.exists
+    },
     directories: { runtimeAvailable: directoryAvailable(activeConfig.codexHome), usageAvailable: directoryAvailable(usageRoot) },
     credentialStorageAvailable,
     loginStatus: resolvedLoginStatus,
@@ -757,14 +788,14 @@ function registerIpc() {
     return true;
   });
   ipcMain.handle('profiles:diagnose', (event, profileId) => {
-    const profile = findProfile(profilesRoot, String(profileId || ''));
+    const profile = findLauncherProfile(profileId);
     invalidateProfileHealth();
     const report = collectProfileDiagnosis(profile);
     const token = storePendingProfileDiagnosis(event, report);
     return { token, report };
   });
   ipcMain.handle('profiles:preflight', (event, payload) => {
-    const profile = findProfile(profilesRoot, String(payload?.profileId || ''));
+    const profile = findLauncherProfile(payload?.profileId);
     const target = String(payload?.target || '');
     if (!PROFILE_TARGETS.includes(target)) throw new Error('不支持的启动目标。');
     invalidateProfileHealth();
@@ -841,11 +872,11 @@ function registerIpc() {
     const profileId = String(payload?.profileId || '');
     const target = String(payload?.target || '');
     if (!PROFILE_TARGETS.includes(target)) throw new Error('不支持的启动目标。');
-    const profile = findProfile(profilesRoot, profileId);
+    const profile = findLauncherProfile(profileId);
     const providerApiKey = profile.provider.type === 'custom' && profile.provider.authMode === 'environment'
       ? readProviderSecret(profile)
       : undefined;
-    const result = launchProfile(profilesRoot, profile.id, target, {
+    const result = launchResolvedProfile(profilesRoot, profile, target, {
       workingDirectory: currentWorkspace,
       providerApiKey,
       targets: detectedTargets(),
@@ -894,7 +925,7 @@ function registerIpc() {
     return { ...await stopRecordedLaunch(launch), canceled: false };
   });
   ipcMain.handle('profiles:stop-all', async (_event, profileId) => {
-    const profile = findProfile(profilesRoot, String(profileId || ''));
+    const profile = findLauncherProfile(profileId);
     const launches = listProfileLaunches(profilesRoot, { limit: 100 })
       .filter(launch => launch.profileId === profile.id && launch.active);
     if (!launches.length) return { canceled: false, results: [] };
@@ -920,7 +951,7 @@ function registerIpc() {
     return { canceled: false, results };
   });
   ipcMain.handle('profiles:open-folder', async (_event, profileId) => {
-    const profile = findProfile(profilesRoot, String(profileId || ''));
+    const profile = findLauncherProfile(profileId);
     const target = profile.runtimeSource === 'default' ? defaultCodexRoot : profile.paths.root;
     const error = await shell.openPath(target);
     if (error) throw new Error(error);
@@ -938,7 +969,7 @@ function registerIpc() {
   });
   ipcMain.handle('work-combinations:activate', (_event, combinationId) => {
     const combination = findWorkCombination(profilesRoot, String(combinationId || ''));
-    const profile = findProfile(profilesRoot, combination.profileId);
+    const profile = findLauncherProfile(combination.profileId);
     if (!directoryAvailable(combination.workspace)) throw new Error('工作目录已失效，请重新选择目录。');
     if (!detectedTargets()[combination.target]?.available) throw new Error('这个客户端入口当前不可用。');
     currentWorkspace = combination.workspace;
@@ -954,7 +985,7 @@ function registerIpc() {
   });
   ipcMain.handle('work-combinations:repair-workspace', async (_event, combinationId) => {
     const combination = findWorkCombination(profilesRoot, String(combinationId || ''));
-    findProfile(profilesRoot, combination.profileId);
+    findLauncherProfile(combination.profileId);
     const parent = path.dirname(combination.workspace);
     const result = await dialog.showOpenDialog(mainWindow, {
       title: '重新选择工作目录',
@@ -1284,12 +1315,12 @@ async function captureRequestedScreenshot(window) {
     await new Promise(resolve => setTimeout(resolve, 350));
   } else if (screenshotView.startsWith('launcher')) {
     window.setSize(1440, 960);
-    const launcherProfileIndex = screenshotView === 'launcher-empty' ? 1 : 0;
+    const launcherProfileIndex = screenshotView === 'launcher-empty' ? 2 : 0;
     const launcherLoaded = await window.webContents.executeJavaScript(`(async () => {
       for (let attempt = 0; attempt < 160; attempt += 1) {
         const profiles = Array.from(document.querySelectorAll('[data-profile-id]'));
-        if (profiles.length >= 2 && document.querySelector('#metric-tokens')?.textContent !== '0') {
-          if (${launcherProfileIndex} === 1) {
+        if (profiles.length >= 3 && document.querySelector('#metric-tokens')?.textContent !== '0') {
+          if (${launcherProfileIndex} === 2) {
             profiles[${launcherProfileIndex}].click();
             for (let profileAttempt = 0; profileAttempt < 160; profileAttempt += 1) {
               const heading = document.querySelector('#usage-heading')?.textContent || '';
@@ -1300,7 +1331,7 @@ async function captureRequestedScreenshot(window) {
             }
             return false;
           }
-          return (document.querySelector('#usage-heading')?.textContent || '').includes('工作账号');
+          return (document.querySelector('#usage-heading')?.textContent || '').includes('默认账号');
         }
         await new Promise(resolve => setTimeout(resolve, 50));
       }

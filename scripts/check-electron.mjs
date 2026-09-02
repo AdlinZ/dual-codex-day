@@ -31,6 +31,9 @@ assert(/Content-Security-Policy/.test(html) && /connect-src 'none'/.test(html), 
 assert(!/frame-src|<iframe/i.test(html), 'native usage analysis must not embed the legacy web dashboard');
 assert(/lucide\/dist\/esm\/createElement\.mjs/.test(renderer) && /icons\/refresh-cw\.mjs/.test(renderer), 'renderer must use tree-scoped Lucide icon modules');
 assert(/profiles:create/.test(main) && /profiles:launch/.test(main), 'Electron main process must use profile IPC handlers');
+assert(/defaultSystemProfile/.test(main) && /listLauncherProfiles\(\)/.test(main) && /builtIn:\s*profile\.builtIn === true/.test(main), 'launcher snapshots must include the built-in system default account');
+assert(/findLauncherProfile/.test(main) && /launchResolvedProfile/.test(main), 'the built-in account must use the shared scoped launch flow');
+assert(/profile\.builtIn/.test(renderer) && /managedProfile/.test(renderer), 'the built-in account must disable Profile-only mutation controls');
 assert(/profiles:stop/.test(main) && /stopProfileLaunch/.test(main + preload + renderer), 'Electron must close a specific recorded instance through scoped IPC');
 assert(/profiles:stop-all/.test(main) && /profile-stop-button/.test(html + renderer + css) && /stopProfileLaunches/.test(preload + renderer), 'selected Profiles with active instances must expose a visible close-client action');
 assert(/work-combinations:activate/.test(main) && /activateWorkCombination/.test(preload + renderer), 'saved work must resolve a stored Profile, workspace, and target before using the shared launch flow');
@@ -81,8 +84,9 @@ assert(/safeStorage\.encryptString/.test(main) && /safeStorage\.decryptString/.t
 assert(/readDailySummary/.test(main), 'Electron main process must expose local usage summary data');
 assert(/getSnapshot\(profileId\)/.test(main) && /readUsage\(launcherUsageSourceId\)/.test(main), 'launcher summary must follow the selected Profile usage source');
 assert(/getSnapshot:\s*profileId\s*=>/.test(preload) && /getSnapshot\(preferredProfileId\)/.test(renderer), 'renderer must request the selected Profile summary');
-assert(/usage\.source\?\.name/.test(renderer) && /profile:\$\{state\.selectedProfileId\}/.test(renderer), 'launcher and usage analysis must label and open the selected Profile source');
+assert(/usage\.source\?\.name/.test(renderer) && /profileUsageSourceId\(profile\)/.test(renderer), 'launcher and usage analysis must label and open the selected account source');
 assert(/launcher-empty/.test(main) && /heading\.includes\('个人账号'\).*tokens === '0'.*calls === '0'/s.test(main), 'screenshot verification must cover an empty isolated Profile summary');
+assert(/profiles\.length >= 3/.test(main) && /usage-heading[\s\S]*?includes\('默认账号'\)/.test(main), 'launcher screenshot verification must select the built-in default account');
 assert(/usage:get-data/.test(main) && /getUsageData/.test(preload), 'Electron must expose scoped native usage data IPC');
 assert(/usage:get-comparison/.test(main) && /getUsageComparison/.test(preload) && /usage-comparison/.test(html + renderer + css), 'Electron must compare account usage through scoped read-only data');
 assert(/readUsageSettings\(dataset\.source\.id\)/.test(renderer), 'account comparison must use each source cost settings');

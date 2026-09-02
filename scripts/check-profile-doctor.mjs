@@ -64,6 +64,28 @@ assert.equal(signedOut.readiness.blockingCount, 0);
 assert.deepEqual(signedOut.readiness.primaryAction, { type: 'launch-login', label: '打开 Codex 登录', target: 'desktop' });
 assert.deepEqual(summarizeProfileReadiness(signedOut), signedOut.readiness);
 
+const defaultAccount = diagnoseProfileEnvironment({
+  ...healthyInput,
+  profile: {
+    ...healthyInput.profile,
+    id: '00000000-0000-4000-8000-000000000000',
+    name: '默认账号',
+    runtimeSource: 'default',
+    usageSource: 'default'
+  },
+  configuration: {
+    registryValid: true,
+    registryRequired: false,
+    configExists: false,
+    configValid: false,
+    configRequired: false
+  },
+  recovery: { activeLaunches: 0, backupState: 'none' }
+});
+assert.equal(defaultAccount.groups.find(group => group.id === 'configuration').checks.find(item => item.id === 'config').status, 'ok', 'the built-in default account may use Codex defaults without a config.toml');
+assert.equal(defaultAccount.groups.find(group => group.id === 'configuration').checks.find(item => item.id === 'registry').status, 'ok', 'the built-in default account must not require a Profile registry entry');
+assert.equal(defaultAccount.readiness.state, 'ready', 'a healthy built-in default account must be launch-ready');
+
 const exported = createProfileDiagnosisExport({
   ...degraded,
   groups: degraded.groups.map(group => ({

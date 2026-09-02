@@ -350,6 +350,10 @@ function selectedProfile() {
   return state.snapshot?.profiles.find(profile => profile.id === state.selectedProfileId) || null;
 }
 
+function profileUsageSourceId(profile) {
+  return profile?.usageSource === 'default' ? 'default' : `profile:${profile?.id || ''}`;
+}
+
 function activeLaunches(profileId = null) {
   return (state.snapshot?.recentLaunches || []).filter(launch => launch.active && (!profileId || launch.profileId === profileId));
 }
@@ -541,7 +545,7 @@ async function selectProfileRecovery(backupId) {
 
 async function openProfileRecovery() {
   const profile = selectedProfile();
-  if (!profile || state.busy) return;
+  if (!profile || profile.builtIn || state.busy) return;
   setBusy(true);
   try {
     await discardProfileRecovery();
@@ -618,7 +622,7 @@ async function runDiagnosisAction(action) {
     return;
   }
   if (action.type === 'open-usage-diagnostics') {
-    state.selectedUsageSourceId = `profile:${profile.id}`;
+    state.selectedUsageSourceId = profileUsageSourceId(profile);
     state.dashboardLoaded = false;
     await closeProfileDiagnosis();
     await switchView('dashboard');
@@ -739,25 +743,27 @@ async function removeSavedWork(combinationId) {
 }
 
 function setBusy(value) {
+  const profile = selectedProfile();
+  const managedProfile = profile && !profile.builtIn;
   state.busy = value;
   document.body.classList.toggle('is-busy', value);
   elements.refresh.disabled = value;
   elements.addProfile.disabled = value;
   elements.importProfileTransfer.disabled = value;
-  elements.exportProfileTransfer.disabled = value || !selectedProfile();
-  elements.profileDiagnosisButton.disabled = value || !selectedProfile();
-  elements.profileRecoveryButton.disabled = value || !selectedProfile();
+  elements.exportProfileTransfer.disabled = value || !managedProfile;
+  elements.profileDiagnosisButton.disabled = value || !profile;
+  elements.profileRecoveryButton.disabled = value || !managedProfile;
   elements.profileRecoveryApply.disabled = value || !state.profileRecoveryToken || activeLaunches(state.selectedProfileId).length > 0;
   elements.profileTransferApply.disabled = value;
   elements.profileDiagnosisRefresh.disabled = value;
   elements.profileDiagnosisLaunch.disabled = value;
   elements.profileDiagnosisExport.disabled = value || !state.profileDiagnosisToken;
-  elements.profileReadinessButton.disabled = value || !selectedProfile();
+  elements.profileReadinessButton.disabled = value || !profile;
   elements.profileStopButton.disabled = value || activeLaunches(state.selectedProfileId).length === 0;
   elements.saveProvider.disabled = value;
-  elements.importProviderConfig.disabled = value;
-  elements.renameProfile.disabled = value || !selectedProfile();
-  elements.deleteProfile.disabled = value || !selectedProfile();
+  elements.importProviderConfig.disabled = value || !managedProfile;
+  elements.renameProfile.disabled = value || !managedProfile;
+  elements.deleteProfile.disabled = value || !managedProfile;
 }
 
 function renderProfiles() {
@@ -771,7 +777,7 @@ function renderProfiles() {
       <span class="profile-avatar">${escapeHtml(initials(profile.name))}</span>
       <span class="profile-copy">
         <strong>${escapeHtml(profile.name)}</strong>
-        <span>${activeLaunches(profile.id).length ? `${activeLaunches(profile.id).length} 个实例运行中` : profile.runtimeSource === 'default' ? '当前默认 Codex' : escapeHtml(profile.provider?.name || 'OpenAI 官方')}</span>
+        <span>${activeLaunches(profile.id).length ? `${activeLaunches(profile.id).length} 个实例运行中` : profile.builtIn ? '系统默认 Codex' : profile.runtimeSource === 'default' ? '当前默认 Codex' : escapeHtml(profile.provider?.name || 'OpenAI 官方')}</span>
         <small class="profile-readiness-label" data-state="${escapeHtml(profile.readiness?.state || 'attention')}">${profile.readiness?.state === 'ready' ? '就绪' : profile.readiness?.state === 'blocked' ? '不可启动' : '需留意'}${profile.readiness?.issueCount ? ` · ${profile.readiness.issueCount} 项` : ''}</small>
       </span>
       <i data-lucide="chevron-right"></i>
@@ -826,12 +832,12 @@ function renderSelectedProfile() {
   elements.usageSourceLabel.textContent = sameSource
     ? profile.runtimeSource === 'default' ? '默认账号' : '独立账号'
     : '混合来源';
-  elements.usageSourceButton.disabled = state.busy;
-  elements.renameProfile.disabled = state.busy;
-  elements.deleteProfile.disabled = state.busy;
-  elements.exportProfileTransfer.disabled = state.busy;
+  elements.usageSourceButton.disabled = state.busy || profile.builtIn;
+  elements.renameProfile.disabled = state.busy || profile.builtIn;
+  elements.deleteProfile.disabled = state.busy || profile.builtIn;
+  elements.exportProfileTransfer.disabled = state.busy || profile.builtIn;
   elements.profileDiagnosisButton.disabled = state.busy;
-  elements.profileRecoveryButton.disabled = state.busy;
+  elements.profileRecoveryButton.disabled = state.busy || profile.builtIn;
   const readiness = profile.readiness || { state: 'attention', issueCount: 1, blockingCount: 0, actionCount: 0 };
   elements.profileReadiness.dataset.state = readiness.state;
   elements.profileReadinessTitle.textContent = readiness.state === 'ready'
@@ -866,6 +872,7 @@ function renderSelectedProfile() {
   elements.providerState.classList.toggle('is-ready', providerReady);
   elements.providerState.classList.toggle('is-error', !providerReady);
   elements.editProvider.disabled = state.busy || profile.runtimeSource === 'default';
+  elements.importProviderConfig.disabled = state.busy || profile.builtIn;
   elements.openProfileFolder.disabled = state.busy;
   const login = profile.loginStatus || { state: 'unknown', method: 'unknown' };
   const loginLabels = {
@@ -2317,7 +2324,7 @@ elements.profileRecoveryApply.addEventListener('click', async () => {
 
 elements.exportProfileTransfer.addEventListener('click', async () => {
   const profile = selectedProfile();
-  if (!profile || state.busy) return;
+  if (!profile || profile.builtIn || state.busy) return;
   setBusy(true);
   try {
     const exported = await window.dualCodexDay.exportProfileTransfer(profile.id, readUsageSettings(`profile:${profile.id}`));
@@ -2400,7 +2407,7 @@ elements.providerForm.addEventListener('change', renderProviderFormMode);
 
 elements.importProviderConfig.addEventListener('click', async () => {
   const profile = selectedProfile();
-  if (!profile || state.busy) return;
+  if (!profile || profile.builtIn || state.busy) return;
   setBusy(true);
   try {
     const imported = await window.dualCodexDay.importProfileConfig(profile.id);
@@ -2458,7 +2465,7 @@ elements.createForm.addEventListener('submit', async event => {
 
 elements.renameProfile.addEventListener('click', () => {
   const profile = selectedProfile();
-  if (!profile || state.busy) return;
+  if (!profile || profile.builtIn || state.busy) return;
   elements.renameProfileInput.value = profile.name;
   elements.renameProfileDialog.showModal();
   elements.renameProfileInput.select();
@@ -2468,7 +2475,7 @@ elements.renameProfileForm.addEventListener('submit', async event => {
   event.preventDefault();
   const profile = selectedProfile();
   const name = elements.renameProfileInput.value.trim();
-  if (!profile || !name || state.busy) return;
+  if (!profile || profile.builtIn || !name || state.busy) return;
   setBusy(true);
   try {
     const updated = await window.dualCodexDay.renameProfile(profile.id, name);
@@ -2485,7 +2492,7 @@ elements.renameProfileForm.addEventListener('submit', async event => {
 
 elements.deleteProfile.addEventListener('click', () => {
   const profile = selectedProfile();
-  if (!profile || state.busy) return;
+  if (!profile || profile.builtIn || state.busy) return;
   elements.deleteProfileName.textContent = profile.name;
   elements.deleteProfileDialog.showModal();
 });
@@ -2493,7 +2500,7 @@ elements.deleteProfile.addEventListener('click', () => {
 elements.deleteProfileForm.addEventListener('submit', async event => {
   event.preventDefault();
   const profile = selectedProfile();
-  if (!profile || state.busy) return;
+  if (!profile || profile.builtIn || state.busy) return;
   setBusy(true);
   try {
     await window.dualCodexDay.deleteProfile(profile.id);
@@ -2593,7 +2600,7 @@ elements.openProfileFolder.addEventListener('click', async () => {
 
 elements.usageSourceButton.addEventListener('click', () => {
   const profile = selectedProfile();
-  if (!profile || state.busy) return;
+  if (!profile || profile.builtIn || state.busy) return;
   const input = elements.usageSourceForm.querySelector(`input[name="profileUsageSource"][value="${profile.usageSource || 'profile'}"]`);
   if (input) input.checked = true;
   const runtimeInput = elements.usageSourceForm.querySelector(`input[name="profileRuntimeSource"][value="${profile.runtimeSource || 'profile'}"]`);
@@ -2609,7 +2616,7 @@ elements.usageSourceForm.addEventListener('submit', async event => {
   const profile = selectedProfile();
   const source = elements.usageSourceForm.querySelector('input[name="profileUsageSource"]:checked')?.value;
   const runtimeSource = elements.usageSourceForm.querySelector('input[name="profileRuntimeSource"]:checked')?.value;
-  if (!profile || !source || !runtimeSource || state.busy) return;
+  if (!profile || profile.builtIn || !source || !runtimeSource || state.busy) return;
   setBusy(true);
   try {
     await window.dualCodexDay.setProfileRuntimeSource(profile.id, runtimeSource);
@@ -2627,8 +2634,9 @@ elements.usageSourceForm.addEventListener('submit', async event => {
 });
 
 elements.openDashboard.addEventListener('click', async () => {
-  if (state.selectedProfileId) {
-    state.selectedUsageSourceId = `profile:${state.selectedProfileId}`;
+  const profile = selectedProfile();
+  if (profile) {
+    state.selectedUsageSourceId = profileUsageSourceId(profile);
     state.dashboardLoaded = false;
     renderUsageSources();
   }

@@ -90,7 +90,9 @@ export function diagnoseProfileEnvironment(input = {}) {
   const missingSkills = safeItems(components.missingSkills);
   const missingPlugins = safeItems(components.missingPlugins);
   const pluginFailureCount = safeCount(components.pluginFailureCount);
-  const configUnavailable = !configuration.configExists || configuration.configValid === false;
+  const registryRequired = configuration.registryRequired !== false;
+  const configRequired = configuration.configRequired !== false;
+  const configUnavailable = configRequired && (!configuration.configExists || configuration.configValid === false);
   const configAction = recovery.backupState === 'valid'
     ? remediation('open-recovery', '打开恢复中心')
     : remediation('open-profile-folder', '打开配置目录');
@@ -102,11 +104,13 @@ export function diagnoseProfileEnvironment(input = {}) {
 
   const groups = [
     group('configuration', '配置与目录', [
-      check('registry', 'Profile 注册表', configuration.registryValid === false ? 'error' : 'ok', configuration.registryValid === false ? 'Profile 注册表无效' : 'Profile 注册信息有效', [], {
-        blocking: configuration.registryValid === false,
-        action: configuration.registryValid === false ? remediation('open-profile-folder', '打开配置目录') : null
+      check('registry', registryRequired ? 'Profile 注册表' : '系统账号注册信息', configuration.registryValid === false ? 'error' : 'ok', configuration.registryValid === false ? 'Profile 注册表无效' : registryRequired ? 'Profile 注册信息有效' : '默认账号不使用独立 Profile 注册表', [], {
+        blocking: registryRequired && configuration.registryValid === false,
+        action: registryRequired && configuration.registryValid === false ? remediation('open-profile-folder', '打开配置目录') : null
       }),
-      check('config', 'config.toml', configUnavailable ? 'error' : 'ok', !configuration.configExists ? '缺少 config.toml' : configuration.configValid === false ? 'config.toml 无法解析' : 'config.toml 可正常解析', [], {
+      check('config', 'config.toml', configUnavailable ? 'error' : 'ok', !configuration.configExists
+        ? configRequired ? '缺少 config.toml' : '默认账号使用 Codex 内置配置'
+        : configuration.configValid === false ? 'config.toml 无法解析' : 'config.toml 可正常解析', [], {
         blocking: configUnavailable,
         action: configUnavailable ? configAction : null
       }),

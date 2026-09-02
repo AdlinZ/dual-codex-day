@@ -6,6 +6,8 @@ import { parse as parseToml } from 'smol-toml';
 import {
   buildLaunchPlan,
   createProfile,
+  DEFAULT_PROFILE_ID,
+  defaultSystemProfile,
   findProfile,
   importProfileConfig,
   launchProfile,
@@ -67,6 +69,11 @@ fakeEnvironment.OpenAi_Api_Key = 'must-not-leak-with-different-case';
 
 try {
   assert(loadProfileRegistry(profileRoot).profiles.length === 0, 'missing registry should behave as an empty profile list');
+  const systemCodexHome = path.join(temporaryRoot, 'system-codex');
+  const builtInDefault = defaultSystemProfile(profileRoot, { codexHome: systemCodexHome, sqliteHome: systemCodexHome });
+  assert(builtInDefault.id === DEFAULT_PROFILE_ID && builtInDefault.builtIn === true, 'the system default account must have a stable built-in identity');
+  assert(builtInDefault.paths.codexHome === systemCodexHome && builtInDefault.runtimeSource === 'default' && builtInDefault.usageSource === 'default', 'the built-in account must use the system Codex state');
+  assert(loadProfileRegistry(profileRoot).profiles.length === 0, 'creating the built-in account view must not modify the Profile registry');
   const first = createProfile(profileRoot, 'Work account');
   const second = createProfile(profileRoot, 'Personal account');
   assert(first.id !== second.id, 'profiles must have distinct opaque ids');
@@ -171,10 +178,17 @@ command = "figma-bridge"
     ...providerOptions,
     defaultCodexHome: path.join(temporaryRoot, 'system-codex')
   });
+  const builtInDesktopPlan = buildLaunchPlan(builtInDefault, 'desktop', {
+    ...providerOptions,
+    defaultCodexHome: systemCodexHome,
+    defaultSqliteHome: systemCodexHome
+  });
   assert(cliPlan.args.includes(first.paths.codexHome) && cliPlan.args.includes(first.paths.sqliteHome), 'CLI runner must receive both isolated state paths');
   assert(vscodePlan.args.includes('--user-data-dir') && vscodePlan.args.includes(first.paths.vscodeData), 'VS Code must receive an isolated user data directory');
   assert(desktopPlan.args.includes(`--user-data-dir=${first.paths.desktopData}`), 'desktop app must receive an isolated Electron data directory');
   assert(defaultDesktopPlan.args.length === 0 && defaultDesktopPlan.environment.CODEX_HOME === path.join(temporaryRoot, 'system-codex'), 'default desktop launches must use the system Codex state without an isolated user-data argument');
+  assert(builtInDesktopPlan.args.length === 0 && builtInDesktopPlan.environment.CODEX_HOME === systemCodexHome, 'the built-in account must launch the system Codex environment');
+  assert(!existsSync(path.join(systemCodexHome, 'config.toml')), 'launch planning for the built-in account must not create or overwrite the system config');
   assert(desktopPlan.experimental === true && vscodePlan.experimental === false, 'only desktop multi-instance support should be marked experimental');
   assert(!vscodePlan.args.some(argument => argument.includes(first.name)), 'display names must not be used as filesystem arguments');
 
