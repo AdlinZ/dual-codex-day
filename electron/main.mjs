@@ -38,6 +38,14 @@ import { readCcSwitchAudit } from '../scripts/lib/cc-switch-audit.mjs';
 import { discoverProjectSkillRoots, removeManagedSkill, scanSkills, setSkillEnabled, shareSkill, skillRoots, syncSkill } from '../scripts/lib/skill-store.mjs';
 import { installPlugin, listPluginMarketplaces, removePlugin, scanPluginSkills, setPluginEnabled } from '../scripts/lib/plugin-store.mjs';
 import { createProfileDiagnosisExport, diagnoseProfileEnvironment, summarizeProfileReadiness } from '../scripts/lib/profile-doctor.mjs';
+import {
+  findWorkCombination,
+  listWorkCombinations,
+  recordWorkCombination,
+  removeWorkCombination,
+  setWorkCombinationPinned,
+  updateWorkCombinationWorkspace
+} from '../scripts/lib/work-combination-store.mjs';
 
 const electronDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.dirname(electronDirectory);
@@ -55,9 +63,7 @@ const defaultCcSwitchDatabase = path.resolve(process.env.CC_SWITCH_DATABASE || p
 const profilesRoot = defaultProfilesRoot();
 
 let mainWindow = null;
-let currentWorkspace = process.env.DUAL_CODEX_DAY_SCREENSHOT_WORKSPACE
-  ? path.resolve(process.env.DUAL_CODEX_DAY_SCREENSHOT_WORKSPACE)
-  : app.isPackaged ? os.homedir() : repoRoot;
+let currentWorkspace = initialWorkspace();
 let targetCache = null;
 let projectSkillRootsCache = null;
 const loginStatusCache = new Map();
@@ -80,6 +86,19 @@ function serializableTargets(targets) {
     available: Boolean(value.available),
     experimental: Boolean(value.experimental)
   }]));
+}
+
+function initialWorkspace() {
+  if (process.env.DUAL_CODEX_DAY_SCREENSHOT_WORKSPACE) {
+    return path.resolve(process.env.DUAL_CODEX_DAY_SCREENSHOT_WORKSPACE);
+  }
+  if (!app.isPackaged) return repoRoot;
+  try {
+    const latest = listWorkCombinations(profilesRoot)
+      .find(item => directoryAvailable(item.workspace));
+    if (latest) return latest.workspace;
+  } catch {}
+  return os.homedir();
 }
 
 function detectedTargets() {
@@ -272,11 +291,52 @@ function readUsage(sourceId = 'default') {
   }
 }
 
+function readWorkCombinations(profiles, targets) {
+  try {
+    const profileById = new Map(profiles.map(profile => [profile.id, profile]));
+    const items = listWorkCombinations(profilesRoot);
+    const latestId = items[0]?.id || null;
+    const ordered = [
+      ...items.filter(item => item.id === latestId),
+      ...items.filter(item => item.id !== latestId && item.pinned),
+      ...items.filter(item => item.id !== latestId && !item.pinned)
+    ].slice(0, 5);
+    return {
+      error: null,
+      total: items.length,
+      items: ordered.map(item => {
+        const profile = profileById.get(item.profileId) || null;
+        const workspaceAvailable = directoryAvailable(item.workspace);
+        const targetAvailable = Boolean(targets[item.target]?.available);
+        const unavailableReason = !profile
+          ? 'profile-missing'
+          : !workspaceAvailable
+            ? 'workspace-missing'
+            : !targetAvailable ? 'target-missing' : null;
+        return {
+          ...item,
+          profileName: profile?.name || '账号已删除',
+          workspaceName: path.basename(item.workspace) || item.workspace,
+          workspaceAvailable,
+          profileAvailable: Boolean(profile),
+          targetAvailable,
+          unavailableReason,
+          available: unavailableReason === null,
+          isLast: item.id === latestId
+        };
+      })
+    };
+  } catch {
+    return { error: '最近工作记录无法读取。', total: 0, items: [] };
+  }
+}
+
 function getSnapshot(profileId) {
   const profiles = listProfiles(profilesRoot);
   const selectedProfile = profiles.find(profile => profile.id === String(profileId || '')) || profiles[0] || null;
   const launcherUsageSourceId = selectedProfile ? `profile:${selectedProfile.id}` : 'default';
   const recentLaunches = listProfileLaunches(profilesRoot, { limit: 10 });
+  const targets = readTargets();
   return {
     version: packageMetadata.version,
     workspace: currentWorkspace,
@@ -284,10 +344,11 @@ function getSnapshot(profileId) {
     profiles: profiles.map(profile => ({ ...publicProfile(profile), readiness: cachedProfileReadiness(profile) })),
     usageSources: publicUsageSources(),
     security: { providerSecretsEncrypted: secureProviderStorageAvailable() },
-    targets: readTargets(),
+    targets,
     usage: readUsage(launcherUsageSourceId),
     activeInstanceCount: recentLaunches.filter(launch => launch.active).length,
-    recentLaunches
+    recentLaunches,
+    workCombinations: readWorkCombinations(profiles, targets)
   };
 }
 
@@ -791,7 +852,18 @@ function registerIpc() {
       defaultCodexHome: defaultCodexRoot,
       defaultSqliteHome: process.env.CODEX_SQLITE_HOME || defaultCodexRoot
     });
-    return confirmLaunch(result);
+    const confirmed = await confirmLaunch(result);
+    try {
+      recordWorkCombination(profilesRoot, {
+        profileId: profile.id,
+        workspace: currentWorkspace,
+        target,
+        usedAt: confirmed.launchedAt
+      });
+      return { ...confirmed, workCombinationSaved: true };
+    } catch {
+      return { ...confirmed, workCombinationSaved: false };
+    }
   });
   ipcMain.handle('profiles:stop', async (_event, launchId) => {
     const launch = listProfileLaunches(profilesRoot, { limit: 24 })
@@ -863,6 +935,40 @@ function registerIpc() {
     if (result.canceled || !result.filePaths[0]) return currentWorkspace;
     currentWorkspace = path.resolve(result.filePaths[0]);
     return currentWorkspace;
+  });
+  ipcMain.handle('work-combinations:activate', (_event, combinationId) => {
+    const combination = findWorkCombination(profilesRoot, String(combinationId || ''));
+    const profile = findProfile(profilesRoot, combination.profileId);
+    if (!directoryAvailable(combination.workspace)) throw new Error('工作目录已失效，请重新选择目录。');
+    if (!detectedTargets()[combination.target]?.available) throw new Error('这个客户端入口当前不可用。');
+    currentWorkspace = combination.workspace;
+    return { ...combination, profileName: profile.name };
+  });
+  ipcMain.handle('work-combinations:set-pinned', (_event, payload) => {
+    try {
+      return setWorkCombinationPinned(profilesRoot, String(payload?.combinationId || ''), payload?.pinned === true);
+    } catch (error) {
+      if (/At most/.test(error.message)) throw new Error('最多固定 8 个工作组合。');
+      throw error;
+    }
+  });
+  ipcMain.handle('work-combinations:repair-workspace', async (_event, combinationId) => {
+    const combination = findWorkCombination(profilesRoot, String(combinationId || ''));
+    findProfile(profilesRoot, combination.profileId);
+    const parent = path.dirname(combination.workspace);
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: '重新选择工作目录',
+      defaultPath: directoryAvailable(parent) ? parent : currentWorkspace,
+      properties: ['openDirectory', 'createDirectory']
+    });
+    if (result.canceled || !result.filePaths[0]) return null;
+    const updated = updateWorkCombinationWorkspace(profilesRoot, combination.id, result.filePaths[0]);
+    currentWorkspace = updated.workspace;
+    return updated;
+  });
+  ipcMain.handle('work-combinations:remove', (_event, combinationId) => {
+    removeWorkCombination(profilesRoot, String(combinationId || ''));
+    return true;
   });
   ipcMain.handle('usage:get-data', (_event, sourceId) => readUsageData(sourceId));
   ipcMain.handle('usage:get-comparison', () => readUsageComparison());
@@ -1136,6 +1242,46 @@ async function captureRequestedScreenshot(window) {
         if (!managerOpened) throw new Error('Plugin manager did not open for the screenshot check.');
       }
     }
+  } else if (screenshotView === 'work-combinations') {
+    window.setSize(1440, 960);
+    const workReady = await window.webContents.executeJavaScript(`(async () => {
+      for (let attempt = 0; attempt < 160; attempt += 1) {
+        const rows = document.querySelectorAll('.work-combination-row');
+        const repair = document.querySelector('[data-work-repair]');
+        const pin = document.querySelector('.work-pin-button:not(.is-active)');
+        if (rows.length >= 3 && repair && pin) {
+          pin.click();
+          for (let pinAttempt = 0; pinAttempt < 80; pinAttempt += 1) {
+            if (document.querySelectorAll('.work-pin-button.is-active').length >= 2) break;
+            await new Promise(resolve => setTimeout(resolve, 50));
+          }
+          window.confirm = () => true;
+          document.querySelector('.work-combination-row.is-unavailable [data-work-remove]')?.click();
+          for (let removeAttempt = 0; removeAttempt < 80; removeAttempt += 1) {
+            if (document.querySelectorAll('.work-combination-row').length === 2) break;
+            await new Promise(resolve => setTimeout(resolve, 50));
+          }
+          const launch = document.querySelector('[data-work-launch]');
+          if (!launch || launch.disabled) return false;
+          launch.click();
+          for (let preflightAttempt = 0; preflightAttempt < 160; preflightAttempt += 1) {
+            const dialog = document.querySelector('#profile-diagnosis-dialog');
+            if (dialog?.open) {
+              document.querySelector('#profile-diagnosis-close')?.click();
+              return document.querySelector('#workspace-path')?.textContent?.includes('fictional-workspace')
+                && document.querySelectorAll('.work-pin-button.is-active').length >= 1
+                && document.querySelectorAll('.work-combination-row').length === 2;
+            }
+            await new Promise(resolve => setTimeout(resolve, 50));
+          }
+          return false;
+        }
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      return false;
+    })()`);
+    if (!workReady) throw new Error('Recent work did not preserve the saved Profile, workspace, target, pin state, and preflight flow.');
+    await new Promise(resolve => setTimeout(resolve, 350));
   } else if (screenshotView.startsWith('launcher')) {
     window.setSize(1440, 960);
     const launcherProfileIndex = screenshotView === 'launcher-empty' ? 1 : 0;

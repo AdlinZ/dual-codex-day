@@ -4,6 +4,23 @@ Project name: **Dual Codex Day** (`dual-codex-day`). Historical entries may reta
 
 ## Unreleased
 
+## [0.23.0] - 2026-09-02
+
+### Added
+
+- Added automatic recent-work combinations for successful Profile, workspace, and client-target launches.
+- Added continue-last-work, pin, unpin, workspace repair, and explicit removal actions in the launch center.
+
+### Changed
+
+- Packaged launches restore the most recently used valid workspace instead of always returning to the user home directory.
+- The previous launch-history panel now prioritizes reusable work combinations while retaining active-instance controls.
+
+### Reliability
+
+- Work combinations use an isolated versioned store with atomic writes, duplicate consolidation, bounded history, and a pinned-item limit.
+- Deleted Profiles, missing directories, and unavailable client targets remain visible with explicit unavailable states and never fall back to another account or target.
+
 ## [0.22.0] - 2026-09-01
 
 ### Added

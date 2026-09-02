@@ -1,6 +1,6 @@
 {
   "name": "dual-codex-day",
-  "version": "0.22.0",
+  "version": "0.23.0",
   "private": true,
   "description": "A local-first Codex profile launcher and personal usage dashboard.",
   "author": "AdlinZ",
@@ -31,6 +31,7 @@
     "test:service": "node ./scripts/check-service.mjs",
     "test:pricing": "node ./scripts/check-pricing.mjs",
     "test:profiles": "node ./scripts/check-profiles.mjs",
+    "test:work-combinations": "node ./scripts/check-work-combinations.mjs",
     "test:profile-transfer": "node ./scripts/check-profile-transfer.mjs",
     "test:profile-recovery": "node ./scripts/check-profile-recovery.mjs",
     "test:profile-doctor": "node ./scripts/check-profile-doctor.mjs",
@@ -38,7 +39,7 @@
     "test:site": "node ./scripts/check-site.mjs",
     "test:tray": "node ./scripts/check-tray.mjs",
     "test:container": "node ./scripts/check-container.mjs",
-    "test": "node ./scripts/check-dashboard.js && npm run test:index && npm run test:usage && npm run test:cc-switch && npm run test:skills && npm run test:plugins && npm run test:service && npm run test:pricing && npm run test:profiles && npm run test:profile-transfer && npm run test:profile-recovery && npm run test:profile-doctor && npm run test:electron && npm run build:site && npm run test:site && npm run test:tray && npm run test:container"
+    "test": "node ./scripts/check-dashboard.js && npm run test:index && npm run test:usage && npm run test:cc-switch && npm run test:skills && npm run test:plugins && npm run test:service && npm run test:pricing && npm run test:profiles && npm run test:work-combinations && npm run test:profile-transfer && npm run test:profile-recovery && npm run test:profile-doctor && npm run test:electron && npm run build:site && npm run test:site && npm run test:tray && npm run test:container"
   },
   "engines": {
     "node": ">=22.5.0"

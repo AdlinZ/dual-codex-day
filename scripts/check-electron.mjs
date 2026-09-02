@@ -14,11 +14,12 @@ const html = readFileSync(path.join(root, 'electron', 'renderer', 'index.html'),
 const renderer = readFileSync(path.join(root, 'electron', 'renderer', 'app.js'), 'utf8');
 const usageAnalysis = readFileSync(path.join(root, 'electron', 'renderer', 'usage-analysis.mjs'), 'utf8');
 const profileDoctor = readFileSync(path.join(root, 'scripts', 'lib', 'profile-doctor.mjs'), 'utf8');
+const workCombinations = readFileSync(path.join(root, 'scripts', 'lib', 'work-combination-store.mjs'), 'utf8');
 const css = readFileSync(path.join(root, 'electron', 'renderer', 'app.css'), 'utf8');
 const capture = readFileSync(path.join(root, 'scripts', 'capture-electron.mjs'), 'utf8');
 const packager = readFileSync(path.join(root, 'scripts', 'package-electron.mjs'), 'utf8');
 
-assert(packageMetadata.version === '0.22.0', 'Electron release must use package version 0.22.0');
+assert(packageMetadata.version === '0.23.0', 'Electron release must use package version 0.23.0');
 assert(packageMetadata.main === 'electron/main.mjs', 'Electron main entry must be declared in package metadata');
 assert(packageMetadata.scripts.desktop === 'electron .', 'desktop command must launch the Electron entry');
 assert(/contextIsolation:\s*true/.test(main), 'Electron windows must enable context isolation');
@@ -32,6 +33,13 @@ assert(/lucide\/dist\/esm\/createElement\.mjs/.test(renderer) && /icons\/refresh
 assert(/profiles:create/.test(main) && /profiles:launch/.test(main), 'Electron main process must use profile IPC handlers');
 assert(/profiles:stop/.test(main) && /stopProfileLaunch/.test(main + preload + renderer), 'Electron must close a specific recorded instance through scoped IPC');
 assert(/profiles:stop-all/.test(main) && /profile-stop-button/.test(html + renderer + css) && /stopProfileLaunches/.test(preload + renderer), 'selected Profiles with active instances must expose a visible close-client action');
+assert(/work-combinations:activate/.test(main) && /activateWorkCombination/.test(preload + renderer), 'saved work must resolve a stored Profile, workspace, and target before using the shared launch flow');
+assert(/workCombinations/.test(main + renderer) && /data-work-launch/.test(renderer) && /继续上次工作/.test(renderer), 'launcher snapshots must expose recent work and a direct continue-work action');
+assert(/work-combinations:set-pinned/.test(main) && /data-work-pin/.test(renderer) && /MAX_PINNED_WORK_COMBINATIONS/.test(workCombinations), 'recent work must support bounded local pinning');
+assert(/work-combinations:repair-workspace/.test(main) && /data-work-repair/.test(renderer), 'missing workspaces must provide an explicit directory repair flow');
+assert(/work-combinations:remove/.test(main) && /data-work-remove/.test(renderer), 'recent work entries must support explicit removal');
+assert(/screenshotView === 'work-combinations'/.test(main) && /work-pin-button\.is-active/.test(main), 'visual verification must exercise recent-work activation, pinning, and the shared preflight flow');
+assert(/if \(!app\.isPackaged\) return repoRoot/.test(main) && /listWorkCombinations\(profilesRoot\)[\s\S]*?\.find\(item => directoryAvailable\(item\.workspace\)\)/.test(main), 'only packaged builds may restore the first available recent workspace');
 assert(/showMessageBox/.test(main) && /默认运行环境/.test(main), 'instance shutdown must require confirmation and warn for the default runtime');
 assert(/profiles:save-provider/.test(main) && /profiles:provider-preview/.test(main), 'Electron main process must expose scoped provider configuration handlers');
 assert(/profiles:set-usage-source/.test(main) && /setProfileUsageSource/.test(preload), 'Electron must expose scoped Profile usage-source settings');
@@ -66,6 +74,7 @@ assert(/isProfileRunning/.test(main) && /listProfileLaunches/.test(main), 'Profi
 assert(/profile-recovery-dialog/.test(html + renderer + css) && /renderProfileRecoveryPreview/.test(renderer), 'Electron must render backup validity and recovery scope before confirmation');
 assert(/screenshotView === 'profile-recovery'/.test(main), 'visual verification must cover the Profile recovery center');
 assert(/archive-restore\.mjs/.test(packager), 'packaged Electron builds must retain the Profile recovery icon');
+assert(/pin\.mjs/.test(packager), 'packaged Electron builds must retain the work-combination pin icon');
 assert(/PROFILE_DIAGNOSIS_SCHEMA_VERSION/.test(profileDoctor) && /createProfileDiagnosisExport/.test(profileDoctor), 'Profile diagnosis must use a versioned sanitized export');
 assert(/confirmLaunch/.test(main) && /listProfileLaunches/.test(main), 'Electron must verify launches and expose persistent instance status');
 assert(/safeStorage\.encryptString/.test(main) && /safeStorage\.decryptString/.test(main), 'provider API keys must use operating-system encryption');

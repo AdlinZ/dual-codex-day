@@ -29,6 +29,7 @@ import Trash2 from '../../node_modules/lucide/dist/esm/icons/trash-2.mjs';
 import LogIn from '../../node_modules/lucide/dist/esm/icons/log-in.mjs';
 import Square from '../../node_modules/lucide/dist/esm/icons/square.mjs';
 import ArchiveRestore from '../../node_modules/lucide/dist/esm/icons/archive-restore.mjs';
+import Pin from '../../node_modules/lucide/dist/esm/icons/pin.mjs';
 import { aggregateUsage, filterUsageEvents, groupUsageTasks, topUsageLabel } from './usage-analysis.mjs';
 
 const iconNodes = {
@@ -61,7 +62,8 @@ const iconNodes = {
   'trash-2': Trash2,
   'log-in': LogIn,
   square: Square,
-  'archive-restore': ArchiveRestore
+  'archive-restore': ArchiveRestore,
+  pin: Pin
 };
 
 const targetMetadata = {
@@ -659,14 +661,80 @@ async function launchSelectedTarget(target, options = {}) {
   setBusy(true);
   renderSelectedProfile();
   try {
-    await window.dualCodexDay.launchProfile(profile.id, target);
+    const result = await window.dualCodexDay.launchProfile(profile.id, target);
     await refreshSnapshot(profile.id, true);
-    showToast(`已用“${profile.name}”启动 ${targetMetadata[target].label}。`);
+    showToast(result.workCombinationSaved === false
+      ? `已启动 ${targetMetadata[target].label}，但最近工作未能保存。`
+      : `已用“${profile.name}”启动 ${targetMetadata[target].label}。`);
   } catch (error) {
     showToast(error.message || '启动失败。', true);
   } finally {
     setBusy(false);
     renderSelectedProfile();
+  }
+}
+
+async function launchWorkCombination(combinationId) {
+  if (state.busy) return;
+  let combination = null;
+  setBusy(true);
+  try {
+    combination = await window.dualCodexDay.activateWorkCombination(combinationId);
+    state.selectedProfileId = combination.profileId;
+    await refreshSnapshot(combination.profileId, true);
+  } catch (error) {
+    showToast(error.message || '无法继续这项工作。', true);
+  } finally {
+    setBusy(false);
+    render();
+  }
+  if (combination) launchSelectedTarget(combination.target);
+}
+
+async function toggleWorkCombinationPin(combinationId, pinned) {
+  if (state.busy) return;
+  setBusy(true);
+  try {
+    await window.dualCodexDay.setWorkCombinationPinned(combinationId, pinned);
+    await refreshSnapshot(state.selectedProfileId, true);
+    showToast(pinned ? '工作组合已固定。' : '已取消固定。');
+  } catch (error) {
+    showToast(error.message || '无法更新固定状态。', true);
+  } finally {
+    setBusy(false);
+    render();
+  }
+}
+
+async function repairWorkCombination(combinationId) {
+  if (state.busy) return;
+  setBusy(true);
+  try {
+    const updated = await window.dualCodexDay.repairWorkCombinationWorkspace(combinationId);
+    if (!updated) return;
+    await refreshSnapshot(state.selectedProfileId, true);
+    showToast('工作目录已更新。');
+  } catch (error) {
+    showToast(error.message || '无法更新工作目录。', true);
+  } finally {
+    setBusy(false);
+    render();
+  }
+}
+
+async function removeSavedWork(combinationId) {
+  const item = state.snapshot?.workCombinations?.items.find(candidate => candidate.id === combinationId);
+  if (!item || state.busy || !confirm(`从最近工作中移除“${item.workspaceName}”？`)) return;
+  setBusy(true);
+  try {
+    await window.dualCodexDay.removeWorkCombination(combinationId);
+    await refreshSnapshot(state.selectedProfileId, true);
+    showToast('工作组合已移除。');
+  } catch (error) {
+    showToast(error.message || '无法移除工作组合。', true);
+  } finally {
+    setBusy(false);
+    render();
   }
 }
 
@@ -952,11 +1020,40 @@ function renderTargets() {
 
 function renderRecent() {
   const recent = state.snapshot.recentLaunches;
-  if (!recent.length) {
-    elements.recentList.innerHTML = '<div class="list-empty">暂无启动记录</div>';
-    return;
-  }
-  elements.recentList.innerHTML = recent.map(item => {
+  const work = state.snapshot.workCombinations || { items: [], error: null };
+  const combinationRows = work.error
+    ? `<div class="list-empty is-error">${escapeHtml(work.error)}</div>`
+    : work.items.length
+      ? work.items.map(item => {
+          const metadata = targetMetadata[item.target] || targetMetadata.cli;
+          const primaryLabel = item.isLast ? '继续上次工作' : item.workspaceName;
+          const detail = item.isLast
+            ? `${item.workspaceName} · ${item.profileName} · ${metadata.label}`
+            : `${item.profileName} · ${metadata.label}`;
+          const stateLabel = item.unavailableReason === 'profile-missing'
+            ? '账号已删除'
+            : item.unavailableReason === 'workspace-missing'
+              ? '重选目录'
+              : item.unavailableReason === 'target-missing'
+                ? '入口不可用'
+                : item.pinned ? '已固定' : item.isLast ? '上次' : formatTime(item.lastUsedAt);
+          return `
+            <div class="work-combination-row${item.available ? '' : ' is-unavailable'}">
+              <button class="work-combination-main" type="button" data-work-launch="${escapeHtml(item.id)}" title="${escapeHtml(item.workspace)}" ${item.available ? '' : 'disabled'}>
+                <span class="recent-icon"><i data-lucide="${metadata.icon}"></i></span>
+                <span class="recent-copy"><strong>${escapeHtml(primaryLabel)}</strong><span>${escapeHtml(detail)}</span><small>${escapeHtml(item.workspace)}</small></span>
+              </button>
+              ${item.unavailableReason === 'workspace-missing'
+                ? `<button class="work-state-button" type="button" data-work-repair="${escapeHtml(item.id)}">${stateLabel}</button>`
+                : `<span class="work-combination-state${item.available ? '' : ' is-error'}">${escapeHtml(stateLabel)}</span>`}
+              <button class="icon-button work-pin-button${item.pinned ? ' is-active' : ''}" type="button" data-work-pin="${escapeHtml(item.id)}" data-pinned="${item.pinned}" title="${item.pinned ? '取消固定' : '固定工作组合'}" aria-label="${item.pinned ? '取消固定' : '固定工作组合'}"><i data-lucide="pin"></i></button>
+              <button class="icon-button work-remove-button" type="button" data-work-remove="${escapeHtml(item.id)}" title="移除工作组合" aria-label="移除工作组合"><i data-lucide="trash-2"></i></button>
+            </div>
+          `;
+        }).join('')
+      : '<div class="list-empty">成功启动后会在这里保留最近工作</div>';
+  const active = recent.filter(item => item.active);
+  const activeRows = active.map(item => {
     const metadata = targetMetadata[item.target] || targetMetadata.cli;
     return `
       <div class="recent-row${item.active ? ' has-action' : ''}">
@@ -970,6 +1067,10 @@ function renderRecent() {
       </div>
     `;
   }).join('');
+  elements.recentList.innerHTML = `
+    ${combinationRows}
+    ${activeRows ? `<div class="recent-group-label has-spacing">运行实例</div>${activeRows}` : ''}
+  `;
 }
 
 function render() {
@@ -2452,6 +2553,14 @@ elements.profileStopButton.addEventListener('click', async () => {
 });
 
 elements.recentList.addEventListener('click', async event => {
+  const workLaunch = event.target.closest('[data-work-launch]');
+  if (workLaunch) return launchWorkCombination(workLaunch.dataset.workLaunch);
+  const workPin = event.target.closest('[data-work-pin]');
+  if (workPin) return toggleWorkCombinationPin(workPin.dataset.workPin, workPin.dataset.pinned !== 'true');
+  const workRepair = event.target.closest('[data-work-repair]');
+  if (workRepair) return repairWorkCombination(workRepair.dataset.workRepair);
+  const workRemove = event.target.closest('[data-work-remove]');
+  if (workRemove) return removeSavedWork(workRemove.dataset.workRemove);
   const button = event.target.closest('[data-stop-launch]');
   if (!button || state.busy) return;
   const launch = state.snapshot?.recentLaunches.find(item => item.id === button.dataset.stopLaunch);

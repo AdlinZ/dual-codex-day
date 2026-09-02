@@ -3,9 +3,10 @@ import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { applyProfileTransfer, createProfile, exportProfileTransfer, launchProfile, updateProfileUsageSource } from './lib/profile-store.mjs';
+import { recordWorkCombination, setWorkCombinationPinned } from './lib/work-combination-store.mjs';
 
 const root = path.resolve('.');
-const outputPath = path.resolve(process.argv[2] || path.join(root, 'dist', 'electron-v0.22.0.png'));
+const outputPath = path.resolve(process.argv[2] || path.join(root, 'dist', 'electron-v0.23.0.png'));
 const packagedExecutable = process.argv[3] && !process.argv[3].startsWith('--') ? path.resolve(process.argv[3]) : null;
 const screenshotView = process.argv.find(argument => argument.startsWith('--view='))?.slice('--view='.length) || '';
 const liveData = process.argv.includes('--live');
@@ -64,12 +65,12 @@ try {
     createUsageFixture(usageRoot);
     const workProfile = createProfile(temporaryRoot, '工作账号');
     createUsageFixture(workProfile.paths.codexHome, 'work', 0.35);
-    createProfile(temporaryRoot, '个人账号');
+    const personalProfile = createProfile(temporaryRoot, '个人账号');
     if (screenshotView === 'profile-recovery') {
       updateProfileUsageSource(temporaryRoot, workProfile.id, 'default');
       const recoverySourceRoot = path.join(temporaryRoot, 'recovery-source');
       const recoverySource = createProfile(recoverySourceRoot, '工作账号');
-      const recoveryTransfer = exportProfileTransfer(recoverySourceRoot, recoverySource.id, { appVersion: '0.22.0' });
+      const recoveryTransfer = exportProfileTransfer(recoverySourceRoot, recoverySource.id, { appVersion: '0.23.0' });
       applyProfileTransfer(temporaryRoot, recoveryTransfer);
     }
     createSkillFixture(path.join(usageRoot, 'skills'), 'issue-drafter', '整理产品问题并生成可提交的 Issue 草稿。');
@@ -78,11 +79,35 @@ try {
     createSkillFixture(path.join(usageRoot, 'skills', '.system'), 'skill-installer', '安装和管理 Codex Skills。');
     createSkillFixture(path.join(screenshotWorkspace, '.agents', 'skills'), 'product-review', '检查当前项目的产品需求和交付边界。');
     createSkillFixture(path.join(screenshotWorkspace, '.agents', 'skills'), 'release-check', '核对当前项目的发布清单。');
-    launchProfile(temporaryRoot, workProfile.id, 'desktop', {
+    const activeLaunch = launchProfile(temporaryRoot, workProfile.id, 'desktop', {
       targets: { desktop: { available: true, executable: process.execPath, experimental: true } },
-      workingDirectory: root,
+      workingDirectory: screenshotWorkspace,
       spawnProcess: () => ({ pid: process.pid, unref() {} })
     });
+    recordWorkCombination(temporaryRoot, {
+      profileId: workProfile.id,
+      workspace: screenshotWorkspace,
+      target: 'desktop',
+      usedAt: activeLaunch.launchedAt
+    });
+    const reviewWorkspace = path.join(temporaryRoot, 'case-review');
+    mkdirSync(reviewWorkspace);
+    const pinned = recordWorkCombination(temporaryRoot, {
+      profileId: personalProfile.id,
+      workspace: reviewWorkspace,
+      target: 'vscode',
+      usedAt: new Date(Date.now() - 3_600_000).toISOString()
+    });
+    setWorkCombinationPinned(temporaryRoot, pinned.id, true);
+    const staleWorkspace = path.join(temporaryRoot, 'archived-project');
+    mkdirSync(staleWorkspace);
+    recordWorkCombination(temporaryRoot, {
+      profileId: workProfile.id,
+      workspace: staleWorkspace,
+      target: 'cli',
+      usedAt: new Date(Date.now() - 7_200_000).toISOString()
+    });
+    rmSync(staleWorkspace, { recursive: true, force: true });
   }
   const electronExecutable = packagedExecutable || (process.platform === 'win32'
     ? path.join(root, 'node_modules', 'electron', 'dist', 'electron.exe')
