@@ -5,7 +5,7 @@ import path from 'node:path';
 import { applyProfileTransfer, createProfile, exportProfileTransfer, launchProfile, updateProfileUsageSource } from './lib/profile-store.mjs';
 
 const root = path.resolve('.');
-const outputPath = path.resolve(process.argv[2] || path.join(root, 'dist', 'electron-v0.21.0.png'));
+const outputPath = path.resolve(process.argv[2] || path.join(root, 'dist', 'electron-v0.22.0.png'));
 const packagedExecutable = process.argv[3] && !process.argv[3].startsWith('--') ? path.resolve(process.argv[3]) : null;
 const screenshotView = process.argv.find(argument => argument.startsWith('--view='))?.slice('--view='.length) || '';
 const liveData = process.argv.includes('--live');
@@ -69,7 +69,7 @@ try {
       updateProfileUsageSource(temporaryRoot, workProfile.id, 'default');
       const recoverySourceRoot = path.join(temporaryRoot, 'recovery-source');
       const recoverySource = createProfile(recoverySourceRoot, '工作账号');
-      const recoveryTransfer = exportProfileTransfer(recoverySourceRoot, recoverySource.id, { appVersion: '0.21.0' });
+      const recoveryTransfer = exportProfileTransfer(recoverySourceRoot, recoverySource.id, { appVersion: '0.22.0' });
       applyProfileTransfer(temporaryRoot, recoveryTransfer);
     }
     createSkillFixture(path.join(usageRoot, 'skills'), 'issue-drafter', '整理产品问题并生成可提交的 Issue 草稿。');

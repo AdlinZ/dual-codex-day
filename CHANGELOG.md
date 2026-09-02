@@ -4,6 +4,25 @@ Project name: **Dual Codex Day** (`dual-codex-day`). Historical entries may reta
 
 ## Unreleased
 
+## [0.22.0] - 2026-09-01
+
+### Added
+
+- Added ready, attention, and launch-blocked summaries to the Profile rail and selected Profile workspace.
+- Added bounded remediation actions for sign-in, provider settings, recovery, Profile folders, Skills, plugins, and usage diagnostics.
+- Added a focused Skills handoff that carries affected component names from Profile diagnostics.
+- Added a visible close-client action beside the launch buttons, with one confirmation for all of the selected Profile's active instances.
+
+### Changed
+
+- Profile launches now run a fresh read-only preflight diagnosis. Healthy Profiles launch directly, non-blocking issues require explicit confirmation, and blocking issues open their remediation paths.
+- Profile diagnosis schema v2 records launch-blocking state and sanitized action metadata alongside existing status and detail fields.
+
+### Reliability
+
+- Launcher readiness summaries use the same diagnosis model as manual checks and are cached for 30 seconds to keep the four-second runtime refresh lightweight.
+- Profile mutations invalidate login and readiness caches so provider, runtime, transfer, recovery, and source changes appear immediately.
+
 ## [0.21.0] - 2026-08-31
 
 ### Added

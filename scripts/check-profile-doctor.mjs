@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createProfileDiagnosisExport, diagnoseProfileEnvironment } from './lib/profile-doctor.mjs';
+import { createProfileDiagnosisExport, diagnoseProfileEnvironment, summarizeProfileReadiness } from './lib/profile-doctor.mjs';
 
 const healthyInput = {
   generatedAt: '2026-08-31T08:00:00.000Z',
@@ -23,6 +23,8 @@ const healthyInput = {
 const healthy = diagnoseProfileEnvironment(healthyInput);
 assert.equal(healthy.status, 'ok');
 assert.equal(healthy.counts.error, 0);
+assert.equal(healthy.counts.blocking, 0);
+assert.deepEqual(healthy.readiness, { state: 'ready', issueCount: 0, blockingCount: 0, actionCount: 0, primaryAction: null });
 assert.equal(healthy.groups.length, 6);
 
 const degraded = diagnoseProfileEnvironment({
@@ -45,7 +47,22 @@ const degraded = diagnoseProfileEnvironment({
 });
 assert.equal(degraded.status, 'error');
 assert(degraded.counts.error >= 3 && degraded.counts.warning >= 4, 'degraded diagnostics must preserve error and warning severity');
+assert(degraded.counts.blocking >= 3, 'invalid config and missing credentials must block launches');
+assert.equal(degraded.readiness.state, 'blocked');
+assert.equal(degraded.readiness.primaryAction.type, 'open-profile-folder');
 assert(degraded.groups.find(group => group.id === 'components').checks.some(item => item.items.includes('release-check')), 'missing component names must remain actionable in the local report');
+assert.equal(degraded.groups.find(group => group.id === 'components').checks.find(item => item.id === 'skills').action.type, 'open-skills');
+assert.equal(degraded.groups.find(group => group.id === 'usage').checks[0].blocking, false, 'usage diagnostics must remain actionable without blocking a client launch');
+
+const signedOut = diagnoseProfileEnvironment({
+  ...healthyInput,
+  loginStatus: { state: 'signed-out', method: 'none' },
+  recovery: { activeLaunches: 0, backupState: 'none' }
+});
+assert.equal(signedOut.readiness.state, 'attention');
+assert.equal(signedOut.readiness.blockingCount, 0);
+assert.deepEqual(signedOut.readiness.primaryAction, { type: 'launch-login', label: '打开 Codex 登录', target: 'desktop' });
+assert.deepEqual(summarizeProfileReadiness(signedOut), signedOut.readiness);
 
 const exported = createProfileDiagnosisExport({
   ...degraded,
@@ -55,13 +72,14 @@ const exported = createProfileDiagnosisExport({
       ? { ...item, detail: 'Missing C:\\Users\\Alice\\.codex\\skills', items: [...item.items, 'C:\\Users\\Alice\\private-skill'] }
       : item)
   }))
-}, { appVersion: '0.20.0' });
+}, { appVersion: '0.22.0' });
 const serialized = JSON.stringify(exported);
 assert.equal(exported.profile.reference.length, 20);
 assert(!serialized.includes('工作账号') && !serialized.includes(healthyInput.profile.id), 'diagnostic export must remove Profile names and internal ids');
 assert(!/C:\\Users|Alice|private-skill/.test(serialized), 'diagnostic export must redact absolute paths and path-contained names');
 assert(!/auth\.json|api.?key|secret/i.test(serialized), 'diagnostic export must not contain credential material or credential filenames');
-assert.equal(exported.appVersion, '0.20.0');
+assert.equal(exported.appVersion, '0.22.0');
+assert.equal(exported.groups.find(group => group.id === 'components').checks.find(item => item.id === 'skills').action.type, 'open-skills');
 
 assert.throws(() => createProfileDiagnosisExport({ schemaVersion: 99 }), /Invalid Profile diagnosis report/);
 console.log('Profile doctor checks passed: severity, actionable groups, and sanitized export.');

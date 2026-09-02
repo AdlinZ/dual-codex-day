@@ -103,9 +103,13 @@ const state = {
   posterSuccessMessage: '海报已保存。',
   pendingProfileTransferToken: null,
   profileDiagnosisToken: null,
+  profileDiagnosisReport: null,
+  pendingLaunchTarget: null,
+  pendingLaunchAllowed: false,
   profileRecoveryToken: null,
   profileRecoveryBackups: [],
-  selectedRecoveryBackupId: null
+  selectedRecoveryBackupId: null,
+  skillsFocus: null
 };
 
 const elements = {
@@ -122,6 +126,9 @@ const elements = {
   skillsWorkspace: document.querySelector('#skills-workspace-button'),
   skillsRefresh: document.querySelector('#skills-refresh-button'),
   skillsRestart: document.querySelector('#skills-restart-button'),
+  skillsFocus: document.querySelector('#skills-focus'),
+  skillsFocusCopy: document.querySelector('#skills-focus-copy'),
+  skillsFocusClear: document.querySelector('#skills-focus-clear'),
   skillsMode: document.querySelector('#skills-mode'),
   standaloneSkillCount: document.querySelector('#standalone-skill-count'),
   pluginSkillCount: document.querySelector('#plugin-skill-count'),
@@ -210,6 +217,7 @@ const elements = {
   profileDiagnosisGroups: document.querySelector('#profile-diagnosis-groups'),
   profileDiagnosisClose: document.querySelector('#profile-diagnosis-close'),
   profileDiagnosisRefresh: document.querySelector('#profile-diagnosis-refresh'),
+  profileDiagnosisLaunch: document.querySelector('#profile-diagnosis-launch'),
   profileDiagnosisExport: document.querySelector('#profile-diagnosis-export'),
   profileRecoveryButton: document.querySelector('#profile-recovery-button'),
   profileRecoveryDialog: document.querySelector('#profile-recovery-dialog'),
@@ -239,6 +247,11 @@ const elements = {
   profileName: document.querySelector('#selected-profile-name'),
   profilePath: document.querySelector('#selected-profile-path'),
   profileRuntime: document.querySelector('#selected-profile-runtime'),
+  profileStopButton: document.querySelector('#profile-stop-button'),
+  profileReadiness: document.querySelector('#profile-readiness'),
+  profileReadinessTitle: document.querySelector('#profile-readiness-title'),
+  profileReadinessDetail: document.querySelector('#profile-readiness-detail'),
+  profileReadinessButton: document.querySelector('#profile-readiness-button'),
   openProfileFolder: document.querySelector('#open-profile-folder-button'),
   renameProfile: document.querySelector('#rename-profile-button'),
   deleteProfile: document.querySelector('#delete-profile-button'),
@@ -397,7 +410,10 @@ function diagnosisStatusLabel(status) {
   return { ok: '正常', warning: '需留意', error: '需处理' }[status] || '未知';
 }
 
-function renderProfileDiagnosis(report) {
+function renderProfileDiagnosis(report, options = {}) {
+  state.profileDiagnosisReport = report;
+  state.pendingLaunchTarget = options.preflightTarget || null;
+  state.pendingLaunchAllowed = options.canLaunch === true;
   elements.profileDiagnosisTitle.textContent = `${report.profile.name} · 环境体检`;
   elements.profileDiagnosisStatus.textContent = diagnosisStatusLabel(report.status);
   elements.profileDiagnosisStatus.dataset.status = report.status;
@@ -410,14 +426,20 @@ function renderProfileDiagnosis(report) {
     <section class="diagnosis-group">
       <div class="diagnosis-group-heading"><h3>${escapeHtml(group.label)}</h3><span>${escapeHtml(diagnosisStatusLabel(group.status))}</span></div>
       ${group.checks.map(item => `
-        <div class="diagnosis-check" data-status="${escapeHtml(item.status)}">
+        <div class="diagnosis-check${item.action ? ' has-action' : ''}" data-status="${escapeHtml(item.status)}">
           <span class="diagnosis-dot"></span>
           <strong>${escapeHtml(item.label)}</strong>
           <span class="diagnosis-check-copy">${escapeHtml(item.detail)}${item.items?.length ? `<small>${escapeHtml(item.items.join('、'))}</small>` : ''}</span>
+          ${item.action ? `<button type="button" data-diagnosis-action="${escapeHtml(`${group.id}:${item.id}`)}">${escapeHtml(item.action.label)}</button>` : ''}
         </div>
       `).join('')}
     </section>
   `).join('');
+  elements.profileDiagnosisLaunch.hidden = !state.pendingLaunchTarget || !state.pendingLaunchAllowed;
+  if (!elements.profileDiagnosisLaunch.hidden) {
+    const metadata = targetMetadata[state.pendingLaunchTarget];
+    elements.profileDiagnosisLaunch.querySelector('span').textContent = `继续打开 ${metadata?.label || '客户端'}`;
+  }
 }
 
 function recoveryDate(value) {
@@ -477,6 +499,14 @@ async function discardProfileDiagnosis() {
   if (token) await window.dualCodexDay.discardProfileDiagnosis(token).catch(() => {});
 }
 
+async function closeProfileDiagnosis() {
+  await discardProfileDiagnosis();
+  state.profileDiagnosisReport = null;
+  state.pendingLaunchTarget = null;
+  state.pendingLaunchAllowed = false;
+  if (elements.profileDiagnosisDialog.open) elements.profileDiagnosisDialog.close();
+}
+
 async function discardProfileRecovery() {
   const token = state.profileRecoveryToken;
   state.profileRecoveryToken = null;
@@ -534,7 +564,7 @@ async function loadProfileDiagnosis() {
   if (!profile || state.busy) return;
   setBusy(true);
   try {
-    await discardProfileDiagnosis();
+    await closeProfileDiagnosis();
     const result = await window.dualCodexDay.diagnoseProfile(profile.id);
     state.profileDiagnosisToken = result.token;
     renderProfileDiagnosis(result.report);
@@ -542,6 +572,98 @@ async function loadProfileDiagnosis() {
     refreshIcons();
   } catch (error) {
     showToast(friendlyProviderError(error) || '无法完成 Profile 环境体检。', true);
+  } finally {
+    setBusy(false);
+    renderSelectedProfile();
+  }
+}
+
+function diagnosisAction(reference) {
+  const [groupId, checkId] = String(reference || '').split(':');
+  return state.profileDiagnosisReport?.groups
+    .find(group => group.id === groupId)?.checks
+    .find(item => item.id === checkId)?.action || null;
+}
+
+async function runDiagnosisAction(action) {
+  const profile = selectedProfile();
+  if (!profile || !action || state.busy) return;
+  if (action.type === 'launch-login') {
+    await closeProfileDiagnosis();
+    return launchSelectedTarget(action.target, { skipPreflight: true });
+  }
+  if (action.type === 'open-provider-settings') {
+    await closeProfileDiagnosis();
+    openProviderEditor();
+    return;
+  }
+  if (action.type === 'open-recovery') {
+    await closeProfileDiagnosis();
+    return openProfileRecovery();
+  }
+  if (action.type === 'open-profile-folder') {
+    await closeProfileDiagnosis();
+    try { await window.dualCodexDay.openProfileFolder(profile.id); }
+    catch (error) { showToast(error.message || '无法打开配置目录。', true); }
+    return;
+  }
+  if (action.type === 'open-skills') {
+    state.skillsMode = action.mode || 'standalone';
+    state.skillsFocus = { profileName: profile.name, items: Array.isArray(action.items) ? action.items : [] };
+    await closeProfileDiagnosis();
+    await switchView('skills');
+    renderSkills();
+    return;
+  }
+  if (action.type === 'open-usage-diagnostics') {
+    state.selectedUsageSourceId = `profile:${profile.id}`;
+    state.dashboardLoaded = false;
+    await closeProfileDiagnosis();
+    await switchView('dashboard');
+    if (state.dashboardLoaded) elements.usageDiagnosticsButton.click();
+  }
+}
+
+async function loadProfilePreflight(target) {
+  const profile = selectedProfile();
+  if (!profile || state.busy) return null;
+  setBusy(true);
+  try {
+    await discardProfileDiagnosis();
+    const result = await window.dualCodexDay.preflightProfile(profile.id, target);
+    state.profileDiagnosisToken = result.token;
+    renderProfileDiagnosis(result.report, { preflightTarget: target, canLaunch: result.canLaunch });
+    if (!elements.profileDiagnosisDialog.open) elements.profileDiagnosisDialog.showModal();
+    refreshIcons();
+    return result;
+  } catch (error) {
+    showToast(error.message || '启动前检查失败。', true);
+    return null;
+  } finally {
+    setBusy(false);
+    renderSelectedProfile();
+  }
+}
+
+async function launchSelectedTarget(target, options = {}) {
+  const profile = selectedProfile();
+  if (!profile || state.busy || !targetMetadata[target]) return;
+  if (!options.skipPreflight) {
+    const result = await loadProfilePreflight(target);
+    if (!result || !result.canLaunch || result.needsConfirmation) {
+      if (result && !result.canLaunch) showToast('当前 Profile 存在阻止启动的问题，请先完成处理。', true);
+      return;
+    }
+    await closeProfileDiagnosis();
+  }
+  setBusy(true);
+  renderSelectedProfile();
+  try {
+    await window.dualCodexDay.launchProfile(profile.id, target);
+    await refreshSnapshot(profile.id, true);
+    showToast(`已用“${profile.name}”启动 ${targetMetadata[target].label}。`);
+  } catch (error) {
+    showToast(error.message || '启动失败。', true);
   } finally {
     setBusy(false);
     renderSelectedProfile();
@@ -560,7 +682,10 @@ function setBusy(value) {
   elements.profileRecoveryApply.disabled = value || !state.profileRecoveryToken || activeLaunches(state.selectedProfileId).length > 0;
   elements.profileTransferApply.disabled = value;
   elements.profileDiagnosisRefresh.disabled = value;
+  elements.profileDiagnosisLaunch.disabled = value;
   elements.profileDiagnosisExport.disabled = value || !state.profileDiagnosisToken;
+  elements.profileReadinessButton.disabled = value || !selectedProfile();
+  elements.profileStopButton.disabled = value || activeLaunches(state.selectedProfileId).length === 0;
   elements.saveProvider.disabled = value;
   elements.importProviderConfig.disabled = value;
   elements.renameProfile.disabled = value || !selectedProfile();
@@ -579,6 +704,7 @@ function renderProfiles() {
       <span class="profile-copy">
         <strong>${escapeHtml(profile.name)}</strong>
         <span>${activeLaunches(profile.id).length ? `${activeLaunches(profile.id).length} 个实例运行中` : profile.runtimeSource === 'default' ? '当前默认 Codex' : escapeHtml(profile.provider?.name || 'OpenAI 官方')}</span>
+        <small class="profile-readiness-label" data-state="${escapeHtml(profile.readiness?.state || 'attention')}">${profile.readiness?.state === 'ready' ? '就绪' : profile.readiness?.state === 'blocked' ? '不可启动' : '需留意'}${profile.readiness?.issueCount ? ` · ${profile.readiness.issueCount} 项` : ''}</small>
       </span>
       <i data-lucide="chevron-right"></i>
     </button>
@@ -593,6 +719,7 @@ function renderSelectedProfile() {
     elements.profilePath.textContent = '请选择一个账号配置';
     elements.profileRuntime.textContent = '未选择';
     elements.profileRuntime.classList.remove('is-active');
+    elements.profileStopButton.hidden = true;
     elements.providerName.textContent = '未选择 Profile';
     elements.providerDetail.textContent = '请选择账号配置';
     elements.providerState.textContent = '未配置';
@@ -604,6 +731,11 @@ function renderSelectedProfile() {
     elements.exportProfileTransfer.disabled = true;
     elements.profileDiagnosisButton.disabled = true;
     elements.profileRecoveryButton.disabled = true;
+    elements.profileReadiness.dataset.state = 'unknown';
+    elements.profileReadinessTitle.textContent = '等待选择 Profile';
+    elements.profileReadinessDetail.textContent = '选择账号后检查配置、认证和本机入口';
+    elements.profileReadinessButton.textContent = '查看体检';
+    elements.profileReadinessButton.disabled = true;
     elements.usageSourceButton.disabled = true;
     elements.profileLoginStatus.textContent = '未选择账号';
     elements.profileRuntimeSource.textContent = '请选择一个账号配置';
@@ -618,6 +750,10 @@ function renderSelectedProfile() {
   if (elements.profileRecoveryDialog.open) elements.profileRecoveryRunning.hidden = running === 0;
   elements.profileRuntime.textContent = running ? `${running} 个实例运行中` : '当前未运行';
   elements.profileRuntime.classList.toggle('is-active', running > 0);
+  elements.profileStopButton.hidden = running === 0;
+  elements.profileStopButton.disabled = state.busy;
+  elements.profileStopButton.querySelector('span').textContent = '关闭客户端';
+  elements.profileStopButton.querySelector('small').textContent = `${running} 个实例`;
   const sameSource = profile.runtimeSource === profile.usageSource;
   elements.usageSourceLabel.textContent = sameSource
     ? profile.runtimeSource === 'default' ? '默认账号' : '独立账号'
@@ -628,6 +764,20 @@ function renderSelectedProfile() {
   elements.exportProfileTransfer.disabled = state.busy;
   elements.profileDiagnosisButton.disabled = state.busy;
   elements.profileRecoveryButton.disabled = state.busy;
+  const readiness = profile.readiness || { state: 'attention', issueCount: 1, blockingCount: 0, actionCount: 0 };
+  elements.profileReadiness.dataset.state = readiness.state;
+  elements.profileReadinessTitle.textContent = readiness.state === 'ready'
+    ? '当前环境已就绪'
+    : readiness.state === 'blocked'
+      ? `${readiness.blockingCount} 项问题阻止启动`
+      : `${readiness.issueCount} 项状态需要确认`;
+  elements.profileReadinessDetail.textContent = readiness.state === 'ready'
+    ? '配置、认证、客户端和本地组件检查正常'
+    : readiness.state === 'blocked'
+      ? '打开体检并完成处理后再启动客户端'
+      : '启动前会展示影响范围和对应处理入口';
+  elements.profileReadinessButton.textContent = readiness.state === 'ready' ? '查看体检' : '处理问题';
+  elements.profileReadinessButton.disabled = state.busy;
   const provider = profile.provider || { type: 'official', name: 'OpenAI 官方' };
   const providerReady = provider.type === 'official'
     || provider.authMode !== 'environment'
@@ -666,7 +816,7 @@ function renderSelectedProfile() {
   elements.profileLoginState.classList.toggle('is-error', login.state === 'signed-out' || login.state === 'missing');
   launchButtons.forEach(button => {
     const target = button.dataset.target;
-    button.disabled = state.busy || !providerReady || !state.snapshot.targets[target]?.available;
+    button.disabled = state.busy || !state.snapshot.targets[target]?.available;
   });
   const desktopButton = elements.launchActions.querySelector('[data-target="desktop"]');
   desktopButton.querySelector('span').textContent = login.state === 'signed-out' ? '打开 Codex 并登录' : profile.runtimeSource === 'default' ? '打开默认 Codex' : '打开独立 Codex';
@@ -1728,7 +1878,7 @@ async function loadDashboard(force = false) {
 }
 
 function switchView(view) {
-  if (!['launcher', 'dashboard', 'skills'].includes(view)) return;
+  if (!['launcher', 'dashboard', 'skills'].includes(view)) return Promise.resolve();
   state.activeView = view;
   elements.launcherView.hidden = view !== 'launcher';
   elements.dashboardView.hidden = view !== 'dashboard';
@@ -1739,8 +1889,9 @@ function switchView(view) {
     button.setAttribute('aria-selected', String(selected));
   });
   if (state.snapshot) renderUsage();
-  if (view === 'dashboard') loadDashboard();
-  if (view === 'skills') loadSkills();
+  if (view === 'dashboard') return loadDashboard();
+  if (view === 'skills') return loadSkills();
+  return Promise.resolve();
 }
 
 function renderSkills() {
@@ -1757,6 +1908,14 @@ function renderSkills() {
   const workspaceRoot = data.roots.find(root => root.scope === 'workspace');
   const discoveredProjects = data.roots.filter(root => root.scope === 'workspace' && root.discovered);
   const workspaceSkillTotal = data.skills.filter(skill => skill.locations.some(location => location.scope === 'workspace')).length;
+  const focusItems = state.skillsFocus?.items || [];
+  const matchesFocus = value => !focusItems.length || focusItems.some(item => String(value || '').toLowerCase().includes(String(item).toLowerCase()) || String(item).toLowerCase().includes(String(value || '').toLowerCase()));
+  elements.skillsFocus.hidden = !state.skillsFocus;
+  if (state.skillsFocus) {
+    elements.skillsFocusCopy.textContent = focusItems.length
+      ? `来自“${state.skillsFocus.profileName}”的体检：${focusItems.join('、')}`
+      : `来自“${state.skillsFocus.profileName}”的体检，请检查当前环境状态`;
+  }
   elements.standaloneSkillCount.textContent = String(data.skills.length);
   elements.pluginSkillCount.textContent = String(pluginSkillTotal);
   elements.availableSkillCount.textContent = String(availableSkillTotal);
@@ -1767,18 +1926,19 @@ function renderSkills() {
   });
   elements.skillsMeta.textContent = `${data.skills.length} 个独立 Skill · 项目来源 ${workspaceSkillTotal} 个（自动发现 ${discoveredProjects.length} 个项目） · ${pluginData.plugins.length} 个已安装插件包含 ${pluginSkillTotal} 个 Skill · ${pluginData.availablePlugins.length} 个可安装插件包含 ${availableSkillTotal} 个 Skill${pluginData.failures.length ? ` · ${pluginData.failures.length} 个环境读取失败` : ''}${workspaceRoot ? ` · 当前项目 ${workspaceRoot.path}` : ''}`;
   if (state.skillsMode === 'plugins') {
-    renderPluginSkills(pluginData);
+    renderPluginSkills({ ...pluginData, plugins: pluginData.plugins.filter(plugin => matchesFocus(plugin.pluginId) || matchesFocus(plugin.name)) });
     return;
   }
   if (state.skillsMode === 'available') {
-    renderAvailablePluginSkills(pluginData);
+    renderAvailablePluginSkills({ ...pluginData, availablePlugins: (pluginData.availablePlugins || []).filter(plugin => matchesFocus(plugin.pluginId) || matchesFocus(plugin.name)) });
     return;
   }
   const columns = data.roots.filter(root => root.scope !== 'system');
+  const visibleSkills = data.skills.filter(skill => matchesFocus(skill.name));
   elements.skillsTable.style.setProperty('--skill-column-count', String(columns.length));
-  elements.skillsTable.innerHTML = data.skills.length ? `
+  elements.skillsTable.innerHTML = visibleSkills.length ? `
     <div class="skills-matrix-header"><span>Skill</span>${columns.map(root => `<span title="${escapeHtml(root.path)}">${escapeHtml(root.label)}</span>`).join('')}<span>操作</span></div>
-    ${data.skills.map(skill => {
+    ${visibleSkills.map(skill => {
       const source = skill.locations.find(item => !item.readOnly) || skill.locations[0];
       const shared = skill.locations.find(item => item.scope === 'shared');
       const onlySystem = skill.locations.every(item => item.readOnly);
@@ -1796,7 +1956,7 @@ function renderSkills() {
           <button class="icon-button danger-icon-button" type="button" data-skill-remove="${escapeHtml(source.path)}" ${!source.managed || source.readOnly ? 'disabled' : ''} title="移入回收站" aria-label="移入回收站"><i data-lucide="trash-2"></i></button>
         </div>
       </div>`;
-    }).join('')}` : '<div class="skills-loading">当前目录中没有可识别的 Skills。</div>';
+    }).join('')}` : `<div class="skills-loading">${state.skillsFocus ? '没有扫描到体检中提到的 Skill，请检查失效路径或从其他来源重新同步。' : '当前目录中没有可识别的 Skills。'}</div>`;
   refreshIcons();
 }
 
@@ -1913,6 +2073,10 @@ elements.skillsMode.addEventListener('click', event => {
   state.skillsMode = button.dataset.skillsMode;
   renderSkills();
 });
+elements.skillsFocusClear.addEventListener('click', () => {
+  state.skillsFocus = null;
+  renderSkills();
+});
 
 elements.pluginManageCancel.addEventListener('click', () => elements.pluginManageDialog.close());
 elements.pluginManageForm.addEventListener('submit', async event => {
@@ -1962,7 +2126,7 @@ elements.skillsWorkspace.addEventListener('click', async () => {
 elements.skillsRestart.addEventListener('click', () => {
   const profile = selectedProfile();
   if (!profile) return showToast('请先在启动中心选择一个账号。', true);
-  window.dualCodexDay.launchProfile(profile.id, 'desktop').then(() => showToast(`已用“${profile.name}”启动 Codex。`)).catch(error => showToast(error.message || '启动失败。', true));
+  launchSelectedTarget('desktop');
 });
 
 elements.profileList.addEventListener('click', event => {
@@ -1982,14 +2146,24 @@ elements.addProfile.addEventListener('click', () => {
 });
 
 elements.profileDiagnosisButton.addEventListener('click', loadProfileDiagnosis);
-elements.profileDiagnosisRefresh.addEventListener('click', loadProfileDiagnosis);
-elements.profileDiagnosisClose.addEventListener('click', async () => {
-  await discardProfileDiagnosis();
-  elements.profileDiagnosisDialog.close();
-});
+elements.profileReadinessButton.addEventListener('click', loadProfileDiagnosis);
+elements.profileDiagnosisRefresh.addEventListener('click', () => state.pendingLaunchTarget
+  ? loadProfilePreflight(state.pendingLaunchTarget)
+  : loadProfileDiagnosis());
+elements.profileDiagnosisClose.addEventListener('click', closeProfileDiagnosis);
 elements.profileDiagnosisDialog.addEventListener('cancel', event => {
   event.preventDefault();
-  discardProfileDiagnosis().finally(() => elements.profileDiagnosisDialog.close());
+  closeProfileDiagnosis();
+});
+elements.profileDiagnosisGroups.addEventListener('click', event => {
+  const button = event.target.closest('[data-diagnosis-action]');
+  if (button) runDiagnosisAction(diagnosisAction(button.dataset.diagnosisAction));
+});
+elements.profileDiagnosisLaunch.addEventListener('click', async () => {
+  const target = state.pendingLaunchAllowed ? state.pendingLaunchTarget : null;
+  if (!target) return;
+  await closeProfileDiagnosis();
+  launchSelectedTarget(target, { skipPreflight: true });
 });
 elements.profileDiagnosisExport.addEventListener('click', async () => {
   if (!state.profileDiagnosisToken || state.busy) return;
@@ -2253,18 +2427,27 @@ elements.launchActions.addEventListener('click', async event => {
   const button = event.target.closest('[data-target]');
   const profile = selectedProfile();
   if (!button || !profile || state.busy) return;
-  const target = button.dataset.target;
+  launchSelectedTarget(button.dataset.target);
+});
+
+elements.profileStopButton.addEventListener('click', async () => {
+  const profile = selectedProfile();
+  const running = activeLaunches(profile?.id);
+  if (!profile || !running.length || state.busy) return;
   setBusy(true);
-  renderSelectedProfile();
   try {
-    await window.dualCodexDay.launchProfile(profile.id, target);
-    await refreshSnapshot(profile.id);
-    showToast(`已用“${profile.name}”启动 ${targetMetadata[target].label}。`);
+    const result = await window.dualCodexDay.stopProfileLaunches(profile.id);
+    if (result.canceled) return;
+    await refreshSnapshot(profile.id, true);
+    const forced = result.results.filter(item => item.forced).length;
+    const suffix = forced ? `，其中 ${forced} 个已强制结束` : '';
+    showToast(`“${profile.name}”的 ${result.results.length} 个客户端已关闭${suffix}。`);
   } catch (error) {
-    showToast(error.message || '启动失败。', true);
+    await refreshSnapshot(profile.id, true);
+    showToast(error.message || '无法关闭客户端。', true);
   } finally {
     setBusy(false);
-    renderSelectedProfile();
+    render();
   }
 });
 

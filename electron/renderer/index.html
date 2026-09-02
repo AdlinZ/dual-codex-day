@@ -14,7 +14,7 @@
         <img src="../../assets/codex-day-mark.svg" alt="" class="brand-mark">
         <div>
           <strong>Dual Codex Day</strong>
-          <span id="version-label">v0.20.0</span>
+          <span id="version-label">v0.22.0</span>
         </div>
       </div>
       <nav class="primary-tabs" aria-label="主要功能">
@@ -124,6 +124,12 @@
             </div>
           </div>
 
+          <div class="profile-readiness" id="profile-readiness" data-state="unknown">
+            <span class="profile-readiness-icon"><i data-lucide="shield-check"></i></span>
+            <span class="profile-readiness-copy"><strong id="profile-readiness-title">等待选择 Profile</strong><small id="profile-readiness-detail">选择账号后检查配置、认证和本机入口</small></span>
+            <button class="secondary-button" id="profile-readiness-button" type="button" disabled>查看体检</button>
+          </div>
+
           <div class="launch-actions" id="launch-actions">
             <button class="launch-button" type="button" data-target="cli" disabled>
               <i data-lucide="terminal-square"></i>
@@ -137,6 +143,11 @@
               <i data-lucide="monitor-up"></i>
               <span>打开 Codex</span>
               <small>桌面端</small>
+            </button>
+            <button class="launch-button launch-stop-button profile-stop-button" id="profile-stop-button" type="button" hidden>
+              <i data-lucide="square"></i>
+              <span>关闭客户端</span>
+              <small>运行中</small>
             </button>
           </div>
         </section>
@@ -325,6 +336,7 @@
         <div class="skills-toolbar-actions"><button class="secondary-button" id="skills-workspace-button" type="button"><i data-lucide="folder-open"></i><span>选择项目</span></button><button class="secondary-button" id="skills-refresh-button" type="button"><i data-lucide="refresh-cw"></i><span>刷新</span></button><button class="primary-button" id="skills-restart-button" type="button"><i data-lucide="rocket"></i><span>重启 Codex</span></button></div>
       </div>
       <div class="skills-notice"><i data-lucide="circle-alert"></i><span>目录或配置变更后，已运行的 Codex 需要重启才会加载最新 Skills。</span></div>
+      <div class="skills-focus" id="skills-focus" hidden><i data-lucide="circle-alert"></i><span id="skills-focus-copy"></span><button type="button" id="skills-focus-clear">显示全部</button></div>
       <div class="skills-mode" id="skills-mode" role="tablist" aria-label="Skill 来源">
         <button type="button" class="is-active" data-skills-mode="standalone" aria-selected="true">独立 Skills <span id="standalone-skill-count">0</span></button>
         <button type="button" data-skills-mode="plugins" aria-selected="false">插件 Skills <span id="plugin-skill-count">0</span></button>
@@ -594,6 +606,7 @@
       <div class="modal-actions">
         <button class="secondary-button" id="profile-diagnosis-close" type="button">关闭</button>
         <button class="secondary-button" id="profile-diagnosis-refresh" type="button"><i data-lucide="refresh-cw"></i><span>重新检查</span></button>
+        <button class="primary-button" id="profile-diagnosis-launch" type="button" hidden><i data-lucide="rocket"></i><span>继续启动</span></button>
         <button class="primary-button" id="profile-diagnosis-export" type="button"><i data-lucide="download"></i><span>导出诊断</span></button>
       </div>
     </div>

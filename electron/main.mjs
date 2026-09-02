@@ -37,7 +37,7 @@ import { getIndexDiagnostics, openIndex, readDailySummary, readIndexedEvents, re
 import { readCcSwitchAudit } from '../scripts/lib/cc-switch-audit.mjs';
 import { discoverProjectSkillRoots, removeManagedSkill, scanSkills, setSkillEnabled, shareSkill, skillRoots, syncSkill } from '../scripts/lib/skill-store.mjs';
 import { installPlugin, listPluginMarketplaces, removePlugin, scanPluginSkills, setPluginEnabled } from '../scripts/lib/plugin-store.mjs';
-import { createProfileDiagnosisExport, diagnoseProfileEnvironment } from '../scripts/lib/profile-doctor.mjs';
+import { createProfileDiagnosisExport, diagnoseProfileEnvironment, summarizeProfileReadiness } from '../scripts/lib/profile-doctor.mjs';
 
 const electronDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.dirname(electronDirectory);
@@ -61,12 +61,19 @@ let currentWorkspace = process.env.DUAL_CODEX_DAY_SCREENSHOT_WORKSPACE
 let targetCache = null;
 let projectSkillRootsCache = null;
 const loginStatusCache = new Map();
+const profileReadinessCache = new Map();
 const pendingProfileTransfers = new Map();
 const pendingProfileDiagnoses = new Map();
 const pendingProfileRecoveries = new Map();
 const PROFILE_TRANSFER_MAX_BYTES = 2 * 1024 * 1024;
 const PROFILE_TRANSFER_TTL_MS = 10 * 60 * 1000;
 const PROFILE_RECOVERY_TTL_MS = 5 * 60 * 1000;
+const PROFILE_READINESS_TTL_MS = 30 * 1000;
+
+function invalidateProfileHealth() {
+  loginStatusCache.clear();
+  profileReadinessCache.clear();
+}
 
 function serializableTargets(targets) {
   return Object.fromEntries(Object.entries(targets).map(([key, value]) => [key, {
@@ -274,7 +281,7 @@ function getSnapshot(profileId) {
     version: packageMetadata.version,
     workspace: currentWorkspace,
     profilesRoot,
-    profiles: profiles.map(publicProfile),
+    profiles: profiles.map(profile => ({ ...publicProfile(profile), readiness: cachedProfileReadiness(profile) })),
     usageSources: publicUsageSources(),
     security: { providerSecretsEncrypted: secureProviderStorageAvailable() },
     targets: readTargets(),
@@ -424,11 +431,32 @@ function collectProfileDiagnosis(profile) {
   });
 }
 
+function cachedProfileReadiness(profile) {
+  const fingerprint = `${profile.updatedAt}:${profile.runtimeSource}:${profile.usageSource}`;
+  const cached = profileReadinessCache.get(profile.id);
+  if (cached && cached.fingerprint === fingerprint && Date.now() - cached.at < PROFILE_READINESS_TTL_MS) return cached.value;
+  let value;
+  try {
+    value = summarizeProfileReadiness(collectProfileDiagnosis(profile));
+  } catch {
+    value = { state: 'attention', issueCount: 1, blockingCount: 0, actionCount: 0, primaryAction: null };
+  }
+  profileReadinessCache.set(profile.id, { at: Date.now(), fingerprint, value });
+  return value;
+}
+
 function prunePendingProfileDiagnoses() {
   const cutoff = Date.now() - PROFILE_TRANSFER_TTL_MS;
   for (const [token, pending] of pendingProfileDiagnoses) {
     if (pending.createdAt < cutoff) pendingProfileDiagnoses.delete(token);
   }
+}
+
+function storePendingProfileDiagnosis(event, report) {
+  prunePendingProfileDiagnoses();
+  const token = randomUUID();
+  pendingProfileDiagnoses.set(token, { createdAt: Date.now(), webContentsId: event.sender.id, report });
+  return token;
 }
 
 function prunePendingProfileRecoveries() {
@@ -510,14 +538,29 @@ async function confirmLaunch(result) {
   return result;
 }
 
+async function stopRecordedLaunch(launch) {
+  try {
+    return await stopProfileLaunch(profilesRoot, launch.id);
+  } catch (error) {
+    if (/Cannot verify/.test(error.message)) {
+      throw new Error('无法确认这个进程仍属于该启动记录。为避免误关其他程序，DCD 已取消操作。');
+    }
+    if (/did not exit/.test(error.message)) throw new Error('客户端未能关闭，请在对应窗口中手动退出。');
+    throw error;
+  }
+}
+
 function registerIpc() {
   ipcMain.handle('app:get-snapshot', (_event, profileId) => getSnapshot(profileId));
   ipcMain.handle('profiles:create', (_event, requestedName) => {
     const profile = createProfile(profilesRoot, requestedName);
+    invalidateProfileHealth();
     return publicProfile(profile);
   });
   ipcMain.handle('profiles:rename', (_event, payload) => {
-    return publicProfile(renameProfile(profilesRoot, String(payload?.profileId || ''), payload?.name));
+    const profile = renameProfile(profilesRoot, String(payload?.profileId || ''), payload?.name);
+    invalidateProfileHealth();
+    return publicProfile(profile);
   });
   ipcMain.handle('profiles:delete', async (_event, profileId) => {
     const profile = findProfile(profilesRoot, String(profileId || ''));
@@ -526,7 +569,7 @@ function registerIpc() {
     }
     if (existsSync(profile.paths.root)) await shell.trashItem(profile.paths.root);
     removeProfile(profilesRoot, profile.id);
-    loginStatusCache.clear();
+    invalidateProfileHealth();
     return true;
   });
   ipcMain.handle('profiles:provider-preview', (_event, payload) => {
@@ -549,7 +592,9 @@ function registerIpc() {
     if (!usesManagedKey && existsSync(providerSecretPath(profile))) {
       unlinkSync(providerSecretPath(profile));
     }
-    return publicProfile(updateProfileProvider(profilesRoot, profile.id, provider));
+    const updated = updateProfileProvider(profilesRoot, profile.id, provider);
+    invalidateProfileHealth();
+    return publicProfile(updated);
   });
   ipcMain.handle('profiles:set-usage-source', (_event, payload) => {
     const profile = updateProfileUsageSource(
@@ -557,6 +602,7 @@ function registerIpc() {
       String(payload?.profileId || ''),
       String(payload?.source || '')
     );
+    invalidateProfileHealth();
     return publicProfile(profile);
   });
   ipcMain.handle('profiles:set-runtime-source', (_event, payload) => {
@@ -565,7 +611,7 @@ function registerIpc() {
       String(payload?.profileId || ''),
       String(payload?.source || '')
     );
-    loginStatusCache.clear();
+    invalidateProfileHealth();
     return publicProfile(profile);
   });
   ipcMain.handle('profiles:import-config', async (_event, profileId) => {
@@ -580,7 +626,9 @@ function registerIpc() {
     if (result.canceled || !result.filePaths[0]) return null;
     const sourcePath = result.filePaths[0];
     if (statSync(sourcePath).size > 2 * 1024 * 1024) throw new Error('config.toml 不能超过 2 MB。');
-    return publicProfile(importProfileConfig(profilesRoot, profile.id, readFileSync(sourcePath, 'utf8')));
+    const imported = importProfileConfig(profilesRoot, profile.id, readFileSync(sourcePath, 'utf8'));
+    invalidateProfileHealth();
+    return publicProfile(imported);
   });
   ipcMain.handle('profiles:export-transfer', async (_event, payload) => {
     const profile = findProfile(profilesRoot, String(payload?.profileId || ''));
@@ -633,7 +681,7 @@ function registerIpc() {
       const secretPath = providerSecretPath(applied.profile);
       if (existsSync(secretPath)) unlinkSync(secretPath);
     }
-    loginStatusCache.clear();
+    invalidateProfileHealth();
     return {
       profile: publicProfile(applied.profile),
       preferences: applied.preferences,
@@ -649,11 +697,26 @@ function registerIpc() {
   });
   ipcMain.handle('profiles:diagnose', (event, profileId) => {
     const profile = findProfile(profilesRoot, String(profileId || ''));
+    invalidateProfileHealth();
     const report = collectProfileDiagnosis(profile);
-    prunePendingProfileDiagnoses();
-    const token = randomUUID();
-    pendingProfileDiagnoses.set(token, { createdAt: Date.now(), webContentsId: event.sender.id, report });
+    const token = storePendingProfileDiagnosis(event, report);
     return { token, report };
+  });
+  ipcMain.handle('profiles:preflight', (event, payload) => {
+    const profile = findProfile(profilesRoot, String(payload?.profileId || ''));
+    const target = String(payload?.target || '');
+    if (!PROFILE_TARGETS.includes(target)) throw new Error('不支持的启动目标。');
+    invalidateProfileHealth();
+    const report = collectProfileDiagnosis(profile);
+    const readiness = summarizeProfileReadiness(report);
+    const token = storePendingProfileDiagnosis(event, report);
+    return {
+      token,
+      report,
+      readiness,
+      canLaunch: readiness.blockingCount === 0,
+      needsConfirmation: readiness.issueCount > 0
+    };
   });
   ipcMain.handle('profiles:export-diagnosis', async (event, token) => {
     prunePendingProfileDiagnoses();
@@ -704,7 +767,7 @@ function registerIpc() {
       isProfileRunning: profileId => listProfileLaunches(profilesRoot, { limit: 24 })
         .some(launch => launch.profileId === profileId && launch.active)
     });
-    loginStatusCache.clear();
+    invalidateProfileHealth();
     return { profile: publicProfile(restored.profile), preview: restored.preview };
   });
   ipcMain.handle('profiles:discard-recovery', (event, token) => {
@@ -756,15 +819,33 @@ function registerIpc() {
     });
     if (confirmation.response !== 1) return { ...launch, canceled: true };
 
-    try {
-      return { ...await stopProfileLaunch(profilesRoot, launch.id), canceled: false };
-    } catch (error) {
-      if (/Cannot verify/.test(error.message)) {
-        throw new Error('无法确认这个进程仍属于该启动记录。为避免误关其他程序，DCD 已取消操作。');
-      }
-      if (/did not exit/.test(error.message)) throw new Error('客户端未能关闭，请在对应窗口中手动退出。');
-      throw error;
-    }
+    return { ...await stopRecordedLaunch(launch), canceled: false };
+  });
+  ipcMain.handle('profiles:stop-all', async (_event, profileId) => {
+    const profile = findProfile(profilesRoot, String(profileId || ''));
+    const launches = listProfileLaunches(profilesRoot, { limit: 100 })
+      .filter(launch => launch.profileId === profile.id && launch.active);
+    if (!launches.length) return { canceled: false, results: [] };
+
+    const defaultRuntimeWarning = launches.some(launch => launch.runtimeSource === 'default')
+      ? '\n\n其中包含系统默认运行环境。若客户端复用了已有窗口，关闭可能影响你在该窗口中的其他工作。'
+      : '';
+    const countLabel = launches.length === 1 ? '这个客户端' : `这 ${launches.length} 个客户端`;
+    const confirmation = await dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      buttons: ['取消', '全部关闭'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      title: '关闭客户端',
+      message: `关闭“${profile.name}”正在运行的${countLabel}？`,
+      detail: `DCD 会逐个请求正常关闭，没有响应时再强制结束对应实例。${defaultRuntimeWarning}`
+    });
+    if (confirmation.response !== 1) return { canceled: true, results: [] };
+
+    const results = [];
+    for (const launch of launches) results.push(await stopRecordedLaunch(launch));
+    return { canceled: false, results };
   });
   ipcMain.handle('profiles:open-folder', async (_event, profileId) => {
     const profile = findProfile(profilesRoot, String(profileId || ''));
@@ -847,7 +928,29 @@ async function captureRequestedScreenshot(window) {
   if (!target) return;
   await new Promise(resolve => setTimeout(resolve, 1200));
   const screenshotView = process.env.DUAL_CODEX_DAY_SCREENSHOT_VIEW || '';
-  if (screenshotView === 'profile-recovery') {
+  if (screenshotView === 'profile-preflight') {
+    window.setSize(1400, 960);
+    const preflightOpened = await window.webContents.executeJavaScript(`(async () => {
+      for (let attempt = 0; attempt < 160; attempt += 1) {
+        const button = document.querySelector('[data-target="desktop"]');
+        if (button && !button.disabled) {
+          button.click();
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      for (let attempt = 0; attempt < 240; attempt += 1) {
+        const dialog = document.querySelector('#profile-diagnosis-dialog');
+        const continueButton = document.querySelector('#profile-diagnosis-launch');
+        const actionButton = document.querySelector('[data-diagnosis-action]');
+        if (dialog?.open && continueButton && !continueButton.hidden && actionButton) return true;
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      return false;
+    })()`);
+    if (!preflightOpened) throw new Error('Profile launch preflight did not expose confirmation and remediation actions.');
+    await new Promise(resolve => setTimeout(resolve, 350));
+  } else if (screenshotView === 'profile-recovery') {
     window.setSize(1400, 960);
     const recoveryOpened = await window.webContents.executeJavaScript(`(async () => {
       for (let attempt = 0; attempt < 160; attempt += 1) {
@@ -888,18 +991,20 @@ async function captureRequestedScreenshot(window) {
       const meta = document.querySelector('#profile-diagnosis-meta');
       if (meta) meta.textContent = '2026/8/31 16:30:00';
       const groups = document.querySelector('#profile-diagnosis-groups');
-      const rows = group => group.checks.map(item => '<div class="diagnosis-check" data-status="' + item.status + '"><span class="diagnosis-dot"></span><strong>' + item.label + '</strong><span class="diagnosis-check-copy">' + item.detail + (item.items ? '<small>' + item.items + '</small>' : '') + '</span></div>').join('');
+      const rows = group => group.checks.map(item => '<div class="diagnosis-check' + (item.action ? ' has-action' : '') + '" data-status="' + item.status + '"><span class="diagnosis-dot"></span><strong>' + item.label + '</strong><span class="diagnosis-check-copy">' + item.detail + (item.items ? '<small>' + item.items + '</small>' : '') + '</span>' + (item.action ? '<button type="button">' + item.action + '</button>' : '') + '</div>').join('');
       const data = [
         { label: '配置与目录', status: '正常', checks: [{ status: 'ok', label: 'config.toml', detail: 'config.toml 可正常解析' }, { status: 'ok', label: '运行目录', detail: '当前运行目录可读' }] },
-        { label: '供应商与认证', status: '需处理', checks: [{ status: 'ok', label: '安全凭据存储', detail: '操作系统安全凭据存储可用' }, { status: 'error', label: '认证状态', detail: '当前供应商缺少所需凭据' }] },
+        { label: '供应商与认证', status: '需处理', checks: [{ status: 'ok', label: '安全凭据存储', detail: '操作系统安全凭据存储可用' }, { status: 'error', label: '认证状态', detail: '当前供应商缺少所需凭据', action: '打开供应商设置' }] },
         { label: '客户端入口', status: '需留意', checks: [{ status: 'ok', label: 'Codex CLI', detail: '入口可用' }, { status: 'ok', label: 'VS Code', detail: '入口可用' }, { status: 'warning', label: 'Codex 桌面端', detail: '未检测到可用入口' }] },
-        { label: 'Skills 与插件', status: '需留意', checks: [{ status: 'warning', label: 'Skills 配置', detail: '1 个 Skill 路径失效', items: 'release-check' }, { status: 'ok', label: '插件状态', detail: '2 个插件状态可读取' }] },
-        { label: '用量索引', status: '需处理', checks: [{ status: 'error', label: '账号用量', detail: '用量索引无法读取' }] },
+        { label: 'Skills 与插件', status: '需留意', checks: [{ status: 'warning', label: 'Skills 配置', detail: '1 个 Skill 路径失效', items: 'release-check', action: '查看相关 Skills' }, { status: 'ok', label: '插件状态', detail: '2 个插件状态可读取' }] },
+        { label: '用量索引', status: '需处理', checks: [{ status: 'error', label: '账号用量', detail: '用量索引无法读取', action: '打开数据诊断' }] },
         { label: '运行与恢复', status: '正常', checks: [{ status: 'ok', label: '迁移备份', detail: '最近备份：2026-08-31T15:42:00.000Z' }] }
       ];
       if (groups) groups.innerHTML = data.map(group => '<section class="diagnosis-group"><div class="diagnosis-group-heading"><h3>' + group.label + '</h3><span>' + group.status + '</span></div>' + rows(group) + '</section>').join('');
       const exportButton = document.querySelector('#profile-diagnosis-export');
       if (exportButton) exportButton.disabled = false;
+      const launchButton = document.querySelector('#profile-diagnosis-launch');
+      if (launchButton) { launchButton.hidden = false; launchButton.querySelector('span').textContent = '继续打开 Codex 桌面端'; }
       dialog?.showModal();
       return dialog?.open === true;
     })()`);

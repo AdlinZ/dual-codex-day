@@ -38,7 +38,7 @@ try {
     authMode: 'none'
   });
   writeFileSync(path.join(source.paths.codexHome, 'config.toml'), 'model = "gpt-recovery"\n');
-  const transfer = exportProfileTransfer(sourceRoot, source.id, { appVersion: '0.21.0' });
+  const transfer = exportProfileTransfer(sourceRoot, source.id, { appVersion: '0.22.0' });
 
   let target = createProfile(targetRoot, '恢复账号');
   target = updateProfileUsageSource(targetRoot, target.id, 'default');

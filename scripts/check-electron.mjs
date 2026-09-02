@@ -18,7 +18,7 @@ const css = readFileSync(path.join(root, 'electron', 'renderer', 'app.css'), 'ut
 const capture = readFileSync(path.join(root, 'scripts', 'capture-electron.mjs'), 'utf8');
 const packager = readFileSync(path.join(root, 'scripts', 'package-electron.mjs'), 'utf8');
 
-assert(packageMetadata.version === '0.21.0', 'Electron release must use package version 0.21.0');
+assert(packageMetadata.version === '0.22.0', 'Electron release must use package version 0.22.0');
 assert(packageMetadata.main === 'electron/main.mjs', 'Electron main entry must be declared in package metadata');
 assert(packageMetadata.scripts.desktop === 'electron .', 'desktop command must launch the Electron entry');
 assert(/contextIsolation:\s*true/.test(main), 'Electron windows must enable context isolation');
@@ -31,6 +31,7 @@ assert(!/frame-src|<iframe/i.test(html), 'native usage analysis must not embed t
 assert(/lucide\/dist\/esm\/createElement\.mjs/.test(renderer) && /icons\/refresh-cw\.mjs/.test(renderer), 'renderer must use tree-scoped Lucide icon modules');
 assert(/profiles:create/.test(main) && /profiles:launch/.test(main), 'Electron main process must use profile IPC handlers');
 assert(/profiles:stop/.test(main) && /stopProfileLaunch/.test(main + preload + renderer), 'Electron must close a specific recorded instance through scoped IPC');
+assert(/profiles:stop-all/.test(main) && /profile-stop-button/.test(html + renderer + css) && /stopProfileLaunches/.test(preload + renderer), 'selected Profiles with active instances must expose a visible close-client action');
 assert(/showMessageBox/.test(main) && /默认运行环境/.test(main), 'instance shutdown must require confirmation and warn for the default runtime');
 assert(/profiles:save-provider/.test(main) && /profiles:provider-preview/.test(main), 'Electron main process must expose scoped provider configuration handlers');
 assert(/profiles:set-usage-source/.test(main) && /setProfileUsageSource/.test(preload), 'Electron must expose scoped Profile usage-source settings');
@@ -48,10 +49,17 @@ assert(/PROFILE_TRANSFER_MAX_BYTES/.test(main) && /showSaveDialog/.test(main) &&
 assert(/profile-transfer-dialog/.test(html + renderer + css) && /credentialRequired/.test(renderer), 'Electron must preview changes, missing components, and credential requirements');
 assert(/screenshotView === 'profile-transfer'/.test(main), 'visual verification must cover the Profile transfer preview');
 assert(/profiles:diagnose/.test(main) && /profiles:export-diagnosis/.test(main) && /collectProfileDiagnosis/.test(main), 'Electron must expose a read-only Profile diagnosis flow');
+assert(/profiles:preflight/.test(main) && /preflightProfile/.test(preload + renderer), 'Electron must perform a fresh scoped diagnosis before a Profile launch');
+assert((renderer.match(/\.launchProfile\(/g) || []).length === 1, 'all renderer launch entry points must route through the shared preflight flow');
+assert(/summarizeProfileReadiness/.test(main + profileDoctor) && /cachedProfileReadiness/.test(main), 'launcher snapshots must expose a cached readiness summary from the diagnosis model');
 assert(/new DatabaseSync\(databasePath, \{ readOnly: true/.test(main) && /readOnlyUsageHealth/.test(main), 'Profile diagnosis must inspect the existing usage index without refreshing it');
 assert(/pendingProfileDiagnoses/.test(main) && /webContentsId/.test(main) && /createProfileDiagnosisExport/.test(main), 'diagnostic export must use a renderer-scoped report token');
 assert(/profile-diagnosis-dialog/.test(html + renderer + css) && /diagnosisStatusLabel/.test(renderer), 'Electron must render grouped Profile health results');
+assert(/data-diagnosis-action/.test(renderer) && /runDiagnosisAction/.test(renderer) && /profile-diagnosis-launch/.test(html + renderer), 'Profile checks must route to bounded remediation actions and warning-only launch confirmation');
+assert(/profile-readiness/.test(html + renderer + css) && /blockingCount/.test(profileDoctor + renderer), 'launcher and Profile rail must distinguish ready, attention, and launch-blocked states');
+assert(/skills-focus/.test(html + renderer + css) && /state\.skillsFocus/.test(renderer), 'diagnostic component actions must preserve a focused Skills handoff');
 assert(/screenshotView === 'profile-diagnosis'/.test(main), 'visual verification must cover the Profile diagnosis dialog');
+assert(/screenshotView === 'profile-preflight'/.test(main) && /profile-diagnosis-launch/.test(main), 'visual verification must exercise the real Profile launch preflight flow');
 assert(/profiles:list-recovery-backups/.test(main) && /profiles:preview-recovery/.test(main) && /profiles:apply-recovery/.test(main), 'Electron must expose a scoped preview-before-restore recovery flow');
 assert(/pendingProfileRecoveries/.test(main) && /PROFILE_RECOVERY_TTL_MS/.test(main) && /webContentsId/.test(main), 'Profile recovery apply must use a renderer-scoped short-lived token');
 assert(/isProfileRunning/.test(main) && /listProfileLaunches/.test(main), 'Profile recovery must reject active target instances');
