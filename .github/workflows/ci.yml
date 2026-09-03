@@ -41,7 +41,7 @@ jobs:
       - name: Launch packaged app and capture smoke screenshot
         shell: pwsh
         run: |
-          node .\scripts\capture-electron.mjs .\dist\windows-package-smoke.png .\dist\electron\dual-codex-day-win32-x64\dual-codex-day.exe --view=work-combinations
+          node .\scripts\capture-electron.mjs .\dist\windows-package-smoke.png .\dist\electron\dual-codex-day-win32-x64\dual-codex-day.exe --view=launcher-empty
           $image = Get-Item -LiteralPath .\dist\windows-package-smoke.png
           if ($image.Length -lt 50000) { throw 'Packaged Electron smoke screenshot is incomplete.' }
 
