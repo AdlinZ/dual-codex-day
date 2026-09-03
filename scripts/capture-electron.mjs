@@ -6,7 +6,7 @@ import { applyProfileTransfer, createProfile, exportProfileTransfer, launchProfi
 import { recordWorkCombination, setWorkCombinationPinned } from './lib/work-combination-store.mjs';
 
 const root = path.resolve('.');
-const outputPath = path.resolve(process.argv[2] || path.join(root, 'dist', 'electron-v0.23.0.png'));
+const outputPath = path.resolve(process.argv[2] || path.join(root, 'dist', 'electron-v0.24.0.png'));
 const packagedExecutable = process.argv[3] && !process.argv[3].startsWith('--') ? path.resolve(process.argv[3]) : null;
 const screenshotView = process.argv.find(argument => argument.startsWith('--view='))?.slice('--view='.length) || '';
 const liveData = process.argv.includes('--live');
@@ -45,6 +45,7 @@ function createUsageFixture(codexRoot, fixtureId = 'default', scale = 1) {
   const events = [
     JSON.stringify({ type: 'session_meta', payload: { id: sessionId, cwd: project } }),
     JSON.stringify({ type: 'turn_context', payload: { model: 'gpt-5.6-sol', cwd: project } }),
+    tokenEvent(new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000).toISOString(), 42000 * scale, 26000 * scale, 3800 * scale),
     tokenEvent(new Date(now.getTime() - 70 * 60 * 1000).toISOString(), 128000 * scale, 96000 * scale, 9200 * scale),
     tokenEvent(new Date(now.getTime() - 35 * 60 * 1000).toISOString(), 86000 * scale, 61000 * scale, 6800 * scale),
     tokenEvent(new Date(now.getTime() - 8 * 60 * 1000).toISOString(), 154000 * scale, 122000 * scale, 11300 * scale)
@@ -70,7 +71,7 @@ try {
       updateProfileUsageSource(temporaryRoot, workProfile.id, 'default');
       const recoverySourceRoot = path.join(temporaryRoot, 'recovery-source');
       const recoverySource = createProfile(recoverySourceRoot, '工作账号');
-      const recoveryTransfer = exportProfileTransfer(recoverySourceRoot, recoverySource.id, { appVersion: '0.23.0' });
+      const recoveryTransfer = exportProfileTransfer(recoverySourceRoot, recoverySource.id, { appVersion: '0.24.0' });
       applyProfileTransfer(temporaryRoot, recoveryTransfer);
     }
     createSkillFixture(path.join(usageRoot, 'skills'), 'issue-drafter', '整理产品问题并生成可提交的 Issue 草稿。');

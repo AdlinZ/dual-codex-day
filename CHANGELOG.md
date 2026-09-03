@@ -4,6 +4,20 @@ Project name: **Dual Codex Day** (`dual-codex-day`). Historical entries may reta
 
 ## Unreleased
 
+## [0.24.0] - 2026-09-03
+
+### Added
+
+- Added weekly and monthly cycle reviews with like-for-like period comparison, budget progress, end-of-period cost forecasts, and leading account, model, and task sources.
+- Added previous and next period navigation so completed natural weeks and months can be reviewed and exported.
+
+### Reliability
+
+- Cycle boundaries follow the machine's local calendar and natural Monday-based weeks.
+- Account reviews isolate unreadable Profile sources and avoid double-counting Profiles that share the default Codex usage source.
+- The preferred review period remains local, travels with Profile transfers, and defaults safely for older transfer files.
+- Completed periods show full-period comparisons without presenting a projected result as recorded usage.
+
 ## [0.23.0] - 2026-09-02
 
 ### Added

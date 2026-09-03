@@ -41,7 +41,7 @@
 - 输入、缓存输入、非缓存输入、输出和推理 Token
 - 按模型公开 API 标价估算成本，支持缓存写入、长上下文与处理模式
 - 今日成本、本月累计、月底预测、预算进度与价格覆盖提示
-- 周报/月报、同期对比、近 12 周活跃日历、CSV、分享海报与 CC Switch 只读对账
+- 周报/月报、同周期对比、历史自然周期回看、周期末预测、CSV、分享海报与 CC Switch 只读对账
 - 默认账号与各 Profile 并列对比，并可从最近任务钻取模型调用与 Token 构成
 - SQLite 增量索引、本地项目别名、任务详情和完整 24 小时时间轴
 - 仅监听 `127.0.0.1`，不上传日志，不依赖远程服务
@@ -157,7 +157,7 @@ node .\scripts\codex-profiles.mjs launch "工作账号" --target vscode --worksp
 
 Windows 会用系统自带的 .NET Framework 编译器在本机构建 `dist\dual-codex-day.exe`。源码更新后自动重建，构建失败时回退到 PowerShell 图形界面。设计和安全边界见 [v1.0.0 规划](docs/plans/v1.0.0.md)。
 
-Electron `v0.23.0` 使用沙箱渲染进程和受限预加载桥接，账号、启动、预检、最近工作与实例关闭逻辑复用同一套 Node.js 核心。范围和基础安全边界见 [v0.10.0 规划](docs/plans/v0.10.0.md)，当前版本变化见 [v0.23.0 Release Notes](docs/releases/v0.23.0.md)。Windows 上打开 Codex CLI 需要系统已安装 Windows Terminal，DCD 会用独立终端窗口承载交互界面。
+Electron `v0.24.0` 使用沙箱渲染进程和受限预加载桥接，账号、启动、预检、最近工作与实例关闭逻辑复用同一套 Node.js 核心。范围和基础安全边界见 [v0.10.0 规划](docs/plans/v0.10.0.md)，当前版本变化见 [v0.24.0 Release Notes](docs/releases/v0.24.0.md)。Windows 上打开 Codex CLI 需要系统已安装 Windows Terminal，DCD 会用独立终端窗口承载交互界面。
 
 ### 同时打开两个 Codex 桌面账号
 
@@ -187,7 +187,7 @@ Electron `v0.23.0` 使用沙箱渲染进程和受限预加载桥接，账号、�
 
 页面设置可以保存币种、汇率、中转站倍率、预算和项目别名，也可以导出带版本号的 JSON 配置并在导入前预览。设置保存在浏览器 `localStorage`，不会写入原始日志。
 
-服务提供 `/healthz`、`/api/status` 与 `/api/summary` 三个只读接口。`/api/summary?date=YYYY-MM-DD` 只返回汇总 Token、交互回合、模型调用数、任务数、缓存率和主要模型，不返回项目名称或 Session ID。Electron 用量中心还提供周报/月报、同期对比、CSV、用量海报与周期报告海报。
+服务提供 `/healthz`、`/api/status` 与 `/api/summary` 三个只读接口。`/api/summary?date=YYYY-MM-DD` 只返回汇总 Token、交互回合、模型调用数、任务数、缓存率和主要模型，不返回项目名称或 Session ID。Electron 用量中心还提供周报/月报、同周期对比、历史周期导航、预算进度、周期末预测、CSV、用量海报与周期报告海报。当前周期按已经过时间与上一自然周期的相同时段比较；历史周期使用完整自然周或自然月，不显示预测结果。
 
 常用命令：
 
@@ -407,10 +407,10 @@ dual-codex-day/
 
 ## 后续方向
 
-- 可选的周目标和月目标回顾
+- 跨账号预算阈值与本地提醒
 - 价格候选快照的人工确认与显式更新流程
 
-v0.23.0 已补齐启动前预检、最近工作组合和默认账号统一入口；Electron 控制中心的基础设计范围与验收标准见 [v0.10.0 规划](docs/plans/v0.10.0.md)。价格审计与 90 天回顾见 [v0.9.0 规划](docs/plans/v0.9.0.md)，设置迁移与每日摘要见 [v0.8.0 规划](docs/plans/v0.8.0.md)。
+v0.24.0 已补齐周/月周期回顾、预算预测、主要消耗来源和历史周期导航；Electron 控制中心的基础设计范围与验收标准见 [v0.10.0 规划](docs/plans/v0.10.0.md)。价格审计与 90 天回顾见 [v0.9.0 规划](docs/plans/v0.9.0.md)，设置迁移与每日摘要见 [v0.8.0 规划](docs/plans/v0.8.0.md)。
 
 ## License
 

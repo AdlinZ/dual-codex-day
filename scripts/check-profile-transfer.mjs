@@ -78,7 +78,7 @@ enabled = false
   const transfer = exportProfileTransfer(sourceRoot, source.id, {
     appVersion: '0.18.0',
     plugins: [{ id: 'openai-docs@openai', enabled: false }],
-    preferences: { relayMultiplier: 1.25, monthlyBudget: 50, costMode: 'fast' },
+    preferences: { relayMultiplier: 1.25, monthlyBudget: 50, costMode: 'fast', reviewPeriod: 'month' },
     exportedAt: '2026-08-31T00:00:00.000Z'
   });
   const serialized = JSON.stringify(transfer);
@@ -86,6 +86,9 @@ enabled = false
   assert(transfer.commonConfig.features.js_repl === true && transfer.commonConfig.mcp_servers.figma.command === 'figma-bridge', 'portable common config must retain normal Codex settings');
   assert(!transfer.commonConfig.skills && !transfer.commonConfig.plugins && !transfer.commonConfig.api_key, 'portable common config must remove paths, component state, and sensitive settings');
   assert(transfer.inventory.skills[0].id === 'release-check' && transfer.inventory.skills[0].enabled === false, 'export must retain Profile-local Skill state by directory name');
+  const legacyTransfer = JSON.parse(serialized);
+  delete legacyTransfer.preferences.reviewPeriod;
+  assert(parseProfileTransfer(legacyTransfer).preferences.reviewPeriod === 'week', 'older transfers must default to the weekly review without changing schema');
 
   assertThrows(() => parseProfileTransfer({ ...transfer, schemaVersion: 99 }), /Unsupported Profile transfer schema/, 'unknown transfer schemas must be rejected');
   const malicious = JSON.parse(serialized);
@@ -105,7 +108,7 @@ enabled = false
   };
   const applied = applyProfileTransfer(targetRoot, transfer, { available });
   assert(applied.profile.name === '迁移账号' && applied.preview.action === 'create', 'apply must create a missing Profile');
-  assert(applied.preferences.monthlyBudget === 50 && applied.preferences.costMode === 'fast', 'apply must return portable usage preferences for the renderer');
+  assert(applied.preferences.monthlyBudget === 50 && applied.preferences.costMode === 'fast' && applied.preferences.reviewPeriod === 'month', 'apply must return portable usage preferences for the renderer');
   assert(existsSync(path.join(applied.backupPath, 'backup.json')), 'apply must create backup metadata before writing');
   const appliedBackup = JSON.parse(readFileSync(path.join(applied.backupPath, 'backup.json'), 'utf8'));
   assert(appliedBackup.targetProfileId === applied.profile.id && appliedBackup.completedAt, 'successful imports must associate backup metadata with the target Profile');

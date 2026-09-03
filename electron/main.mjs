@@ -180,6 +180,7 @@ function usageSources() {
     name: profile.name,
     detail: profile.usageSource === 'default' ? '当前默认 Codex' : profile.provider?.name || 'OpenAI 官方',
     kind: 'profile',
+    duplicateOf: profile.usageSource === 'default' ? 'default' : null,
     roots: [profile.usageSource === 'default' ? defaultCodexRoot : profile.paths.codexHome]
   }));
   const defaultSource = {
@@ -1349,7 +1350,8 @@ async function captureRequestedScreenshot(window) {
     if (!launcherLoaded) throw new Error('Profile-scoped launcher usage did not load for the screenshot check.');
     await new Promise(resolve => setTimeout(resolve, 350));
   } else if (screenshotView.startsWith('dashboard')) {
-    window.setSize(screenshotView === 'dashboard-min' ? 980 : 1440, screenshotView === 'dashboard-min' ? 680 : 960);
+    const minimumDashboard = screenshotView === 'dashboard-min' || screenshotView.endsWith('-min');
+    window.setSize(minimumDashboard ? 980 : 1440, minimumDashboard ? 680 : 960);
     const dashboardLoaded = await window.webContents.executeJavaScript(`(async () => {
       const tab = document.querySelector('[data-view="dashboard"]');
       tab?.click();
@@ -1403,16 +1405,25 @@ async function captureRequestedScreenshot(window) {
       })()`);
       if (!taskOpened) throw new Error('Task drilldown did not open for the screenshot check.');
     }
-    if (screenshotView === 'dashboard-report') {
+    if (screenshotView.startsWith('dashboard-report')) {
       const reportVisible = await window.webContents.executeJavaScript(`(() => {
+        document.querySelector('#usage-settings-button')?.click();
+        const budget = document.querySelector('#usage-monthly-budget');
+        if (budget) budget.value = '25';
+        document.querySelector('#usage-settings-form')?.requestSubmit();
+        if (${JSON.stringify(screenshotView)}.includes('month')) document.querySelector('[data-report-period="month"]')?.click();
+        if (${JSON.stringify(screenshotView)}.includes('history')) document.querySelector('#report-previous')?.click();
         document.querySelector('[data-usage-detail="report"]')?.click();
         const report = document.querySelector('.period-report');
         report?.scrollIntoView({ block: 'center' });
-        return Boolean(report && !report.hidden && document.querySelector('#report-metrics')?.children.length === 4);
+        const historical = ${JSON.stringify(screenshotView)}.includes('history');
+        const metrics = document.querySelector('#report-metrics');
+        return Boolean(report && !report.hidden && metrics?.children.length === 4
+          && (!historical || (!metrics.textContent.includes('周期末预测') && !document.querySelector('#report-current')?.hidden)));
       })()`);
       if (!reportVisible) throw new Error('Periodic report did not render for the screenshot check.');
     }
-    if (screenshotView === 'dashboard-report-poster') {
+    if (screenshotView.startsWith('dashboard-report') && screenshotView.endsWith('poster')) {
       const reportPosterOpened = await window.webContents.executeJavaScript(`(async () => {
         document.querySelector('#report-poster-button')?.click();
         for (let attempt = 0; attempt < 80; attempt += 1) {

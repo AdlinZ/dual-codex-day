@@ -73,7 +73,7 @@ const paths = await packager({
     /^\/node_modules\/lucide\/dist\/esm\/shared($|\/)/,
     /^\/node_modules\/lucide\/dist\/esm\/.*\.map$/,
     /^\/node_modules\/lucide\/dist\/esm\/(iconsAndAliases|lucide|replaceElement)\.mjs$/,
-    /^\/node_modules\/lucide\/dist\/esm\/icons\/(?!refresh-cw\.mjs$|plus\.mjs$|shield-check\.mjs$|folder-open\.mjs$|folder-cog\.mjs$|ellipsis\.mjs$|square\.mjs$|square-terminal\.mjs$|panels-top-left\.mjs$|monitor-up\.mjs$|chart-no-axes-combined\.mjs$|user-round-plus\.mjs$|chevron-right\.mjs$|server-cog\.mjs$|settings-2\.mjs$|key-round\.mjs$|save-check\.mjs$|sliders-horizontal\.mjs$|eye\.mjs$|eye-off\.mjs$|file-input\.mjs$|rocket\.mjs$|circle-alert\.mjs$|database\.mjs$|download\.mjs$|image-down\.mjs$|pencil\.mjs$|trash-2\.mjs$|log-in\.mjs$|archive-restore\.mjs$|pin\.mjs$).+$/,
+    /^\/node_modules\/lucide\/dist\/esm\/icons\/(?!refresh-cw\.mjs$|plus\.mjs$|shield-check\.mjs$|folder-open\.mjs$|folder-cog\.mjs$|ellipsis\.mjs$|square\.mjs$|square-terminal\.mjs$|panels-top-left\.mjs$|monitor-up\.mjs$|chart-no-axes-combined\.mjs$|user-round-plus\.mjs$|chevron-left\.mjs$|chevron-right\.mjs$|server-cog\.mjs$|settings-2\.mjs$|key-round\.mjs$|save-check\.mjs$|sliders-horizontal\.mjs$|eye\.mjs$|eye-off\.mjs$|file-input\.mjs$|rocket\.mjs$|circle-alert\.mjs$|database\.mjs$|download\.mjs$|image-down\.mjs$|pencil\.mjs$|trash-2\.mjs$|log-in\.mjs$|archive-restore\.mjs$|pin\.mjs$).+$/,
     /^\/scripts\/(check-|capture-|package-|build-(?:brand|demo|profiles))/,
     /^\/scripts\/codex-day-tray\.ps1$/,
     /^\/scripts\/codex-profiles-ui\.ps1$/,
@@ -89,6 +89,7 @@ const paths = await packager({
 
 const requiredPackagedFiles = [
   path.join('node_modules', 'smol-toml', 'dist', 'index.js'),
+  path.join('node_modules', 'lucide', 'dist', 'esm', 'icons', 'chevron-left.mjs'),
   path.join('node_modules', 'lucide', 'dist', 'esm', 'icons', 'server-cog.mjs'),
   path.join('node_modules', 'lucide', 'dist', 'esm', 'icons', 'settings-2.mjs'),
   path.join('node_modules', 'lucide', 'dist', 'esm', 'icons', 'key-round.mjs'),

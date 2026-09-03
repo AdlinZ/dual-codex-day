@@ -11,6 +11,7 @@ import MonitorUp from '../../node_modules/lucide/dist/esm/icons/monitor-up.mjs';
 import ChartNoAxesCombined from '../../node_modules/lucide/dist/esm/icons/chart-no-axes-combined.mjs';
 import UserRoundPlus from '../../node_modules/lucide/dist/esm/icons/user-round-plus.mjs';
 import ChevronRight from '../../node_modules/lucide/dist/esm/icons/chevron-right.mjs';
+import ChevronLeft from '../../node_modules/lucide/dist/esm/icons/chevron-left.mjs';
 import ServerCog from '../../node_modules/lucide/dist/esm/icons/server-cog.mjs';
 import Settings2 from '../../node_modules/lucide/dist/esm/icons/settings-2.mjs';
 import KeyRound from '../../node_modules/lucide/dist/esm/icons/key-round.mjs';
@@ -30,7 +31,7 @@ import LogIn from '../../node_modules/lucide/dist/esm/icons/log-in.mjs';
 import Square from '../../node_modules/lucide/dist/esm/icons/square.mjs';
 import ArchiveRestore from '../../node_modules/lucide/dist/esm/icons/archive-restore.mjs';
 import Pin from '../../node_modules/lucide/dist/esm/icons/pin.mjs';
-import { aggregateUsage, filterUsageEvents, groupUsageTasks, topUsageLabel } from './usage-analysis.mjs';
+import { aggregateUsage, buildPeriodReview, filterUsageEvents, groupUsageTasks, summarizeUsageSources, topUsageLabel } from './usage-analysis.mjs';
 
 const iconNodes = {
   'refresh-cw': RefreshCw,
@@ -45,6 +46,7 @@ const iconNodes = {
   'chart-no-axes-combined': ChartNoAxesCombined,
   'user-round-plus': UserRoundPlus,
   'chevron-right': ChevronRight,
+  'chevron-left': ChevronLeft,
   'server-cog': ServerCog,
   'settings-2': Settings2,
   'key-round': KeyRound,
@@ -98,8 +100,9 @@ const state = {
   usageRefreshTimer: null,
   ccSwitchAudit: null,
   ccSwitchPath: '',
-  usageSettings: { relayMultiplier: 1, monthlyBudget: 0, costMode: 'standard' },
+  usageSettings: { relayMultiplier: 1, monthlyBudget: 0, costMode: 'standard', reviewPeriod: 'week' },
   reportPeriod: 'week',
+  reportOffset: 0,
   posterCanvas: null,
   posterFilename: '',
   posterSuccessMessage: '海报已保存。',
@@ -203,6 +206,9 @@ const elements = {
   taskDetailCalls: document.querySelector('#task-detail-calls'),
   taskDetailClose: document.querySelector('#task-detail-close'),
   reportPeriod: document.querySelector('#report-period'),
+  reportPrevious: document.querySelector('#report-previous'),
+  reportNext: document.querySelector('#report-next'),
+  reportCurrent: document.querySelector('#report-current'),
   reportPosterButton: document.querySelector('#report-poster-button'),
   reportTitle: document.querySelector('#period-report-title'),
   reportDates: document.querySelector('#period-report-dates'),
@@ -1146,15 +1152,19 @@ function readUsageSettings(sourceId = state.selectedUsageSourceId) {
     return {
       relayMultiplier: Math.max(0, Number(saved.relayMultiplier ?? 1)),
       monthlyBudget: Math.max(0, Number(saved.monthlyBudget || 0)),
-      costMode: ['standard', 'batch', 'flex', 'fast'].includes(saved.costMode) ? saved.costMode : 'standard'
+      costMode: ['standard', 'batch', 'flex', 'fast'].includes(saved.costMode) ? saved.costMode : 'standard',
+      reviewPeriod: ['week', 'month'].includes(saved.reviewPeriod) ? saved.reviewPeriod : 'week'
     };
   } catch {
-    return { relayMultiplier: 1, monthlyBudget: 0, costMode: 'standard' };
+    return { relayMultiplier: 1, monthlyBudget: 0, costMode: 'standard', reviewPeriod: 'week' };
   }
 }
 
 function loadUsageSettings() {
   state.usageSettings = readUsageSettings();
+  state.reportPeriod = state.usageSettings.reviewPeriod;
+  state.reportOffset = 0;
+  elements.reportPeriod.querySelectorAll('[data-report-period]').forEach(item => item.classList.toggle('is-active', item.dataset.reportPeriod === state.reportPeriod));
 }
 
 function usageEvents() {
@@ -1289,55 +1299,32 @@ function filteredUsageEvents() {
     && (!state.usageProject || event.projectId === state.usageProject));
 }
 
-function reportBounds(period = state.reportPeriod, now = new Date()) {
-  const currentStart = new Date(now.getFullYear(), now.getMonth(), period === 'month' ? 1 : now.getDate());
-  if (period === 'week') currentStart.setDate(currentStart.getDate() - ((currentStart.getDay() || 7) - 1));
-  const previousStart = period === 'month'
-    ? new Date(currentStart.getFullYear(), currentStart.getMonth() - 1, 1)
-    : new Date(currentStart.getFullYear(), currentStart.getMonth(), currentStart.getDate() - 7);
-  const previousPeriodEnd = period === 'month'
-    ? new Date(currentStart.getFullYear(), currentStart.getMonth(), 1)
-    : new Date(previousStart.getFullYear(), previousStart.getMonth(), previousStart.getDate() + 7);
-  const elapsed = now.getTime() - currentStart.getTime();
-  const previousEnd = new Date(Math.min(previousPeriodEnd.getTime(), previousStart.getTime() + elapsed + 1));
-  return { currentStart, currentEnd: new Date(now.getTime() + 1), previousStart, previousEnd };
-}
-
 function reportData() {
-  const bounds = reportBounds();
   const events = filteredUsageEvents();
-  const currentEvents = events.filter(event => {
-    const time = new Date(event.timestamp);
-    return time >= bounds.currentStart && time < bounds.currentEnd;
+  const review = buildPeriodReview(events, { period: state.reportPeriod, offset: state.reportOffset, estimate: event => estimateUsageEvent(event) });
+  const month = buildPeriodReview(state.usageData?.events || [], { period: 'month', estimate: event => estimateUsageEvent(event) });
+  const accountRows = summarizeUsageSources(state.usageComparison?.sources, {
+    start: review.bounds.currentStart,
+    end: review.bounds.currentEnd,
+    model: state.usageModel,
+    projectId: state.usageProject,
+    excludeDuplicates: state.selectedUsageSourceId === 'all',
+    estimate: (event, dataset) => estimateUsageEvent(event, dataset, readUsageSettings(dataset.source.id))
   });
-  const previousEvents = events.filter(event => {
-    const time = new Date(event.timestamp);
-    return time >= bounds.previousStart && time < bounds.previousEnd;
-  });
-  const current = usageAggregate(currentEvents);
-  const previous = usageAggregate(previousEvents);
-  const days = [];
-  const dayCursor = new Date(bounds.currentStart);
-  const today = new Date(bounds.currentEnd.getFullYear(), bounds.currentEnd.getMonth(), bounds.currentEnd.getDate());
-  while (dayCursor <= today) {
-    const next = new Date(dayCursor.getFullYear(), dayCursor.getMonth(), dayCursor.getDate() + 1);
-    const dayEvents = currentEvents.filter(event => {
-      const time = new Date(event.timestamp);
-      return time >= dayCursor && time < next;
-    });
-    days.push({ date: new Date(dayCursor), ...usageAggregate(dayEvents) });
-    dayCursor.setDate(dayCursor.getDate() + 1);
-  }
+  const visibleAccountRows = state.selectedUsageSourceId === 'all'
+    ? accountRows
+    : accountRows.filter(row => row.source?.id === state.selectedUsageSourceId);
+  const successfulAccounts = visibleAccountRows.filter(row => !row.error).sort((a, b) => b.aggregate.total - a.aggregate.total);
+  const tasks = posterGroups(review.currentEvents, 'sessionId', 'project');
   return {
-    bounds,
-    currentEvents,
-    previousEvents,
-    current,
-    previous,
-    days,
-    projects: posterGroups(currentEvents, 'projectId', 'project'),
-    models: posterGroups(currentEvents, 'model'),
-    peakDay: [...days].sort((a, b) => b.total - a.total)[0] || null
+    ...review,
+    month,
+    accounts: successfulAccounts,
+    failedAccounts: visibleAccountRows.filter(row => row.error),
+    projects: posterGroups(review.currentEvents, 'projectId', 'project'),
+    models: posterGroups(review.currentEvents, 'model'),
+    tasks,
+    peakDay: [...review.days].sort((a, b) => b.total - a.total)[0] || null
   };
 }
 
@@ -1347,22 +1334,40 @@ function reportDelta(current, previous) {
   return { text: `${value >= 0 ? '+' : ''}${value.toFixed(1)}% 较上期`, className: value > 0 ? 'is-up' : value < 0 ? 'is-down' : '' };
 }
 
-function reportDate(value) {
-  return new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric' }).format(value);
+function reportDate(value, includeYear = false) {
+  return new Intl.DateTimeFormat('zh-CN', { ...(includeYear ? { year: 'numeric' } : {}), month: 'short', day: 'numeric' }).format(value);
 }
 
 function renderPeriodReport() {
   const report = reportData();
-  const periodLabel = state.reportPeriod === 'month' ? '本月报告' : '本周报告';
+  const currentLabel = state.reportPeriod === 'month' ? '本月报告' : '本周报告';
+  const previousLabel = state.reportPeriod === 'month' ? '上月报告' : '上周报告';
+  const historyLabel = state.reportPeriod === 'month' ? '历史月报' : '历史周报';
+  const periodLabel = state.reportOffset === 0 ? currentLabel : state.reportOffset === -1 ? previousLabel : historyLabel;
   elements.reportTitle.textContent = periodLabel;
-  elements.reportDates.textContent = `${reportDate(report.bounds.currentStart)} - ${reportDate(new Date(report.bounds.currentEnd.getTime() - 1))}`;
-  const metrics = [
+  elements.reportDates.textContent = `${reportDate(report.bounds.currentStart, !report.bounds.isCurrent)} - ${reportDate(new Date(report.bounds.currentEnd.getTime() - 1), !report.bounds.isCurrent)}`;
+  elements.reportNext.disabled = state.reportOffset === 0;
+  elements.reportCurrent.hidden = state.reportOffset === 0;
+  const budget = state.usageSettings.monthlyBudget;
+  const budgetProgress = budget ? report.month.current.cost / budget * 100 : 0;
+  const forecastNote = budget && state.reportPeriod === 'month' && report.forecast?.cost > budget
+    ? `高于预算 ${formatUsd(report.forecast.cost - budget)}`
+    : '按当前节奏';
+  const currentMetrics = [
     ['Token', formatTokens(report.current.total), reportDelta(report.current.total, report.previous.total)],
+    ['预计成本', formatUsd(report.current.cost), reportDelta(report.current.cost, report.previous.cost)],
+    ['本月预算', budget ? `${budgetProgress.toFixed(0)}%` : '未设置', budget ? `${formatUsd(report.month.current.cost)} / ${formatUsd(budget)}` : { text: '在用量设置中配置', className: '' }],
+    ['周期末预测', formatUsd(report.forecast?.cost), { text: forecastNote, className: budget && state.reportPeriod === 'month' && report.forecast?.cost > budget ? 'is-down' : '' }]
+  ];
+  const historyMetrics = [
+    ['Token', formatTokens(report.current.total), reportDelta(report.current.total, report.previous.total)],
+    ['预计成本', formatUsd(report.current.cost), reportDelta(report.current.cost, report.previous.cost)],
     ['交互回合', report.current.turns.toLocaleString('zh-CN'), reportDelta(report.current.turns, report.previous.turns)],
-    ['模型调用', report.current.calls.toLocaleString('zh-CN'), reportDelta(report.current.calls, report.previous.calls)],
     ['任务', report.current.tasks.toLocaleString('zh-CN'), reportDelta(report.current.tasks, report.previous.tasks)]
   ];
-  elements.reportMetrics.innerHTML = metrics.map(([label, value, delta]) => `<div class="report-metric"><span>${label}</span><strong>${value}</strong><small class="${delta.className}">${delta.text}</small></div>`).join('');
+  const metrics = report.bounds.isCurrent ? currentMetrics : historyMetrics;
+  const normalizedMetrics = metrics.map(([label, value, detail]) => [label, value, typeof detail === 'string' ? { text: detail, className: '' } : detail]);
+  elements.reportMetrics.innerHTML = normalizedMetrics.map(([label, value, delta]) => `<div class="report-metric"><span>${label}</span><strong>${value}</strong><small class="${delta.className}">${delta.text}</small></div>`).join('');
   const max = Math.max(1, ...report.days.map(day => day.total));
   const labelStep = Math.max(1, Math.ceil(report.days.length / 10));
   const chartWidth = 900, chartHeight = 230, chartTop = 10, chartBottom = 34, slot = chartWidth / Math.max(1, report.days.length);
@@ -1378,12 +1383,13 @@ function renderPeriodReport() {
     }).join('')}
   </svg>`;
   const leaders = [
-    ['峰值日期', report.peakDay?.total ? reportDate(report.peakDay.date) : '暂无数据', report.peakDay?.total ? formatTokens(report.peakDay.total) : '0'],
-    ['主要项目', report.projects[0]?.label || '暂无数据', report.projects[0] ? formatTokens(report.projects[0].total) : '0'],
+    ['主要账号', report.accounts[0]?.source?.name || '暂无数据', report.accounts[0] ? formatTokens(report.accounts[0].aggregate.total) : '0'],
     ['主要模型', report.models[0]?.label || '暂无数据', report.models[0] ? formatTokens(report.models[0].total) : '0'],
-    ['预计成本', formatUsd(report.current.cost), `${(report.current.coverage * 100).toFixed(0)}% 已定价`]
+    ['主要任务', report.tasks[0]?.label || '暂无数据', report.tasks[0] ? formatTokens(report.tasks[0].total) : '0'],
+    ['峰值日期', report.peakDay?.total ? reportDate(report.peakDay.date) : '暂无数据', report.peakDay?.total ? formatTokens(report.peakDay.total) : '0']
   ];
-  elements.reportLeaders.innerHTML = leaders.map(([label, value, detail]) => `<div class="report-leader"><span>${label}</span><strong>${escapeHtml(value)}</strong><b>${escapeHtml(detail)}</b></div>`).join('');
+  const failureNote = report.failedAccounts.length ? `<p class="report-source-warning">${report.failedAccounts.length} 个账号读取失败，已从排行中排除</p>` : '';
+  elements.reportLeaders.innerHTML = leaders.map(([label, value, detail]) => `<div class="report-leader"><span>${label}</span><strong>${escapeHtml(value)}</strong><b>${escapeHtml(detail)}</b></div>`).join('') + failureNote;
 }
 
 function formatUsd(value) {
@@ -1667,7 +1673,7 @@ function createPeriodReportPoster() {
   context.textAlign = 'left';
   context.fillStyle = colors.muted;
   context.font = `500 18px ${font}`;
-  context.fillText(`${reportDate(report.bounds.currentStart)} - ${reportDate(new Date(report.bounds.currentEnd.getTime() - 1))}`, 224, 176);
+  context.fillText(`${reportDate(report.bounds.currentStart, !report.bounds.isCurrent)} - ${reportDate(new Date(report.bounds.currentEnd.getTime() - 1), !report.bounds.isCurrent)}`, 224, 176);
 
   context.fillStyle = colors.ink;
   context.font = `700 49px ${font}`;
@@ -1680,12 +1686,19 @@ function createPeriodReportPoster() {
   context.font = `500 21px ${font}`;
   context.fillText(`${totalDelta.text}  ·  ${report.current.turns.toLocaleString('zh-CN')} 回合  ·  ${report.current.calls.toLocaleString('zh-CN')} 次模型调用`, 72, 478);
 
-  const metricValues = [
+  const currentMetricValues = [
     ['任务', report.current.tasks.toLocaleString('zh-CN'), `${report.current.projects} 个项目`, colors.blue],
     ['缓存率', `${(report.current.cacheRate * 100).toFixed(1)}%`, `${formatTokens(report.current.cached)} cached`, colors.green],
     ['预计成本', formatUsd(report.current.cost), `${(report.current.coverage * 100).toFixed(0)}% 已定价`, colors.coral],
-    ['每次模型调用', formatTokens(report.current.average), '平均 Token', colors.violet]
+    ['周期末预测', formatUsd(report.forecast?.cost), '按当前节奏', colors.violet]
   ];
+  const historyMetricValues = [
+    ['任务', report.current.tasks.toLocaleString('zh-CN'), `${report.current.projects} 个项目`, colors.blue],
+    ['缓存率', `${(report.current.cacheRate * 100).toFixed(1)}%`, `${formatTokens(report.current.cached)} cached`, colors.green],
+    ['预计成本', formatUsd(report.current.cost), `${(report.current.coverage * 100).toFixed(0)}% 已定价`, colors.coral],
+    ['模型调用', report.current.calls.toLocaleString('zh-CN'), '完整周期', colors.violet]
+  ];
+  const metricValues = report.bounds.isCurrent ? currentMetricValues : historyMetricValues;
   metricValues.forEach((item, index) => {
     const x = 72 + index * 264;
     posterRoundedRect(context, x, 548, 240, 154, 12, colors.panel);
@@ -1727,9 +1740,9 @@ function createPeriodReportPoster() {
   context.font = `700 24px ${font}`;
   context.fillText('本期重点', 72, 1242);
   const leaders = [
-    ['峰值日期', report.peakDay?.total ? reportDate(report.peakDay.date) : '暂无数据', report.peakDay?.total ? formatTokens(report.peakDay.total) : '0'],
-    ['主要项目', report.projects[0]?.label || '暂无数据', report.projects[0] ? formatTokens(report.projects[0].total) : '0'],
-    ['主要模型', report.models[0]?.label || '暂无数据', report.models[0] ? formatTokens(report.models[0].total) : '0']
+    ['主要账号', report.accounts[0]?.source?.name || '暂无数据', report.accounts[0] ? formatTokens(report.accounts[0].aggregate.total) : '0'],
+    ['主要模型', report.models[0]?.label || '暂无数据', report.models[0] ? formatTokens(report.models[0].total) : '0'],
+    ['主要任务', report.tasks[0]?.label || '暂无数据', report.tasks[0] ? formatTokens(report.tasks[0].total) : '0']
   ];
   leaders.forEach((item, index) => {
     const x = 72 + index * 352;
@@ -1767,7 +1780,8 @@ function openUsagePoster() {
 function openReportPoster() {
   if (!state.dashboardLoaded) return;
   state.posterCanvas = createPeriodReportPoster();
-  state.posterFilename = `dual-codex-day-${state.reportPeriod}-report-${new Date().toISOString().slice(0, 10)}.png`;
+  const report = reportData();
+  state.posterFilename = `dual-codex-day-${state.reportPeriod}-report-${report.bounds.currentStart.toLocaleDateString('en-CA')}.png`;
   state.posterSuccessMessage = `${state.reportPeriod === 'month' ? '月报' : '周报'}海报已保存。`;
   elements.usagePosterTitle.textContent = state.reportPeriod === 'month' ? '月报海报' : '周报海报';
   elements.usagePosterPreview.src = state.posterCanvas.toDataURL('image/png');
@@ -1908,8 +1922,11 @@ function renderNativeUsage() {
   const maxPart = Math.max(aggregate.parts.input, aggregate.parts.cached, aggregate.parts.output, .000001);
   document.querySelector('#usage-cost-breakdown').innerHTML = [['普通输入', aggregate.parts.input], ['缓存输入', aggregate.parts.cached], ['输出', aggregate.parts.output]].map(([label, value]) => `<div class="cost-row"><span>${label}</span><progress class="cost-track" max="${maxPart}" value="${value}"></progress><strong>${formatUsd(value)}</strong></div>`).join('');
   const budget = state.usageSettings.monthlyBudget;
-  document.querySelector('#usage-budget-label').textContent = budget ? `${formatUsd(aggregate.cost)} / ${formatUsd(budget)}` : '未设置';
-  document.querySelector('#usage-budget-bar').value = budget ? Math.min(100, aggregate.cost / budget * 100) : 0;
+  const monthReview = buildPeriodReview(state.usageData?.events || [], { period: 'month', estimate: event => estimateUsageEvent(event) });
+  document.querySelector('#usage-budget-label').textContent = budget
+    ? `${formatUsd(monthReview.current.cost)} / ${formatUsd(budget)} · 预计 ${formatUsd(monthReview.forecast.cost)}`
+    : '未设置';
+  document.querySelector('#usage-budget-bar').value = budget ? Math.min(100, monthReview.current.cost / budget * 100) : 0;
   const filterCount = Number(Boolean(state.usageModel)) + Number(Boolean(state.usageProject));
   elements.usageFilterCount.textContent = String(filterCount);
   elements.usageFilterCount.hidden = filterCount === 0;
@@ -2723,7 +2740,8 @@ elements.usageSettingsForm.addEventListener('submit', event => {
   state.usageSettings = {
     relayMultiplier: Math.max(0, Number(elements.usageRelayMultiplier.value || 1)),
     monthlyBudget: Math.max(0, Number(elements.usageMonthlyBudget.value || 0)),
-    costMode: elements.usageCostMode.value
+    costMode: elements.usageCostMode.value,
+    reviewPeriod: state.reportPeriod
   };
   localStorage.setItem(usageSettingsKey(), JSON.stringify(state.usageSettings));
   elements.usageSettingsDialog.close();
@@ -2763,7 +2781,22 @@ elements.reportPeriod.addEventListener('click', event => {
   const button = event.target.closest('[data-report-period]');
   if (!button) return;
   state.reportPeriod = button.dataset.reportPeriod;
+  state.reportOffset = 0;
+  state.usageSettings.reviewPeriod = state.reportPeriod;
+  localStorage.setItem(usageSettingsKey(), JSON.stringify(state.usageSettings));
   elements.reportPeriod.querySelectorAll('[data-report-period]').forEach(item => item.classList.toggle('is-active', item === button));
+  renderPeriodReport();
+});
+elements.reportPrevious.addEventListener('click', () => {
+  state.reportOffset -= 1;
+  renderPeriodReport();
+});
+elements.reportNext.addEventListener('click', () => {
+  state.reportOffset = Math.min(0, state.reportOffset + 1);
+  renderPeriodReport();
+});
+elements.reportCurrent.addEventListener('click', () => {
+  state.reportOffset = 0;
   renderPeriodReport();
 });
 elements.usagePosterCancel.addEventListener('click', () => elements.usagePosterDialog.close());

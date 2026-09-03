@@ -19,7 +19,7 @@ const css = readFileSync(path.join(root, 'electron', 'renderer', 'app.css'), 'ut
 const capture = readFileSync(path.join(root, 'scripts', 'capture-electron.mjs'), 'utf8');
 const packager = readFileSync(path.join(root, 'scripts', 'package-electron.mjs'), 'utf8');
 
-assert(packageMetadata.version === '0.23.0', 'Electron release must use package version 0.23.0');
+assert(packageMetadata.version === '0.24.0', 'Electron release must use package version 0.24.0');
 assert(packageMetadata.main === 'electron/main.mjs', 'Electron main entry must be declared in package metadata');
 assert(packageMetadata.scripts.desktop === 'electron .', 'desktop command must launch the Electron entry');
 assert(/contextIsolation:\s*true/.test(main), 'Electron windows must enable context isolation');
@@ -78,6 +78,7 @@ assert(/profile-recovery-dialog/.test(html + renderer + css) && /renderProfileRe
 assert(/screenshotView === 'profile-recovery'/.test(main), 'visual verification must cover the Profile recovery center');
 assert(/archive-restore\.mjs/.test(packager), 'packaged Electron builds must retain the Profile recovery icon');
 assert(/pin\.mjs/.test(packager), 'packaged Electron builds must retain the work-combination pin icon');
+assert(/chevron-left\.mjs/.test(packager), 'packaged Electron builds must retain the historical-period navigation icon');
 assert(/PROFILE_DIAGNOSIS_SCHEMA_VERSION/.test(profileDoctor) && /createProfileDiagnosisExport/.test(profileDoctor), 'Profile diagnosis must use a versioned sanitized export');
 assert(/confirmLaunch/.test(main) && /listProfileLaunches/.test(main), 'Electron must verify launches and expose persistent instance status');
 assert(/safeStorage\.encryptString/.test(main) && /safeStorage\.decryptString/.test(main), 'provider API keys must use operating-system encryption');
@@ -116,7 +117,10 @@ assert(/discoverProjectSkillRoots/.test(main) && /自动发现/.test(renderer), 
 assert(!/cpSync.*plugins.cache/s.test(readFileSync(path.join(root, 'scripts', 'lib', 'plugin-store.mjs'), 'utf8')), 'plugin synchronization must not copy plugin cache directories');
 assert(/setInterval\(\(\) =>/.test(renderer) && /loadDashboard\(true\)/.test(renderer), 'native usage analysis must refresh automatically while visible');
 assert(/usage-poster-button/.test(html) && /createUsagePoster/.test(renderer) && /canvas\.width = 1200/.test(renderer) && /canvas\.height = 1600/.test(renderer), 'native usage analysis must export a filtered 1200 by 1600 poster');
-assert(/data-report-period="week"/.test(html) && /data-report-period="month"/.test(html) && /createPeriodReportPoster/.test(renderer), 'native usage analysis must provide weekly and monthly reports with a dedicated poster');
+assert(/data-report-period="week"/.test(html) && /data-report-period="month"/.test(html) && /createPeriodReportPoster/.test(renderer) && /buildPeriodReview/.test(renderer), 'native usage analysis must provide weekly and monthly reports with comparison, forecast, and a dedicated poster');
+assert(/duplicateOf/.test(main) && /failedAccounts/.test(renderer) && /summarizeUsageSources/.test(renderer), 'period reports must isolate failed sources and avoid duplicate default-source accounts');
+assert(/dashboard-report/.test(main) && /usage-monthly-budget/.test(main) && /minimumDashboard/.test(main), 'screenshot validation must cover budgeted period reports at normal and minimum window sizes');
+assert(/id="report-previous"/.test(html) && /id="report-next"/.test(html) && /id="report-current"/.test(html) && /reportOffset/.test(renderer), 'period reports must navigate complete historical weeks and months and return to the current cycle');
 assert(/turnId/.test(renderer + usageAnalysis) && /交互回合/.test(html + renderer) && /模型调用/.test(html + renderer), 'usage metrics must distinguish interaction turns from model calls');
 assert(/dashboard-poster/.test(main) && /naturalWidth === 1200.*naturalHeight === 1600/s.test(main), 'visual verification must validate the rendered poster dimensions');
 assert(/will-download/.test(main) && /nativeImage\.createFromPath/.test(main), 'packaged verification must exercise the PNG download and validate the saved file');

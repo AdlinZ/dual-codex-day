@@ -20,7 +20,7 @@ const script = read('site/app.js');
 const server = read('scripts/serve-site.mjs');
 const workflow = read('.github/workflows/pages.yml');
 
-for (const text of ['Dual Codex Day', '多账号', '用量分析', '供应商设置', '非 OpenAI 官方项目']) {
+for (const text of ['Dual Codex Day', '多账号', '用量分析', '供应商设置', '自然周/月回看', '周期末预测', '非 OpenAI 官方项目']) {
   assert(html.includes(text), `Site must include: ${text}`);
 }
 

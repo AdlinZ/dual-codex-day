@@ -14,7 +14,7 @@
         <img src="../../assets/codex-day-mark.svg" alt="" class="brand-mark">
         <div>
           <strong>Dual Codex Day</strong>
-          <span id="version-label">v0.23.0</span>
+          <span id="version-label">v0.24.0</span>
         </div>
       </div>
       <nav class="primary-tabs" aria-label="主要功能">
@@ -281,7 +281,7 @@
             <div class="usage-panel cost-panel">
               <div class="usage-panel-heading"><h2>成本构成</h2><span id="usage-cost-total" class="panel-total">$0.00</span></div>
               <div class="cost-breakdown" id="usage-cost-breakdown"></div>
-              <div class="budget-progress"><div><span>预算使用</span><strong id="usage-budget-label">未设置</strong></div><progress class="budget-track" id="usage-budget-bar" max="100" value="0"></progress></div>
+              <div class="budget-progress"><div><span>本月预算</span><strong id="usage-budget-label">未设置</strong></div><progress class="budget-track" id="usage-budget-bar" max="100" value="0"></progress></div>
             </div>
           </section>
 
@@ -312,6 +312,11 @@
               <div class="usage-panel-heading report-heading">
                 <div><h2 id="period-report-title">本周报告</h2><p id="period-report-dates"></p></div>
                 <div class="report-actions">
+                  <div class="report-navigation" role="group" aria-label="历史周期">
+                    <button class="icon-button" id="report-previous" type="button" title="前一期" aria-label="前一期"><i data-lucide="chevron-left"></i></button>
+                    <button class="text-button" id="report-current" type="button" hidden>回到本期</button>
+                    <button class="icon-button" id="report-next" type="button" title="后一期" aria-label="后一期" disabled><i data-lucide="chevron-right"></i></button>
+                  </div>
                   <div class="usage-range report-period" id="report-period" role="group" aria-label="报告周期">
                     <button type="button" data-report-period="week" class="is-active">周报</button>
                     <button type="button" data-report-period="month">月报</button>
@@ -319,7 +324,7 @@
                   <button class="secondary-button" id="report-poster-button" type="button"><i data-lucide="image-down"></i><span>导出报告</span></button>
                 </div>
               </div>
-              <div class="report-metrics" id="report-metrics"></div>
+              <div class="report-metrics" id="report-metrics" aria-label="周期指标"></div>
               <div class="report-body">
                 <div class="report-chart" id="report-chart"></div>
                 <div class="report-leaders" id="report-leaders"></div>

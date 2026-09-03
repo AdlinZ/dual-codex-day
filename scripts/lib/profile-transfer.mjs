@@ -7,6 +7,7 @@ export const PROFILE_TRANSFER_SCHEMA_VERSION = 1;
 const forbiddenKey = /(?:api.?key|access.?token|secret|password|credential|authorization|cookie|http.?headers?|env.?http.?headers?)/i;
 const forbiddenObjectKeys = new Set(['__proto__', 'constructor', 'prototype']);
 const supportedCostModes = new Set(['standard', 'batch', 'flex', 'fast']);
+const supportedReviewPeriods = new Set(['week', 'month']);
 
 function plainObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value);
@@ -53,8 +54,9 @@ export function normalizeTransferPreferences(value = {}) {
   const relayMultiplier = Math.max(0, Number(value?.relayMultiplier ?? 1));
   const monthlyBudget = Math.max(0, Number(value?.monthlyBudget || 0));
   const costMode = supportedCostModes.has(String(value?.costMode || 'standard')) ? String(value.costMode || 'standard') : 'standard';
+  const reviewPeriod = supportedReviewPeriods.has(String(value?.reviewPeriod || 'week')) ? String(value.reviewPeriod || 'week') : 'week';
   if (!Number.isFinite(relayMultiplier) || !Number.isFinite(monthlyBudget)) throw new Error('Profile transfer contains invalid usage preferences.');
-  return { relayMultiplier, monthlyBudget, costMode };
+  return { relayMultiplier, monthlyBudget, costMode, reviewPeriod };
 }
 
 export function portableConfig(configText = '') {
