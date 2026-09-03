@@ -1177,8 +1177,14 @@ async function captureRequestedScreenshot(window) {
     const screenshotAuthMode = screenshotView === 'provider-openai' ? 'openai' : 'environment';
     window.setSize(1400, 960);
     const providerOpened = await window.webContents.executeJavaScript(`(async () => {
-      const button = document.querySelector('#edit-provider-button');
       for (let attempt = 0; attempt < 80 && !document.querySelector('[data-profile-id]'); attempt += 1) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      const managedProfile = [...document.querySelectorAll('[data-profile-id]')]
+        .find(candidate => !candidate.textContent.includes('系统默认 Codex'));
+      managedProfile?.click();
+      const button = document.querySelector('#edit-provider-button');
+      for (let attempt = 0; attempt < 80 && button?.disabled; attempt += 1) {
         await new Promise(resolve => setTimeout(resolve, 50));
       }
       button?.click();
@@ -1319,7 +1325,9 @@ async function captureRequestedScreenshot(window) {
     const launcherLoaded = await window.webContents.executeJavaScript(`(async () => {
       for (let attempt = 0; attempt < 160; attempt += 1) {
         const profiles = Array.from(document.querySelectorAll('[data-profile-id]'));
-        if (profiles.length >= 3 && document.querySelector('#metric-tokens')?.textContent !== '0') {
+        const minimumProfiles = ${launcherProfileIndex} === 2 ? 3 : 1;
+        const usageHeading = document.querySelector('#usage-heading')?.textContent || '';
+        if (profiles.length >= minimumProfiles && usageHeading) {
           if (${launcherProfileIndex} === 2) {
             profiles[${launcherProfileIndex}].click();
             for (let profileAttempt = 0; profileAttempt < 160; profileAttempt += 1) {
@@ -1331,7 +1339,8 @@ async function captureRequestedScreenshot(window) {
             }
             return false;
           }
-          return (document.querySelector('#usage-heading')?.textContent || '').includes('默认账号');
+          const selectedName = profiles[${launcherProfileIndex}].querySelector('strong')?.textContent || '';
+          return Boolean(selectedName) && usageHeading.includes(selectedName);
         }
         await new Promise(resolve => setTimeout(resolve, 50));
       }

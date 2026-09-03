@@ -86,7 +86,7 @@ assert(/getSnapshot\(profileId\)/.test(main) && /readUsage\(launcherUsageSourceI
 assert(/getSnapshot:\s*profileId\s*=>/.test(preload) && /getSnapshot\(preferredProfileId\)/.test(renderer), 'renderer must request the selected Profile summary');
 assert(/usage\.source\?\.name/.test(renderer) && /profileUsageSourceId\(profile\)/.test(renderer), 'launcher and usage analysis must label and open the selected account source');
 assert(/launcher-empty/.test(main) && /heading\.includes\('个人账号'\).*tokens === '0'.*calls === '0'/s.test(main), 'screenshot verification must cover an empty isolated Profile summary');
-assert(/profiles\.length >= 3/.test(main) && /usage-heading[\s\S]*?includes\('默认账号'\)/.test(main), 'launcher screenshot verification must select the built-in default account');
+assert(/minimumProfiles[\s\S]*?launcherProfileIndex[\s\S]*?selectedName[\s\S]*?usageHeading\.includes\(selectedName\)/.test(main), 'launcher screenshot verification must validate the selected Profile without assuming fixture counts or nonzero usage');
 assert(/usage:get-data/.test(main) && /getUsageData/.test(preload), 'Electron must expose scoped native usage data IPC');
 assert(/usage:get-comparison/.test(main) && /getUsageComparison/.test(preload) && /usage-comparison/.test(html + renderer + css), 'Electron must compare account usage through scoped read-only data');
 assert(/readUsageSettings\(dataset\.source\.id\)/.test(renderer), 'account comparison must use each source cost settings');

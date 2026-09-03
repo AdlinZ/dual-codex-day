@@ -74,6 +74,28 @@ try {
   assert(builtInDefault.id === DEFAULT_PROFILE_ID && builtInDefault.builtIn === true, 'the system default account must have a stable built-in identity');
   assert(builtInDefault.paths.codexHome === systemCodexHome && builtInDefault.runtimeSource === 'default' && builtInDefault.usageSource === 'default', 'the built-in account must use the system Codex state');
   assert(loadProfileRegistry(profileRoot).profiles.length === 0, 'creating the built-in account view must not modify the Profile registry');
+
+  const legacyProfileRoot = path.join(temporaryRoot, 'v0.10.1-profiles');
+  const legacyProfileId = '11111111-1111-4111-8111-111111111111';
+  mkdirSync(legacyProfileRoot, { recursive: true });
+  writeFileSync(path.join(legacyProfileRoot, 'profiles.json'), `${JSON.stringify({
+    schemaVersion: 1,
+    profiles: [{
+      id: legacyProfileId,
+      name: 'Legacy account',
+      provider: { type: 'official', name: 'OpenAI 官方' },
+      usageSource: 'profile',
+      runtimeSource: 'profile',
+      createdAt: '2026-08-26T00:00:00.000Z',
+      updatedAt: '2026-08-26T00:00:00.000Z'
+    }]
+  }, null, 2)}\n`, 'utf8');
+  const legacyProfile = listProfiles(legacyProfileRoot)[0];
+  const legacyPlan = buildLaunchPlan(legacyProfile, 'desktop', { targets: fakeTargets, environment: fakeEnvironment, workingDirectory: root });
+  assert(legacyProfile.id === legacyProfileId && legacyProfile.paths.codexHome.includes(legacyProfileId), 'v0.10.1 Profile registries must load with current derived paths');
+  assert(legacyPlan.args.includes(`--user-data-dir=${legacyProfile.paths.desktopData}`), 'v0.10.1 Profiles must produce a current isolated desktop launch plan');
+  assert(existsSync(path.join(legacyProfile.paths.codexHome, 'config.toml')), 'v0.10.1 Profiles must initialize missing current runtime files without rewriting their identity');
+
   const first = createProfile(profileRoot, 'Work account');
   const second = createProfile(profileRoot, 'Personal account');
   assert(first.id !== second.id, 'profiles must have distinct opaque ids');
@@ -227,6 +249,7 @@ command = "figma-bridge"
       }
     });
     assert(terminalPlan.command === terminalPath && terminalPlan.args.includes('-PidFile'), 'Windows CLI launches must use Windows Terminal with a PID handshake');
+    assert(path.dirname(terminalPlan.pidFile) === os.tmpdir() && path.basename(terminalPlan.pidFile).startsWith('dual-codex-day-cli-'), 'CLI PID handshakes must use a writable, random temporary file');
     const terminalPid = 43000;
     const terminalLaunch = launchProfile(terminalProfileRoot, terminalProfile.id, 'cli', {
       ...providerOptions,
@@ -341,7 +364,7 @@ command = "figma-bridge"
     assert(built.status === 0 && existsSync(path.join(root, 'dist', 'dual-codex-day.exe')), `native profile launcher build failed:\n${built.stderr || built.stdout}`);
   }
 
-  console.log('Profile checks passed: isolated state, two-profile desktop launches, persistent runtime status, CLI, and Windows UI.');
+  console.log('Profile checks passed: v0.10.1 compatibility, isolated state, two-profile desktop launches, persistent runtime status, CLI, and Windows UI.');
 } finally {
   const resolved = path.resolve(temporaryRoot);
   if (resolved.startsWith(path.resolve(os.tmpdir())) && path.basename(resolved).startsWith('codex-day-profiles-test-')) {

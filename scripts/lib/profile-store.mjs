@@ -1110,9 +1110,7 @@ export function buildLaunchPlan(profile, target, options = {}) {
       '-ProfileName', profile.name
     ];
     if (process.platform === 'win32' && detected.terminal) {
-      const runtimeDirectory = path.join(profile.paths.root, 'runtime');
-      mkdirSync(runtimeDirectory, { recursive: true });
-      const pidFile = path.join(runtimeDirectory, `cli-${randomUUID()}.pid`);
+      const pidFile = path.join(os.tmpdir(), `dual-codex-day-cli-${randomUUID()}.pid`);
       return {
         target,
         command: detected.terminal,

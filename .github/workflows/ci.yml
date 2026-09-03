@@ -26,6 +26,25 @@ jobs:
       - name: Verify generated files are current
         run: git diff --exit-code -- demo/index.html src/token-dashboard.css
 
+  windows-package:
+    name: Package and smoke test Windows app
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run package:electron
+      - name: Launch packaged app and capture smoke screenshot
+        shell: pwsh
+        run: |
+          node .\scripts\capture-electron.mjs .\dist\windows-package-smoke.png .\dist\electron\dual-codex-day-win32-x64\dual-codex-day.exe --view=work-combinations
+          $image = Get-Item -LiteralPath .\dist\windows-package-smoke.png
+          if ($image.Length -lt 50000) { throw 'Packaged Electron smoke screenshot is incomplete.' }
+
   docker:
     name: Build Docker image
     needs: test

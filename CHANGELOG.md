@@ -20,6 +20,9 @@ Project name: **Dual Codex Day** (`dual-codex-day`). Historical entries may reta
 
 - Work combinations use an isolated versioned store with atomic writes, duplicate consolidation, bounded history, and a pinned-item limit.
 - Deleted Profiles, missing directories, and unavailable client targets remain visible with explicit unavailable states and never fall back to another account or target.
+- Added release consistency checks for package metadata, notes, the public site, the Windows smoke-test workflow, and current product screenshots.
+- Updated screenshot automation to select a managed Profile after the built-in default account joined the launcher.
+- Moved the one-time CLI PID handshake to the system temporary directory so Windows Terminal can report the interactive process across local directory permission boundaries.
 
 ## [0.22.0] - 2026-09-01
 
